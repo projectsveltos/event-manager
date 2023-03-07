@@ -86,3 +86,21 @@ func getKeyFromObject(scheme *runtime.Scheme, obj client.Object) *corev1.ObjectR
 		APIVersion: apiVersion,
 	}
 }
+
+func getPolicyRef(o client.Object) *libsveltosv1alpha1.PolicyRef {
+	policyRef := &libsveltosv1alpha1.PolicyRef{
+		Namespace: o.GetNamespace(),
+		Name:      o.GetName(),
+	}
+
+	switch o.(type) {
+	case *corev1.ConfigMap:
+		policyRef.Kind = string(libsveltosv1alpha1.ConfigMapReferencedResourceKind)
+	case *corev1.Secret:
+		policyRef.Kind = string(libsveltosv1alpha1.SecretReferencedResourceKind)
+	default:
+		panic(1)
+	}
+
+	return policyRef
+}

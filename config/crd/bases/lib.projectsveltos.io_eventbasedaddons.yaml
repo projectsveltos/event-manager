@@ -138,6 +138,13 @@ spec:
                   - repositoryURL
                   type: object
                 type: array
+              oneForEvent:
+                default: true
+                description: Multiple resources in a managed cluster can be a match
+                  for referenced EventSource. OneForEvent indicates whether a ClusterProfile
+                  for all resource (OneForEvent = false) or one per resource (OneForEvent
+                  = true) needs to be creted. Default to to true.
+                type: boolean
               policyRefs:
                 description: PolicyRefs references all the ConfigMaps/Secrets containing
                   kubernetes resources that need to be deployed in the matching clusters

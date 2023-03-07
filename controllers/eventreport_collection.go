@@ -40,12 +40,12 @@ const (
 )
 
 // removeEventReports deletes all EventReport corresponding to EventSource instance
-func removeEventReports(ctx context.Context, c client.Client, eventSource *libsveltosv1alpha1.EventSource,
+func removeEventReports(ctx context.Context, c client.Client, eventSourceName string,
 	logger logr.Logger) error {
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels{
-			libsveltosv1alpha1.EventSourceLabelName: eventSource.Name,
+			libsveltosv1alpha1.EventSourceLabelName: eventSourceName,
 		},
 	}
 

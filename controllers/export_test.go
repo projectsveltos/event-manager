@@ -39,11 +39,28 @@ var (
 	GetHandlersForFeature = getHandlersForFeature
 )
 
+type (
+	CurrentObject = currentObject
+)
+
 var (
 	RemoveClusterInfoEntry  = removeClusterInfoEntry
 	EventBasedAddOnHash     = eventBasedAddOnHash
 	RemoveStaleEventSources = removeStaleEventSources
 	DeployEventSource       = deployEventSource
+
+	InstantiateOneClusterProfilePerAllResource = instantiateOneClusterProfilePerAllResource
+	InstantiateOneClusterProfilePerResource    = instantiateOneClusterProfilePerResource
+	RemoveClusterProfiles                      = removeClusterProfiles
+
+	GetInstantiatedObjectLabels = getInstantiatedObjectLabels
+	GetClusterProfileName       = getClusterProfileName
+
+	InstantiateReferencedPolicies = instantiateReferencedPolicies
+	InstantiateDataSection        = instantiateDataSection
+	RemoveConfigMaps              = removeConfigMaps
+	RemoveSecrets                 = removeSecrets
+	UnstructuredToTyped           = unstructuredToTyped
 )
 
 // fetcher
