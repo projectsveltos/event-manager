@@ -10,10 +10,6 @@
 
 Please refere to sveltos [documentation](https://projectsveltos.github.io/sveltos/).
 
-## Addon deployment: how it works
-
-![sveltos logo](./doc/sveltos.png)
-
 ## Contributing 
 
 ❤️ Your contributions are always welcome! If you want to contribute, have questions, noticed any bug or want to get the latest project news, you can connect with us in the following ways:
