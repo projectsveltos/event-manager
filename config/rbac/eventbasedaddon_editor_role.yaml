@@ -1,0 +1,24 @@
+# permissions for end users to edit eventbasedaddons.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: eventbasedaddon-editor-role
+rules:
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
+  - eventbasedaddons
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
+  - eventbasedaddons/status
+  verbs:
+  - get

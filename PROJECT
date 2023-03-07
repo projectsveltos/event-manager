@@ -1,0 +1,31 @@
+domain: projectsveltos.io
+layout:
+- go.kubebuilder.io/v3
+projectName: event-manager
+repo: github.com/projectsveltos/event-manager
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: projectsveltos.io
+  group: lib
+  kind: EventBasedAddOn
+  path: github.com/projectsveltos/event-manager/api/v1alpha1
+  version: v1alpha1
+- controller: true
+  domain: projectsveltos.io
+  group: lib
+  kind: EventReport
+  version: v1alpha1
+- controller: true
+  domain: projectsveltos.io
+  group: lib
+  kind: SveltosCluster
+  version: v1alpha1
+- controller: true
+  domain: projectsveltos.io
+  group: lib
+  kind: EventSource
+  version: v1alpha1
+version: "3"

@@ -1,0 +1,6 @@
+apiVersion: lib.projectsveltos.io/v1alpha1
+kind: EventBasedAddOn
+metadata:
+  name: eventbasedaddon-sample
+spec:
+  # TODO(user): Add fields here
