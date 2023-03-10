@@ -21,12 +21,14 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/gdexlab/go-render/render"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -154,6 +156,26 @@ func verifyClusterSummary(clusterProfile *configv1alpha1.ClusterProfile,
 	return clusterSummary
 }
 
+func verifyFeatureStatusIsProvisioned(clusterSummaryNamespace, clusterSummaryName string, featureID configv1alpha1.FeatureID) {
+	Eventually(func() bool {
+		currentClusterSummary := &configv1alpha1.ClusterSummary{}
+		err := k8sClient.Get(context.TODO(),
+			types.NamespacedName{Namespace: clusterSummaryNamespace, Name: clusterSummaryName},
+			currentClusterSummary)
+		if err != nil {
+			return false
+		}
+		for i := range currentClusterSummary.Status.FeatureSummaries {
+			if currentClusterSummary.Status.FeatureSummaries[i].FeatureID == featureID &&
+				currentClusterSummary.Status.FeatureSummaries[i].Status == configv1alpha1.FeatureStatusProvisioned {
+
+				return true
+			}
+		}
+		return false
+	}, timeout, pollingInterval).Should(BeTrue())
+}
+
 func getClusterSummary(ctx context.Context,
 	clusterProfileName, clusterNamespace, clusterName string) (*configv1alpha1.ClusterSummary, error) {
 
@@ -182,4 +204,14 @@ func getClusterSummary(ctx context.Context,
 	}
 
 	return &clusterSummaryList.Items[0], nil
+}
+
+func printClusterSummary(clusterSummary *configv1alpha1.ClusterSummary) {
+	if clusterSummary == nil {
+		By("clusterSummary is nil")
+		return
+	}
+
+	Byf("clusterSummary Spec: %s", render.AsCode(clusterSummary.Spec))
+	Byf("clusterSummary status %s", render.AsCode(clusterSummary.Status))
 }

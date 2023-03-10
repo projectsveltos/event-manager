@@ -83,6 +83,15 @@ var _ = Describe("Instantiate ClusterProfile", func() {
 		projectsveltos = "projectsveltos"
 	)
 
+	var clusterSummary *configv1alpha1.ClusterSummary
+
+	AfterEach(func() {
+		if !CurrentSpecReport().Failure.IsZero() {
+			By("Test failed. ")
+			printClusterSummary(clusterSummary)
+		}
+	})
+
 	It("Verifies ClusterProfiles is instantiated using eventreport values", Label("FV"), func() {
 		serviceNamespace := randomString()
 
@@ -220,7 +229,10 @@ var _ = Describe("Instantiate ClusterProfile", func() {
 		Expect(len(clusterProfileList.Items)).To(Equal(1))
 
 		clusterProfile := &clusterProfileList.Items[0]
-		verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
+		clusterSummary = verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
+
+		Byf("Verifying ClusterSummary %s status is set to Deployed for Helm feature", clusterSummary.Name)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1alpha1.FeatureResources)
 
 		Byf("Verifying NewtworkPolicy is created in the namespace %s", serviceNamespace)
 		listOptions = []client.ListOption{
