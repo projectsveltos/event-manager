@@ -9,6 +9,24 @@ spec:
  group: ""
  version: "v1"
  kind: "Service"
+ labelFilters:
+ - key: sveltos
+   operation: Equal
+   value: fv
+---
+# EventSource supports Lua script as well allowing more complex
+# event definition. Any Service is passed to Lua script (obj)
+# so script can access any property .
+# This is same EventSource as above defined using a script.
+apiVersion: lib.projectsveltos.io/v1alpha1
+kind: EventSource
+metadata:
+ name: sveltos-service
+spec:
+ collectResources: true
+ group: ""
+ version: "v1"
+ kind: "Service"
  script: |
   function evaluate()
     hs = {}
