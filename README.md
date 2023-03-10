@@ -10,6 +10,8 @@
 
 Please refere to sveltos [documentation](https://projectsveltos.github.io/sveltos/).
 
+Event manager is a Sveltos micro service in charge of deploying add-ons when certain events happen in managed clusters.
+
 ## Contributing 
 
 ❤️ Your contributions are always welcome! If you want to contribute, have questions, noticed any bug or want to get the latest project news, you can connect with us in the following ways:
