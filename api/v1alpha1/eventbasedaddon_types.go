@@ -39,6 +39,15 @@ type EventBasedAddOnSpec struct {
 	// ClusterSelector identifies clusters to associate to.
 	ClusterSelector libsveltosv1alpha1.Selector `json:"clusterSelector"`
 
+	// Multiple resources in a managed cluster can be a match for referenced
+	// EventSource. OneForEvent indicates whether a ClusterProfile for all
+	// resource (OneForEvent = false) or one per resource (OneForEvent = true)
+	// needs to be creted.
+	// Default to to true.
+	// +kubebuilder:default:=true
+	// +optional
+	OneForEvent bool `json:"oneForEvent,omitempty"`
+
 	// EventSourceName is the name of the referenced EventSource.
 	// Resources contained in the referenced ConfigMaps/Secrets and HelmCharts
 	// will be customized using information from resources matching the EventSource

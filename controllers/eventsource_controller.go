@@ -47,7 +47,7 @@ func (r *EventSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	eventSource := &libsveltosv1alpha1.EventSource{}
 	if err := r.Get(ctx, req.NamespacedName, eventSource); err != nil {
 		if apierrors.IsNotFound(err) {
-			err = removeEventReports(ctx, r.Client, eventSource, logger)
+			err = removeEventReports(ctx, r.Client, req.NamespacedName.Name, logger)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -63,7 +63,7 @@ func (r *EventSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Handle deleted eventSource
 	if !eventSource.DeletionTimestamp.IsZero() {
-		err := removeEventReports(ctx, r.Client, eventSource, logger)
+		err := removeEventReports(ctx, r.Client, eventSource.Name, logger)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
