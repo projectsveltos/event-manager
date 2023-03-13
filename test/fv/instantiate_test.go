@@ -87,7 +87,7 @@ var _ = Describe("Instantiate ClusterProfile", func() {
 
 	AfterEach(func() {
 		if !CurrentSpecReport().Failure.IsZero() {
-			By("Test failed. ")
+			By("Test failed.")
 			printClusterSummary(clusterSummary)
 		}
 	})

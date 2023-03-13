@@ -9,8 +9,8 @@ require (
 	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
 	k8s.io/client-go v0.25.3
 	sigs.k8s.io/cluster-api v1.3.5
-	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20211110210527-619e6b92dab9
-	sigs.k8s.io/controller-tools v0.8.0
+	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20230307042619-c304e7ec2ee7
+	sigs.k8s.io/controller-tools v0.10.0
 	sigs.k8s.io/kind v0.14.0
 	sigs.k8s.io/kustomize/kustomize/v4 v4.5.7
 )
