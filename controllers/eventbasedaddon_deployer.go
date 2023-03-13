@@ -820,7 +820,9 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 			Labels: labels,
 		},
 		Spec: configv1alpha1.ClusterProfileSpec{
-			ClusterRefs: []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)},
+			ClusterRefs:          []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)},
+			StopMatchingBehavior: eventBasedAddOn.Spec.StopMatchingBehavior,
+			SyncMode:             eventBasedAddOn.Spec.SyncMode,
 		},
 	}
 
@@ -882,7 +884,9 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 			Labels: labels,
 		},
 		Spec: configv1alpha1.ClusterProfileSpec{
-			ClusterRefs: []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)},
+			ClusterRefs:          []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)},
+			StopMatchingBehavior: eventBasedAddOn.Spec.StopMatchingBehavior,
+			SyncMode:             eventBasedAddOn.Spec.SyncMode,
 		},
 	}
 

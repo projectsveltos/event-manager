@@ -39,6 +39,28 @@ type EventBasedAddOnSpec struct {
 	// ClusterSelector identifies clusters to associate to.
 	ClusterSelector libsveltosv1alpha1.Selector `json:"clusterSelector"`
 
+	// SyncMode specifies how features are synced in a matching workload cluster.
+	// - OneTime means, first time a workload cluster matches the ClusterProfile,
+	// features will be deployed in such cluster. Any subsequent feature configuration
+	// change won't be applied into the matching workload clusters;
+	// - Continuous means first time a workload cluster matches the ClusterProfile,
+	// features will be deployed in such a cluster. Any subsequent feature configuration
+	// change will be applied into the matching workload clusters.
+	// - DryRun means no change will be propagated to any matching cluster. A report
+	// instead will be generated summarizing what would happen in any matching cluster
+	// because of the changes made to ClusterProfile while in DryRun mode.
+	// +kubebuilder:default:=Continuous
+	// +optional
+	SyncMode configv1alpha1.SyncMode `json:"syncMode,omitempty"`
+
+	// StopMatchingBehavior indicates what behavior should be when a Cluster stop matching
+	// the ClusterProfile. By default all deployed Helm charts and Kubernetes resources will
+	// be withdrawn from Cluster. Setting StopMatchingBehavior to LeavePolicies will instead
+	// leave ClusterProfile deployed policies in the Cluster.
+	// +kubebuilder:default:=WithdrawPolicies
+	// +optional
+	StopMatchingBehavior configv1alpha1.StopMatchingBehavior `json:"stopMatchingBehavior,omitempty"`
+
 	// Multiple resources in a managed cluster can be a match for referenced
 	// EventSource. OneForEvent indicates whether a ClusterProfile for all
 	// resource (OneForEvent = false) or one per resource (OneForEvent = true)
