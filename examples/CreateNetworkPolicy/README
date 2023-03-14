@@ -1,0 +1,48 @@
+In this example:
+1. EventSource is matching any corev1 Service with labels sveltos=fv
+1. EventBasedAddOn references such EventSource and a ConfigMap containing a NetworkPolicy template
+   
+EventSource gets deployed in each clusters matching EventBasedAddOn Spec.ClusterSelector.
+When a Service matching EventSource is detected in any of such clusters, it collectes matching Services and reports this information back to management cluster.
+
+Sveltos event-manager in the management cluster uses information from collected Service (in this example Service labels and ports) and instatiate the NetworkPolicy containined in the referenced ConfigMap.
+
+Using the Service listed in this example, following NetworkPolicy will be deployed then managed clusters:
+
+```
+apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    annotations:
+      projectsveltos.io/hash: sha256:2994d06e227cc2d4c6eeff8de89fdb921aaddc363131a5bc3c846845580b6f3e
+    creationTimestamp: "2023-03-10T18:18:21Z"
+    generation: 1
+    labels:
+      projectsveltos.io/reference-kind: ConfigMap
+      projectsveltos.io/reference-name: sveltos-0j3u99hoylxztmrz2m8g
+      projectsveltos.io/reference-namespace: projectsveltos
+    name: front-my-service
+    namespace: default
+    ownerReferences:
+    - apiVersion: config.projectsveltos.io/v1alpha1
+      kind: ClusterProfile
+      name: sveltos-jmir32lwenr0lodpz2rv
+      uid: 16c12bc4-698d-4688-bb32-dc0ec60d2949
+    resourceVersion: "1152"
+    uid: 09f74165-2bc8-4a30-bd13-1792fd3f7d83
+  spec:
+    ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app: wordpress
+      ports:
+      - port: 80
+        protocol: TCP
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: MyApp
+    policyTypes:
+    - Ingress
+  status: {}
+  ```

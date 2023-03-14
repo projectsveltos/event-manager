@@ -1,0 +1,44 @@
+# This EventBasedAddOn reference EventSource 
+# sveltos-service and a ConfigMap containing a NetworkPolicy 
+# template which will be instatiated using information
+# from managed cluster resources matching the referenced
+# EventSource
+apiVersion: lib.projectsveltos.io/v1alpha1
+kind: EventBasedAddOn
+metadata:
+ name: service-network-policy
+spec:
+ clusterSelector: env=fv
+ eventSourceName: sveltos-service
+ policyRefs:
+ - name: network-policy
+   namespace: default
+   kind: ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-policy
+  namespace: default
+data:
+  networkpolicy.yaml: |
+    kind: NetworkPolicy
+    apiVersion: networking.k8s.io/v1
+    metadata:
+      name: front-{{ .Resource.metadata.name }}
+      namespace: {{ .Resource.metadata.namespace }}
+    spec:
+      podSelector:
+        matchLabels:
+          {{ range $key, $value := .Resource.spec.selector }}
+          {{ $key }}: {{ $value }}
+          {{ end }}
+      ingress:
+        - from:
+          - podSelector:
+              matchLabels:
+                app: wordpress
+          ports:
+            {{ range $port := .Resource.spec.ports }}
+            - port: {{ $port.port }}
+            {{ end }}
