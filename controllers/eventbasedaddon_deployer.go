@@ -835,7 +835,7 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	clusterProfile.Spec.HelmCharts = instantiateHelmChartsWithResource
 
 	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
-	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventBasedAddOn, clusterRef, object, logger)
+	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventBasedAddOn, clusterRef, object, labels, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -899,7 +899,7 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	clusterProfile.Spec.HelmCharts = instantiateHelmChartsWithResources
 
 	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
-	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventBasedAddOn, clusterRef, objects, logger)
+	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventBasedAddOn, clusterRef, objects, labels, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1051,7 +1051,7 @@ func instantiateHelmChartsWithAllResources(templateName string, helmCharts []con
 // which represent all of the resources matching referenced EventSource in the managed cluster.
 func instantiateReferencedPolicies(ctx context.Context, c client.Client, templateName string,
 	eventBasedAddOn *v1alpha1.EventBasedAddOn, cluster *corev1.ObjectReference, objects any,
-	logger logr.Logger) (*libsveltosset.Set, error) {
+	labels map[string]string, logger logr.Logger) (*libsveltosset.Set, error) {
 
 	result := libsveltosset.Set{}
 
@@ -1060,9 +1060,6 @@ func instantiateReferencedPolicies(ctx context.Context, c client.Client, templat
 	if err != nil {
 		return nil, err
 	}
-
-	labels := getInstantiatedObjectLabels(cluster.Namespace, cluster.Name, eventBasedAddOn.Name,
-		clusterproxy.GetClusterType(cluster))
 
 	// For each referenced resource, instantiate it using objects collected from managed cluster
 	// and create/update corresponding ConfigMap/Secret in managemenent cluster
