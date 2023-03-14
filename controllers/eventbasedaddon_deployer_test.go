@@ -976,8 +976,11 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			},
 		}
 
+		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventBasedAddOn.Name,
+			libsveltosv1alpha1.ClusterTypeCapi)
+
 		set, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventBasedAddOn,
-			clusterRef, object, klogr.New())
+			clusterRef, object, labels, klogr.New())
 		Expect(err).To(BeNil())
 		Expect(set).ToNot(BeNil())
 		Expect(set.Len()).To(Equal(2))
