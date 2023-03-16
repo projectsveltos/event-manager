@@ -38,48 +38,50 @@ import (
 var (
 	// This Lua script matches all Services with label
 	// sveltos: fv
-	serviceLuaScript = `
+	httpServiceLuaScript = `
 function evaluate()
-    hs = {}
-	hs.matching = false
-	hs.message = ""	
-	if obj.metadata.labels ~= nil then
-	  for key, value in pairs(obj.metadata.labels) do
-        if key == "sveltos" then
-		  if value == "fv" then
-		    hs.matching = true
-		  end
-		end
+  hs = {}
+  hs.matching = false
+  if obj.spec.ports ~= nil then
+    for _,p in pairs(obj.spec.ports) do
+      if p.port == 443 or p.port == 8443 then
+        hs.matching = true
+       end
       end
-	end
-	return hs
-end`
+    end
+    return hs
+  end`
 
-	networkPolicy = `kind: NetworkPolicy
-apiVersion: networking.k8s.io/v1
-metadata:
-  name: front-{{ .Resource.metadata.name }}
-  namespace: {{ .Resource.metadata.namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      {{ range $key, $value := .Resource.spec.selector }}
-      {{ $key }}: {{ $value }}
-      {{ end }}
-  ingress:
-    - from:
-      - podSelector:
-          matchLabels:
-            app: wordpress
-      ports:
-        {{ range $port := .Resource.spec.ports }}
-        - port: {{ $port.port }}
-        {{ end }}`
+	ingress = `    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: ingress
+      namespace: %s
+      annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /
+    spec:
+      ingressClassName: http-ingress
+      rules:
+      {{ range .Resources }}
+        - http:
+            paths:
+            - path: /{{ .metadata.name }}
+              pathType: Prefix
+              backend:
+                service:
+                  name: {{ .metadata.name }}
+                  port:
+                    {{ range .spec.ports }}
+                    {{ if or (eq .port 443 ) (eq .port 8443 ) }}
+                    number: {{ .port }}
+                    {{ end }}
+                    {{ end }}
+      {{ end }}`
 )
 
-var _ = Describe("Instantiate one ClusterProfile per resource", func() {
+var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 	const (
-		namePrefix     = "events-"
+		namePrefix     = "events-one-for-all"
 		projectsveltos = "projectsveltos"
 	)
 
@@ -88,7 +90,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 	It("Verifies ClusterProfiles is instantiated using eventreport values", Label("FV"), func() {
 		serviceNamespace := randomString()
 
-		Byf("Create a EventSource matching Services in namespace: %s", serviceNamespace)
+		Byf("Create a EventSource matching https Services in namespace: %s", serviceNamespace)
 		eventSource := libsveltosv1alpha1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
@@ -98,20 +100,20 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 				Version:          "v1",
 				Kind:             "Service",
 				Namespace:        serviceNamespace,
-				Script:           serviceLuaScript,
+				Script:           httpServiceLuaScript,
 				CollectResources: true,
 			},
 		}
 		Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
-		By("Creating a ConfigMap containing a calico policy")
+		By("Creating a ConfigMap containing a ingress policy")
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
 				Name:      randomString(),
 			},
 			Data: map[string]string{
-				"calico": networkPolicy,
+				"ingress": fmt.Sprintf(ingress, serviceNamespace),
 			},
 		}
 		Expect(k8sClient.Create(context.TODO(), cm)).To(Succeed())
@@ -125,18 +127,8 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 		Byf("Create a EventBasedAddOn referencing EventSource %s", eventSource.Name)
 		eventBasedAddOn := getEventBasedAddOn(namePrefix, eventSource.Name,
 			map[string]string{key: value}, []libsveltosv1alpha1.PolicyRef{policyRef})
-		eventBasedAddOn.Spec.OneForEvent = true
-		eventBasedAddOn.Spec.HelmCharts = []configv1alpha1.HelmChart{
-			{
-				RepositoryURL:    "https://kyverno.github.io/kyverno/",
-				RepositoryName:   "kyverno",
-				ChartName:        "kyverno/kyverno",
-				ChartVersion:     "v2.5.0",
-				ReleaseName:      "kyverno-latest",
-				ReleaseNamespace: "{{ .MatchingResource.Namespace }}",
-				HelmChartAction:  configv1alpha1.HelmChartActionInstall,
-			},
-		}
+		eventBasedAddOn.Spec.OneForEvent = false
+		eventBasedAddOn.Spec.HelmCharts = nil
 		Expect(k8sClient.Create(context.TODO(), eventBasedAddOn)).To(Succeed())
 
 		Byf("Getting client to access the workload cluster")
@@ -176,13 +168,37 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 		Expect(workloadClient.Create(context.TODO(), ns)).To(Succeed())
 
 		Byf("Creating a Service in namespace %s in the managed cluster", serviceNamespace)
-		var port int32 = 5467
+		var port int32 = 443
 		service := &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: serviceNamespace, // EventSource filters service in this namespace
 				Name:      randomString(),
 				Labels: map[string]string{
-					"sveltos": "fv", // those labels are needed to match lua script
+					randomString(): randomString(),
+				},
+			},
+			Spec: corev1.ServiceSpec{
+				Selector: map[string]string{
+					randomString(): randomString(),
+					randomString(): randomString(),
+				},
+				Ports: []corev1.ServicePort{
+					{
+						Name: randomString(),
+						Port: port,
+					},
+				},
+			},
+		}
+		Expect(workloadClient.Create(context.TODO(), service)).To(Succeed())
+
+		Byf("Creating second Service in namespace %s in the managed cluster", serviceNamespace)
+		service = &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: serviceNamespace, // EventSource filters service in this namespace
+				Name:      randomString(),
+				Labels: map[string]string{
+					randomString(): randomString(),
 				},
 			},
 			Spec: corev1.ServiceSpec{
@@ -246,19 +262,16 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 		clusterProfile := &clusterProfileList.Items[0]
 		clusterSummary = verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
 
-		Byf("Verifying ClusterSummary %s status is set to Deployed for Helm feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1alpha1.FeatureHelm)
-
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Resources feature", clusterSummary.Name)
 		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1alpha1.FeatureResources)
 
-		Byf("Verifying NewtworkPolicy is created in the namespace %s", serviceNamespace)
+		Byf("Verifying Ingress is created in the namespace %s", serviceNamespace)
 		listOptions = []client.ListOption{
 			client.InNamespace(serviceNamespace),
 		}
-		networkPolicies := &networkingv1.NetworkPolicyList{}
-		Expect(workloadClient.List(context.TODO(), networkPolicies, listOptions...)).To(Succeed())
-		Expect(len(networkPolicies.Items)).To(Equal(1))
+		ingresses := &networkingv1.IngressList{}
+		Expect(workloadClient.List(context.TODO(), ingresses, listOptions...)).To(Succeed())
+		Expect(len(ingresses.Items)).To(Equal(1))
 
 		Byf("Deleting EventBasedAddOn %s", eventBasedAddOn.Name)
 		currentEventBasedAddOn := &v1alpha1.EventBasedAddOn{}
@@ -324,15 +337,3 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 		}, timeout, pollingInterval).Should(BeTrue())
 	})
 })
-
-func getEventReportName(eventSourceName string) string {
-	return fmt.Sprintf("capi--%s--sveltos-management-workload", eventSourceName)
-}
-
-// getInstantiatedObjectLabels returns the labels to add to a ClusterProfile created
-// by an EventBasedAddOn for a given cluster
-func getInstantiatedObjectLabels(eventBasedAddOnName string) map[string]string {
-	return map[string]string{
-		"eventbasedaddon.lib.projectsveltos.io/eventbasedaddonname": eventBasedAddOnName,
-	}
-}
