@@ -1000,6 +1000,144 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		Expect(reflect.DeepEqual(secrets.Items[0].Data, secret.Data)).To(BeTrue())
 	})
 
+	It("instantiateReferencedPolicies, one for all resources, instantiates referenced configMap", func() {
+		eventBasedAddOnName := randomString()
+
+		namespace := randomString()
+
+		ingress := `apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: ingress
+      namespace: %s
+      annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /
+    spec:
+      ingressClassName: http-ingress
+      rules:
+        - http:
+            paths:
+            {{ range .Resources }}
+            - path: /{{ .metadata.name }}
+              pathType: Prefix
+              backend:
+                service:
+                  name: {{ .metadata.name }}
+                  port:
+                    {{ range .spec.ports }}
+                    {{if or (eq .port 443 ) (eq .port 8443 ) }}
+                    number: {{ .port }}
+                    {{ end }}
+                    {{ end }}
+            {{ end }}`
+
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      randomString(),
+			},
+			Data: map[string]string{
+				"policy": fmt.Sprintf(ingress, namespace),
+			},
+		}
+
+		eventBasedAddOn := &v1alpha1.EventBasedAddOn{
+			ObjectMeta: metav1.ObjectMeta{Name: eventBasedAddOnName},
+			Spec: v1alpha1.EventBasedAddOnSpec{
+				EventSourceName: randomString(),
+				OneForEvent:     false,
+				PolicyRefs: []libsveltosv1alpha1.PolicyRef{
+					{
+						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
+						Name:      configMap.Name,
+						Namespace: configMap.Namespace,
+					},
+				},
+			},
+		}
+
+		clusterRef := &corev1.ObjectReference{
+			Namespace:  namespace,
+			Name:       randomString(),
+			Kind:       "Cluster",
+			APIVersion: clusterv1.GroupVersion.String(),
+		}
+
+		initObjects := []client.Object{
+			configMap, eventBasedAddOn,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+
+		httpsService1 := `apiVersion: v1
+kind: Service
+metadata:
+  name: my-service-1
+spec:
+  selector:
+    app.kubernetes.io/name: MyApp
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 9376
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 9377`
+
+		httpsService2 := `apiVersion: v1
+kind: Service
+metadata:
+  name: my-service-2
+spec:
+  selector:
+    app.kubernetes.io/name: MyApp
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 9378
+    - name: https
+      protocol: TCP
+      port: 8443
+      targetPort: 9379`
+
+		u1, err := libsveltosutils.GetUnstructured([]byte(httpsService1))
+		Expect(err).To(BeNil())
+
+		var u2 *unstructured.Unstructured
+		u2, err = libsveltosutils.GetUnstructured([]byte(httpsService2))
+		Expect(err).To(BeNil())
+
+		objects := &controllers.CurrentObjects{
+			Resources: []map[string]interface{}{
+				u1.UnstructuredContent(),
+				u2.UnstructuredContent(),
+			},
+		}
+
+		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventBasedAddOn.Name,
+			libsveltosv1alpha1.ClusterTypeCapi)
+
+		set, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventBasedAddOn,
+			clusterRef, objects, labels, klogr.New())
+		Expect(err).To(BeNil())
+		Expect(set).ToNot(BeNil())
+		Expect(set.Len()).To(Equal(1))
+
+		listOptions := []client.ListOption{
+			client.InNamespace(controllers.ReportNamespace),
+		}
+
+		configMaps := &corev1.ConfigMapList{}
+		Expect(c.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
+		Expect(len(configMaps.Items)).To(Equal(1))
+		Expect(configMaps.Items[0].Data).ToNot(BeEmpty())
+		Expect(configMaps.Items[0].Data["policy"]).To(ContainSubstring("443"))
+		Expect(configMaps.Items[0].Data["policy"]).To(ContainSubstring("8443"))
+	})
+
 	It("removeConfigMaps removes stale ConfigMaps", func() {
 		clusterNamespace := randomString()
 		clusterName := randomString()

@@ -65,8 +65,6 @@ type EventBasedAddOnSpec struct {
 	// EventSource. OneForEvent indicates whether a ClusterProfile for all
 	// resource (OneForEvent = false) or one per resource (OneForEvent = true)
 	// needs to be creted.
-	// Default to to true.
-	// +kubebuilder:default:=true
 	// +optional
 	OneForEvent bool `json:"oneForEvent,omitempty"`
 

@@ -40,7 +40,8 @@ var (
 )
 
 type (
-	CurrentObject = currentObject
+	CurrentObject  = currentObject
+	CurrentObjects = currentObjects
 )
 
 var (
