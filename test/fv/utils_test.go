@@ -24,7 +24,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/gdexlab/go-render/render"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -71,19 +70,7 @@ func getEventBasedAddOn(namePrefix, eventSourceName string, clusterLabels map[st
 		Spec: v1alpha1.EventBasedAddOnSpec{
 			ClusterSelector: libsveltosv1alpha1.Selector(selector),
 			EventSourceName: eventSourceName,
-			OneForEvent:     true,
-			HelmCharts: []configv1alpha1.HelmChart{
-				{
-					RepositoryURL:    "https://kyverno.github.io/kyverno/",
-					RepositoryName:   "kyverno",
-					ChartName:        "kyverno/kyverno",
-					ChartVersion:     "v2.5.0",
-					ReleaseName:      "kyverno-latest",
-					ReleaseNamespace: "{{ .MatchingResource.Namespace }}",
-					HelmChartAction:  configv1alpha1.HelmChartActionInstall,
-				},
-			},
-			PolicyRefs: policyRefs,
+			PolicyRefs:      policyRefs,
 		},
 	}
 
@@ -204,14 +191,4 @@ func getClusterSummary(ctx context.Context,
 	}
 
 	return &clusterSummaryList.Items[0], nil
-}
-
-func printClusterSummary(clusterSummary *configv1alpha1.ClusterSummary) {
-	if clusterSummary == nil {
-		By("clusterSummary is nil")
-		return
-	}
-
-	Byf("clusterSummary Spec: %s", render.AsCode(clusterSummary.Spec))
-	Byf("clusterSummary status %s", render.AsCode(clusterSummary.Status))
 }

@@ -11,7 +11,7 @@ require (
 	github.com/onsi/gomega v1.24.1
 	github.com/pkg/errors v0.9.1
 	github.com/projectsveltos/libsveltos v0.7.1-0.20230314175637-cecbf1f2a756
-	github.com/projectsveltos/sveltos-manager v0.7.1-0.20230314211611-0e9ad0df7565
+	github.com/projectsveltos/sveltos-manager v0.7.1-0.20230314205211-d72e999627f3
 	github.com/prometheus/client_golang v1.13.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/text v0.7.0

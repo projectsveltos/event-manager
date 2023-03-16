@@ -138,7 +138,7 @@ type EventBasedAddOnReconciler struct {
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventbasedaddons/finalizers,verbs=update
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventsources,verbs=get;list;watch
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventreports,verbs=create;update;delete;get;watch;list
-//+kubebuilder:rbac:groups=config.projectsveltos.io,resources=clusterprofiles,verbs=get;list;update;create;delete
+//+kubebuilder:rbac:groups=config.projectsveltos.io,resources=clusterprofiles,verbs=get;list;update;create;delete;watch
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters,verbs=get;watch;list
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters/status,verbs=get;watch;list
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines,verbs=get;watch;list

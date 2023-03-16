@@ -63,7 +63,7 @@ func processCluster(ctx context.Context, c client.Client, cluster client.Object,
 	if err := c.Get(ctx, req.NamespacedName, cluster); err != nil {
 		if apierrors.IsNotFound(err) {
 			err = removeEventReportsFromCluster(ctx, c, req.Namespace, req.Name,
-				libsveltosv1alpha1.ClusterTypeCapi, logger)
+				libsveltosv1alpha1.ClusterTypeCapi, map[string]bool{}, logger)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -80,7 +80,7 @@ func processCluster(ctx context.Context, c client.Client, cluster client.Object,
 	// Handle deleted cluster
 	if !cluster.GetDeletionTimestamp().IsZero() {
 		err := removeEventReportsFromCluster(ctx, c, req.Namespace, req.Name,
-			libsveltosv1alpha1.ClusterTypeCapi, logger)
+			libsveltosv1alpha1.ClusterTypeCapi, map[string]bool{}, logger)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

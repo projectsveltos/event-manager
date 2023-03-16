@@ -69,7 +69,7 @@ func removeEventReports(ctx context.Context, c client.Client, eventSourceName st
 
 // removeEventReportsFromCluster deletes all EventReport corresponding to Cluster instance
 func removeEventReportsFromCluster(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, logger logr.Logger) error {
+	clusterType libsveltosv1alpha1.ClusterType, currentEventReports map[string]bool, logger logr.Logger) error {
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels{
@@ -86,10 +86,12 @@ func removeEventReportsFromCluster(ctx context.Context, c client.Client, cluster
 	}
 
 	for i := range eventReportList.Items {
-		cr := &eventReportList.Items[i]
-		err = c.Delete(ctx, cr)
-		if err != nil {
-			return err
+		er := &eventReportList.Items[i]
+		if _, ok := currentEventReports[er.Name]; !ok {
+			err = c.Delete(ctx, er)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -155,34 +157,42 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 		return err
 	}
 
+	currentEventReports := make(map[string]bool)
 	for i := range eventReportList.Items {
-		hcr := &eventReportList.Items[i]
-		l := logger.WithValues("eventReport", hcr.Name)
+		er := &eventReportList.Items[i]
+		l := logger.WithValues("eventReport", er.Name)
 		// First update/delete eventReports in managemnent cluster
-		if !hcr.DeletionTimestamp.IsZero() {
+		if !er.DeletionTimestamp.IsZero() {
 			logger.V(logs.LogDebug).Info("deleting from management cluster")
-			err = deleteEventReport(ctx, c, cluster, hcr, l)
+			err = deleteEventReport(ctx, c, cluster, er, l)
 			if err != nil {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to delete EventReport in management cluster. Err: %v", err))
 			}
 		} else {
 			logger.V(logs.LogDebug).Info("updating in management cluster")
-			err = updateEventReport(ctx, c, cluster, hcr, l)
+			err = updateEventReport(ctx, c, cluster, er, l)
 			if err != nil {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update EventReport in management cluster. Err: %v", err))
 			}
+			// Name in the management cluster is different than name in the managed cluster
+			eventSourceName := er.Labels[libsveltosv1alpha1.EventSourceLabelName]
+			clusterType := clusterproxy.GetClusterType(cluster)
+			eventReportName := libsveltosv1alpha1.GetEventReportName(eventSourceName, cluster.Name, &clusterType)
+			currentEventReports[eventReportName] = true
 		}
+
 		logger.V(logs.LogDebug).Info("updating in managed cluster")
 		// Update EventReport Status in managed cluster
 		phase := libsveltosv1alpha1.ReportProcessed
-		hcr.Status.Phase = &phase
-		err = remoteClient.Status().Update(ctx, hcr)
+		er.Status.Phase = &phase
+		err = remoteClient.Status().Update(ctx, er)
 		if err != nil {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update EventReport in managed cluster. Err: %v", err))
 		}
 	}
 
-	return nil
+	return removeEventReportsFromCluster(ctx, c, cluster.Namespace, cluster.Name, clusterproxy.GetClusterType(cluster),
+		currentEventReports, logger)
 }
 
 func deleteEventReport(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
