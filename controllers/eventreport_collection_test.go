@@ -126,7 +126,7 @@ var _ = Describe("EventSource Deployer", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
 
 		Expect(controllers.RemoveEventReportsFromCluster(context.TODO(), c, clusterNamespace, clusterName,
-			clusterType, klogr.New())).To(Succeed())
+			clusterType, map[string]bool{}, klogr.New())).To(Succeed())
 
 		eventReportList := &libsveltosv1alpha1.EventReportList{}
 		Expect(c.List(context.TODO(), eventReportList)).To(Succeed())

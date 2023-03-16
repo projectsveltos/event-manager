@@ -205,6 +205,7 @@ func undeployEventBasedAddOnResourcesFromCluster(ctx context.Context, c client.C
 	}
 
 	logger.V(logs.LogDebug).Info("Undeployed eventBasedAddOn.")
+
 	logger.V(logs.LogDebug).Info("Clearing instantiated ClusterProfile/ConfigMap/Secret instances")
 	return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType, resource, nil, logger)
 }
@@ -676,7 +677,7 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 // set to true (otherwise resources matching an EventSource won't be sent to management cluster)
 type currentObjects struct {
 	MatchingResources []corev1.ObjectReference
-	Resources         []unstructured.Unstructured
+	Resources         []map[string]interface{}
 }
 
 // When instantiating one ClusterProfile per resource those values are available.
@@ -713,6 +714,12 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 		msg := "found more than one EventReport for a given EventSource/cluster"
 		logger.V(logs.LogInfo).Info(msg)
 		return fmt.Errorf("%s", msg)
+	}
+
+	// If no resource is currently matching, clear all
+	if len(eventReports.Items[0].Spec.MatchingResources) == 0 {
+		return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType,
+			eventBasedAddOn, nil, logger)
 	}
 
 	var clusterProfiles []*configv1alpha1.ClusterProfile
@@ -865,9 +872,14 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 		return nil, err
 	}
 
+	values := make([]map[string]interface{}, len(resources))
+	for i := range resources {
+		values[i] = resources[i].UnstructuredContent()
+	}
+
 	objects := &currentObjects{
 		MatchingResources: eventReport.Spec.MatchingResources,
-		Resources:         resources,
+		Resources:         values,
 	}
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOn.Name, clusterType)
@@ -1005,7 +1017,7 @@ func instantiateDataSection(templateName string, content map[string]string, data
 
 	contentJson, err := json.Marshal(content)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to marshel helmCharts: %v", err))
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to marshal content: %v", err))
 		return nil, err
 	}
 
@@ -1384,7 +1396,7 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 
 	if err := removeClusterProfiles(ctx, c, clusterNamespace, clusterName, clusterType, eventBasedAddOn,
 		clusterProfiles, logger); err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to remove stale clustrProfiles: %v", err))
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to remove stale clusterProfiles: %v", err))
 		return err
 	}
 
