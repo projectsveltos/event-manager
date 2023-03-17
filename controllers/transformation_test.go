@@ -84,15 +84,17 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
 
 		reconciler := &controllers.EventBasedAddOnReconciler{
-			Client:           c,
-			Scheme:           scheme,
-			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns: make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ClusterLabels:    make(map[corev1.ObjectReference]map[string]string),
-			Mux:              sync.Mutex{},
+			Client:             c,
+			Scheme:             scheme,
+			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
+			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
+			ClusterLabels:      make(map[corev1.ObjectReference]map[string]string),
+			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			Mux:                sync.Mutex{},
 		}
 
 		By("Setting EventBasedAddOnReconciler internal structures")

@@ -1159,6 +1159,7 @@ func createSecret(ctx context.Context, c client.Client, ref client.Object, name 
 			Annotations: ref.GetAnnotations(), //  "projectsveltos.io/template" might be set
 		},
 		Data: data,
+		Type: libsveltosv1alpha1.ClusterProfileSecretType,
 	}
 
 	return c.Create(ctx, secret)
@@ -1211,6 +1212,7 @@ func updateSecret(ctx context.Context, c client.Client, name string, labels, con
 
 	secret.Labels = labels
 	secret.Data = data
+	secret.Type = libsveltosv1alpha1.ClusterProfileSecretType
 
 	return c.Update(ctx, secret)
 }

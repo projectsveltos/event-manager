@@ -140,15 +140,17 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		controllers.RegisterFeatures(dep, klogr.New())
 
 		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:           c,
-			Deployer:         dep,
-			Scheme:           c.Scheme(),
-			Mux:              sync.Mutex{},
-			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns: make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			Client:             c,
+			Deployer:           dep,
+			Scheme:             c.Scheme(),
+			Mux:                sync.Mutex{},
+			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
+			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
+			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		eScope, err := scope.NewEventBasedAddOnScope(scope.EventBasedAddOnScopeParams{
@@ -224,15 +226,17 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		controllers.RegisterFeatures(dep, klogr.New())
 
 		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:           c,
-			Deployer:         dep,
-			Scheme:           c.Scheme(),
-			Mux:              sync.Mutex{},
-			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns: make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			Client:             c,
+			Deployer:           dep,
+			Scheme:             c.Scheme(),
+			Mux:                sync.Mutex{},
+			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
+			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
+			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		// Verify eventBasedAddOn has been created
