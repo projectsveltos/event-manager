@@ -30,10 +30,12 @@ var (
 	UpdateClusterInfo                = (*EventBasedAddOnReconciler).updateClusterInfo
 	CleanMaps                        = (*EventBasedAddOnReconciler).cleanMaps
 	UpdateMaps                       = (*EventBasedAddOnReconciler).updateMaps
+	GetEventSourceMapForEntry        = (*EventBasedAddOnReconciler).getEventSourceMapForEntry
 	GetReferenceMapForEntry          = (*EventBasedAddOnReconciler).getReferenceMapForEntry
 	GetClusterMapForEntry            = (*EventBasedAddOnReconciler).getClusterMapForEntry
 	IsClusterEntryRemoved            = (*EventBasedAddOnReconciler).isClusterEntryRemoved
 	ProcessEventBasedAddOn           = (*EventBasedAddOnReconciler).processEventBasedAddOn
+	UpdateReferencedResourceMap      = (*EventBasedAddOnReconciler).updateReferencedResourceMap
 
 	GetKeyFromObject      = getKeyFromObject
 	GetHandlersForFeature = getHandlersForFeature

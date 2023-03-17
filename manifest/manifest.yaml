@@ -410,16 +410,22 @@ rules:
   resources:
   - configmaps
   verbs:
+  - create
+  - delete
   - get
   - list
+  - update
   - watch
 - apiGroups:
   - ""
   resources:
   - secrets
   verbs:
+  - create
+  - delete
   - get
   - list
+  - update
   - watch
 - apiGroups:
   - apiextensions.k8s.io
@@ -683,7 +689,7 @@ spec:
         - --v=5
         command:
         - /manager
-        image: projectsveltos/event-manager-amd64:v0.7.1
+        image: projectsveltos/event-manager-amd64:v0.7.2
         livenessProbe:
           httpGet:
             path: /healthz
