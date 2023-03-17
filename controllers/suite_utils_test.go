@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -44,6 +45,17 @@ import (
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	configv1alpha1 "github.com/projectsveltos/sveltos-manager/api/v1alpha1"
+)
+
+const (
+	viewClusterRole = `apiVersion: rbac.authorization.k8s.io/v1
+	kind: ClusterRole
+	metadata:
+	  name: %s
+	rules:
+	- apiGroups: [""] # "" indicates the core API group
+	  resources: ["pods"]
+	  verbs: ["get", "watch", "list"]`
 )
 
 var (
@@ -158,15 +170,17 @@ func getEventReport(eventSourceName, clusterNamespace, clusterName string) *libs
 
 func getEventBasedAddOnReconciler(c client.Client) *controllers.EventBasedAddOnReconciler {
 	return &controllers.EventBasedAddOnReconciler{
-		Client:           c,
-		Scheme:           scheme,
-		ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-		EventBasedAddOns: make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-		EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-		ClusterLabels:    make(map[corev1.ObjectReference]map[string]string),
-		Mux:              sync.Mutex{},
+		Client:             c,
+		Scheme:             scheme,
+		ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
+		EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+		EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
+		ClusterLabels:      make(map[corev1.ObjectReference]map[string]string),
+		EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
+		ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		Mux:                sync.Mutex{},
 	}
 }
 
@@ -319,4 +333,25 @@ func createSecretWithKubeconfig(clusterNamespace, clusterName string) {
 
 	Expect(testEnv.Create(context.TODO(), secret)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv.Client, secret)).To(Succeed())
+}
+
+// createConfigMapWithPolicy creates a configMap with passed in policies.
+func createConfigMapWithPolicy(namespace, configMapName string, policyStrs ...string) *corev1.ConfigMap {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      configMapName,
+		},
+		Data: map[string]string{},
+	}
+	for i := range policyStrs {
+		key := fmt.Sprintf("policy%d.yaml", i)
+		if utf8.Valid([]byte(policyStrs[i])) {
+			cm.Data[key] = policyStrs[i]
+		} else {
+			cm.BinaryData[key] = []byte(policyStrs[i])
+		}
+	}
+
+	return cm
 }
