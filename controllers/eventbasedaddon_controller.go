@@ -131,6 +131,11 @@ type EventBasedAddOnReconciler struct {
 
 	// Key: EventBasedAddOn: value: set of EventSource referenced
 	ToEventSourceMap map[types.NamespacedName]*libsveltosset.Set
+
+	// key: Referenced object; value: set of all EventBasedAddOns referencing the resource
+	ReferenceMap map[corev1.ObjectReference]*libsveltosset.Set
+	// key: EventBasedAddOns name; value: set of referenced resources
+	EventBasedAddOnMap map[types.NamespacedName]*libsveltosset.Set
 }
 
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventbasedaddons,verbs=get;list;watch;create;update;patch;delete
@@ -145,8 +150,8 @@ type EventBasedAddOnReconciler struct {
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines/status,verbs=get;watch;list
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=sveltosclusters,verbs=get;watch;list
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=sveltosclusters/status,verbs=get;watch;list
-//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;watch;list
-//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;watch;list
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;watch;list;create;update;delete
+//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;watch;list;create;update;delete
 
 func (r *EventBasedAddOnReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	logger := ctrl.LoggerFrom(ctx)
@@ -286,7 +291,7 @@ func (r *EventBasedAddOnReconciler) SetupWithManager(mgr ctrl.Manager) (controll
 		return nil, errors.Wrap(err, "error creating controller")
 	}
 
-	/* TODO:
+	/* TODO
 	// When projectsveltos ClusterProfile changes, according to ClusterProfilePredicates,
 	// one or more EventBasedAddOns need to be reconciled.
 	err = c.Watch(&source.Kind{Type: &configv1alpha1.ClusterProfile{}},
@@ -316,6 +321,26 @@ func (r *EventBasedAddOnReconciler) SetupWithManager(mgr ctrl.Manager) (controll
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating controller")
+	}
+
+	// When ConfigMap changes, according to ConfigMapPredicates,
+	// one or more EventBasedAddOns need to be reconciled.
+	err = c.Watch(&source.Kind{Type: &corev1.ConfigMap{}},
+		handler.EnqueueRequestsFromMapFunc(r.requeueEventBasedAddOnForReference),
+		ConfigMapPredicates(mgr.GetLogger().WithValues("predicate", "configmappredicate")),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// When Secret changes, according to SecretPredicates,
+	// one or more EventBasedAddOns need to be reconciled.
+	err = c.Watch(&source.Kind{Type: &corev1.Secret{}},
+		handler.EnqueueRequestsFromMapFunc(r.requeueEventBasedAddOnForReference),
+		SecretPredicates(mgr.GetLogger().WithValues("predicate", "secretpredicate")),
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	if r.EventReportMode == CollectFromManagementCluster {
@@ -398,12 +423,21 @@ func (r *EventBasedAddOnReconciler) cleanMaps(eventBasedAddOnScope *scope.EventB
 	}
 
 	delete(r.EventBasedAddOns, *eventBasedAddOnInfo)
+
+	delete(r.EventBasedAddOnMap, types.NamespacedName{Name: eventBasedAddOnScope.Name()})
+
+	for i := range r.ReferenceMap {
+		eventBasedAddOnSet := r.ReferenceMap[i]
+		eventBasedAddOnSet.Erase(eventBasedAddOnInfo)
+	}
 }
 
 func (r *EventBasedAddOnReconciler) updateMaps(eventBasedAddOnScope *scope.EventBasedAddOnScope) {
 	r.updateClusterMaps(eventBasedAddOnScope)
 
 	r.updateEventSourceMaps(eventBasedAddOnScope)
+
+	r.updateReferencedResourceMap(eventBasedAddOnScope)
 
 	eventBasedAddOnInfo := getKeyFromObject(r.Scheme, eventBasedAddOnScope.EventBasedAddOn)
 
@@ -471,6 +505,48 @@ func (r *EventBasedAddOnReconciler) updateEventSourceMaps(eventBasedAddOnScope *
 	// For each currently referenced instance, add EventBasedAddOn as consumer
 	for _, referencedResource := range currentReferences.Items() {
 		tmpResource := referencedResource
+		r.getEventSourceMapForEntry(&tmpResource).Insert(
+			&corev1.ObjectReference{
+				APIVersion: v1alpha1.GroupVersion.String(),
+				Kind:       v1alpha1.EventBasedAddOnKind,
+				Name:       eventBasedAddOnScope.Name(),
+			},
+		)
+	}
+
+	// For each resource not reference anymore, remove EventBasedAddOn as consumer
+	for i := range toBeRemoved {
+		referencedResource := toBeRemoved[i]
+		r.getEventSourceMapForEntry(&referencedResource).Erase(
+			&corev1.ObjectReference{
+				APIVersion: v1alpha1.GroupVersion.String(),
+				Kind:       v1alpha1.EventBasedAddOnKind,
+				Name:       eventBasedAddOnScope.Name(),
+			},
+		)
+	}
+
+	// Update list of EventSource instances currently referenced by EventBasedAddOn
+	r.ToEventSourceMap[name] = currentReferences
+}
+
+func (r *EventBasedAddOnReconciler) updateReferencedResourceMap(eventBasedAddOnScope *scope.EventBasedAddOnScope) {
+	// Get list of ConfigMap/Secret currently referenced
+	currentReferences := r.getCurrentReferences(eventBasedAddOnScope)
+
+	r.Mux.Lock()
+	defer r.Mux.Unlock()
+
+	// Get list of References not referenced anymore by EventBasedAddOn
+	var toBeRemoved []corev1.ObjectReference
+	eventBasedAddOnName := types.NamespacedName{Name: eventBasedAddOnScope.Name()}
+	if v, ok := r.EventBasedAddOnMap[eventBasedAddOnName]; ok {
+		toBeRemoved = v.Difference(currentReferences)
+	}
+
+	// For each currently referenced instance, add EventBasedAddOn as consumer
+	for _, referencedResource := range currentReferences.Items() {
+		tmpResource := referencedResource
 		r.getReferenceMapForEntry(&tmpResource).Insert(
 			&corev1.ObjectReference{
 				APIVersion: v1alpha1.GroupVersion.String(),
@@ -492,15 +568,24 @@ func (r *EventBasedAddOnReconciler) updateEventSourceMaps(eventBasedAddOnScope *
 		)
 	}
 
-	// Update list of EventSource instances currently referenced by EventBasedAddOn
-	r.ToEventSourceMap[name] = currentReferences
+	// Update list of ConfigMaps/Secrets currently referenced by EventBasedAddOn
+	r.EventBasedAddOnMap[eventBasedAddOnName] = currentReferences
 }
 
-func (r *EventBasedAddOnReconciler) getReferenceMapForEntry(entry *corev1.ObjectReference) *libsveltosset.Set {
+func (r *EventBasedAddOnReconciler) getEventSourceMapForEntry(entry *corev1.ObjectReference) *libsveltosset.Set {
 	s := r.EventSourceMap[*entry]
 	if s == nil {
 		s = &libsveltosset.Set{}
 		r.EventSourceMap[*entry] = s
+	}
+	return s
+}
+
+func (r *EventBasedAddOnReconciler) getReferenceMapForEntry(entry *corev1.ObjectReference) *libsveltosset.Set {
+	s := r.ReferenceMap[*entry]
+	if s == nil {
+		s = &libsveltosset.Set{}
+		r.ReferenceMap[*entry] = s
 	}
 	return s
 }
@@ -549,4 +634,27 @@ func (r *EventBasedAddOnReconciler) updateClusterInfo(ctx context.Context,
 
 	eventBasedAddOnScope.SetClusterInfo(finalClusterInfo)
 	return nil
+}
+
+func (r *EventBasedAddOnReconciler) getCurrentReferences(eventBasedAddOnScope *scope.EventBasedAddOnScope) *libsveltosset.Set {
+	currentReferences := &libsveltosset.Set{}
+	for i := range eventBasedAddOnScope.EventBasedAddOn.Spec.PolicyRefs {
+		referencedNamespace := eventBasedAddOnScope.EventBasedAddOn.Spec.PolicyRefs[i].Namespace
+		referencedName := eventBasedAddOnScope.EventBasedAddOn.Spec.PolicyRefs[i].Name
+
+		// If referenced resource namespace is empty, at instantiation time the cluster namespace will be used.
+		// Here to track referenced ConfigMaps/Resource, we use all current matching clusters
+		for j := range eventBasedAddOnScope.EventBasedAddOn.Status.MatchingClusterRefs {
+			clusterRef := eventBasedAddOnScope.EventBasedAddOn.Status.MatchingClusterRefs[j]
+			namespace := getReferenceResourceNamespace(clusterRef.Namespace, referencedNamespace)
+
+			currentReferences.Insert(&corev1.ObjectReference{
+				APIVersion: corev1.SchemeGroupVersion.String(), // the only resources that can be referenced are Secret and ConfigMap
+				Kind:       eventBasedAddOnScope.EventBasedAddOn.Spec.PolicyRefs[i].Kind,
+				Namespace:  namespace,
+				Name:       referencedName,
+			})
+		}
+	}
+	return currentReferences
 }

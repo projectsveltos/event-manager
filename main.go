@@ -119,6 +119,8 @@ func main() {
 		ClusterLabels:        make(map[corev1.ObjectReference]map[string]string),
 		EventSourceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ToEventSourceMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+		EventBasedAddOnMap:   make(map[types.NamespacedName]*libsveltosset.Set),
+		ReferenceMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
 	}
 
 	eventBasedAddOnController, err = eventBasedAddOnReconciler.SetupWithManager(mgr)
