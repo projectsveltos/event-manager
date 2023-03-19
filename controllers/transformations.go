@@ -55,8 +55,8 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventReport(
 		Kind: libsveltosv1alpha1.EventSourceKind, Name: eventReport.Spec.EventSourceName}
 
 	// Get all EventBasedAddOns referencing this EventSource
-	requests := make([]ctrl.Request, r.getReferenceMapForEntry(&eventSourceInfo).Len())
-	consumers := r.getReferenceMapForEntry(&eventSourceInfo).Items()
+	requests := make([]ctrl.Request, r.getEventSourceMapForEntry(&eventSourceInfo).Len())
+	consumers := r.getEventSourceMapForEntry(&eventSourceInfo).Items()
 
 	for i := range consumers {
 		l := logger.WithValues("eventBasedAddOn", consumers[i].Name)
@@ -92,8 +92,8 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventSource(
 		Kind: libsveltosv1alpha1.EventSourceKind, Name: eventSource.Name}
 
 	// Get all EventBasedAddOns referencing this EventSource
-	requests := make([]ctrl.Request, r.getReferenceMapForEntry(&eventSourceInfo).Len())
-	consumers := r.getReferenceMapForEntry(&eventSourceInfo).Items()
+	requests := make([]ctrl.Request, r.getEventSourceMapForEntry(&eventSourceInfo).Len())
+	consumers := r.getEventSourceMapForEntry(&eventSourceInfo).Items()
 
 	for i := range consumers {
 		l := logger.WithValues("eventBasedAddOn", consumers[i].Name)
