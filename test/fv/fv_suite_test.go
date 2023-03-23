@@ -99,7 +99,7 @@ var _ = BeforeSuite(func() {
 	clusterList := &clusterv1.ClusterList{}
 	listOptions := []client.ListOption{
 		client.MatchingLabels(
-			map[string]string{clusterv1.ClusterLabelName: "sveltos-management-workload"},
+			map[string]string{clusterv1.ClusterNameLabel: "sveltos-management-workload"},
 		),
 	}
 
@@ -112,7 +112,7 @@ var _ = BeforeSuite(func() {
 		machineList := &clusterv1.MachineList{}
 		listOptions = []client.ListOption{
 			client.InNamespace(kindWorkloadCluster.Namespace),
-			client.MatchingLabels{clusterv1.ClusterLabelName: kindWorkloadCluster.Name},
+			client.MatchingLabels{clusterv1.ClusterNameLabel: kindWorkloadCluster.Name},
 		}
 		err = k8sClient.List(context.TODO(), machineList, listOptions...)
 		if err != nil {
