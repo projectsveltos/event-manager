@@ -220,6 +220,7 @@ func eventBasedAddOnHash(ctx context.Context, c client.Client,
 	}
 
 	config := render.AsCode(e.Spec)
+	config += render.AsCode(e.Labels)
 
 	for i := range resources {
 		switch r := resources[i].(type) {
@@ -597,12 +598,18 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 	if err == nil {
 		logger.V(logs.LogDebug).Info("updating eventSource")
 		currentEventSource.Spec = eventSource.Spec
+		// Copy labels. If admin-label is set, sveltos-agent will impersonate
+		// ServiceAccount representing the tenant admin when fetching resources
+		currentEventSource.Labels = eventSource.Labels
 		deployer.AddOwnerReference(currentEventSource, resource)
 		return remoteClient.Update(ctx, currentEventSource)
 	}
 
 	currentEventSource.Name = eventSource.Name
 	currentEventSource.Spec = eventSource.Spec
+	// Copy labels. If admin-label is set, sveltos-agent will impersonate
+	// ServiceAccount representing the tenant admin when fetching resources
+	currentEventSource.Labels = eventSource.Labels
 	deployer.AddOwnerReference(currentEventSource, resource)
 
 	logger.V(logs.LogDebug).Info("creating eventSource")
@@ -821,6 +828,13 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		return nil, err
 	}
 
+	// If EventBasedAddOn was created by tenant admin, copy label over to created ClusterProfile
+	if eventBasedAddOn.Labels != nil {
+		if admin, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.AdminLabel]; ok {
+			labels[libsveltosv1alpha1.AdminLabel] = admin
+		}
+	}
+
 	clusterProfile := &configv1alpha1.ClusterProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   clusterProfileName,
@@ -888,6 +902,13 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile name: %v", err))
 		return nil, err
+	}
+
+	// If EventBasedAddOn was created by tenant admin, copy label over to created ClusterProfile
+	if eventBasedAddOn.Labels != nil {
+		if admin, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.AdminLabel]; ok {
+			labels[libsveltosv1alpha1.AdminLabel] = admin
+		}
 	}
 
 	clusterProfile := &configv1alpha1.ClusterProfile{
