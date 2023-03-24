@@ -332,6 +332,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		}
 
 		config := render.AsCode(e.Spec)
+		config += render.AsCode(e.Labels)
 		config += render.AsCode(eventSource.Spec)
 		config += render.AsCode(eventReport.Spec)
 		config += render.AsCode(configMap.Data)
