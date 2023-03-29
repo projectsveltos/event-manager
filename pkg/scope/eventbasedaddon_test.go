@@ -89,7 +89,7 @@ var _ = Describe("EventBasedAddOnScope", func() {
 	})
 
 	It("GetSelector returns EventBasedAddOn ClusterSelector", func() {
-		eventBasedAddOn.Spec.ClusterSelector = libsveltosv1alpha1.Selector("zone=east")
+		eventBasedAddOn.Spec.SourceClusterSelector = libsveltosv1alpha1.Selector("zone=east")
 		params := scope.EventBasedAddOnScopeParams{
 			Client:          c,
 			EventBasedAddOn: eventBasedAddOn,
@@ -100,7 +100,7 @@ var _ = Describe("EventBasedAddOnScope", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(scope).ToNot(BeNil())
 
-		Expect(scope.GetSelector()).To(Equal(string(eventBasedAddOn.Spec.ClusterSelector)))
+		Expect(scope.GetSelector()).To(Equal(string(eventBasedAddOn.Spec.SourceClusterSelector)))
 	})
 
 	It("Close updates EventBasedAddOn", func() {

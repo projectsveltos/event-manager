@@ -841,10 +841,17 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 			Labels: labels,
 		},
 		Spec: configv1alpha1.ClusterProfileSpec{
-			ClusterRefs:          []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)},
 			StopMatchingBehavior: eventBasedAddOn.Spec.StopMatchingBehavior,
 			SyncMode:             eventBasedAddOn.Spec.SyncMode,
 		},
+	}
+
+	if eventBasedAddOn.Spec.DestinationClusterSelector == nil || *eventBasedAddOn.Spec.DestinationClusterSelector == "" {
+		clusterProfile.Spec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
+		clusterProfile.Spec.ClusterSelector = ""
+	} else {
+		clusterProfile.Spec.ClusterRefs = nil
+		clusterProfile.Spec.ClusterSelector = *eventBasedAddOn.Spec.DestinationClusterSelector
 	}
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventBasedAddOn.Name)
@@ -917,10 +924,17 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 			Labels: labels,
 		},
 		Spec: configv1alpha1.ClusterProfileSpec{
-			ClusterRefs:          []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)},
 			StopMatchingBehavior: eventBasedAddOn.Spec.StopMatchingBehavior,
 			SyncMode:             eventBasedAddOn.Spec.SyncMode,
 		},
+	}
+
+	if eventBasedAddOn.Spec.DestinationClusterSelector == nil || *eventBasedAddOn.Spec.DestinationClusterSelector == "" {
+		clusterProfile.Spec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
+		clusterProfile.Spec.ClusterSelector = ""
+	} else {
+		clusterProfile.Spec.ClusterRefs = nil
+		clusterProfile.Spec.ClusterSelector = *eventBasedAddOn.Spec.DestinationClusterSelector
 	}
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventBasedAddOn.Name)

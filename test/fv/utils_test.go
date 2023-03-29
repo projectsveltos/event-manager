@@ -68,9 +68,9 @@ func getEventBasedAddOn(namePrefix, eventSourceName string, clusterLabels map[st
 			Name: namePrefix + randomString(),
 		},
 		Spec: v1alpha1.EventBasedAddOnSpec{
-			ClusterSelector: libsveltosv1alpha1.Selector(selector),
-			EventSourceName: eventSourceName,
-			PolicyRefs:      policyRefs,
+			SourceClusterSelector: libsveltosv1alpha1.Selector(selector),
+			EventSourceName:       eventSourceName,
+			PolicyRefs:            policyRefs,
 		},
 	}
 

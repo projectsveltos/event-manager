@@ -62,7 +62,7 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
 			Spec: v1alpha1.EventBasedAddOnSpec{
-				ClusterSelector: libsveltosv1alpha1.Selector("env=production"),
+				SourceClusterSelector: libsveltosv1alpha1.Selector("env=production"),
 			},
 		}
 
@@ -71,7 +71,7 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
 			Spec: v1alpha1.EventBasedAddOnSpec{
-				ClusterSelector: libsveltosv1alpha1.Selector("env=qa"),
+				SourceClusterSelector: libsveltosv1alpha1.Selector("env=qa"),
 			},
 		}
 
@@ -100,10 +100,10 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		By("Setting EventBasedAddOnReconciler internal structures")
 		matchingInfo := corev1.ObjectReference{APIVersion: cluster.APIVersion,
 			Kind: v1alpha1.EventBasedAddOnKind, Name: matchingEventBasedAddOn.Name}
-		reconciler.EventBasedAddOns[matchingInfo] = matchingEventBasedAddOn.Spec.ClusterSelector
+		reconciler.EventBasedAddOns[matchingInfo] = matchingEventBasedAddOn.Spec.SourceClusterSelector
 		nonMatchingInfo := corev1.ObjectReference{APIVersion: cluster.APIVersion,
 			Kind: v1alpha1.EventBasedAddOnKind, Name: nonMatchingEventBasedAddOn.Name}
-		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.ClusterSelector
+		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.SourceClusterSelector
 
 		// ClusterMap contains, per ClusterName, list of EventBasedAddOns matching it.
 		eventBasedAddOnSet := &libsveltosset.Set{}
@@ -126,10 +126,10 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		Expect(requests).To(ContainElement(expected))
 
 		By("Changing eventBasedAddOn ClusterSelector again to have two EventBasedAddOns match")
-		nonMatchingEventBasedAddOn.Spec.ClusterSelector = matchingEventBasedAddOn.Spec.ClusterSelector
+		nonMatchingEventBasedAddOn.Spec.SourceClusterSelector = matchingEventBasedAddOn.Spec.SourceClusterSelector
 		Expect(c.Update(context.TODO(), nonMatchingEventBasedAddOn)).To(Succeed())
 
-		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.ClusterSelector
+		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.SourceClusterSelector
 
 		clusterSet1.Insert(&clusterInfo)
 		reconciler.ToClusterMap[types.NamespacedName{Name: nonMatchingInfo.Name}] = clusterSet1
@@ -144,9 +144,9 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		Expect(requests).To(ContainElement(expected))
 
 		By("Changing eventBasedAddOn ClusterSelector again to have no EventBasedAddOn match")
-		matchingEventBasedAddOn.Spec.ClusterSelector = libsveltosv1alpha1.Selector("env=qa")
+		matchingEventBasedAddOn.Spec.SourceClusterSelector = libsveltosv1alpha1.Selector("env=qa")
 		Expect(c.Update(context.TODO(), matchingEventBasedAddOn)).To(Succeed())
-		nonMatchingEventBasedAddOn.Spec.ClusterSelector = matchingEventBasedAddOn.Spec.ClusterSelector
+		nonMatchingEventBasedAddOn.Spec.SourceClusterSelector = matchingEventBasedAddOn.Spec.SourceClusterSelector
 		Expect(c.Update(context.TODO(), nonMatchingEventBasedAddOn)).To(Succeed())
 
 		emptySet := &libsveltosset.Set{}
@@ -154,8 +154,8 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		reconciler.ToClusterMap[types.NamespacedName{Name: nonMatchingInfo.Name}] = emptySet
 		reconciler.ClusterMap[clusterInfo] = emptySet
 
-		reconciler.EventBasedAddOns[matchingInfo] = matchingEventBasedAddOn.Spec.ClusterSelector
-		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.ClusterSelector
+		reconciler.EventBasedAddOns[matchingInfo] = matchingEventBasedAddOn.Spec.SourceClusterSelector
+		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.SourceClusterSelector
 
 		requests = controllers.RequeueEventBasedAddOnForCluster(reconciler, cluster)
 		Expect(requests).To(HaveLen(0))
@@ -188,7 +188,7 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
 			Spec: v1alpha1.EventBasedAddOnSpec{
-				ClusterSelector: libsveltosv1alpha1.Selector("env=production"),
+				SourceClusterSelector: libsveltosv1alpha1.Selector("env=production"),
 			},
 		}
 
@@ -215,7 +215,7 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 
 		apiVersion, kind = eventBasedAddOn.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 		eventBasedAddOnInfo := corev1.ObjectReference{APIVersion: apiVersion, Kind: kind, Name: eventBasedAddOn.GetName()}
-		eventBasedAddOnReconciler.EventBasedAddOns[eventBasedAddOnInfo] = eventBasedAddOn.Spec.ClusterSelector
+		eventBasedAddOnReconciler.EventBasedAddOns[eventBasedAddOnInfo] = eventBasedAddOn.Spec.SourceClusterSelector
 
 		eventBasedAddOnList := controllers.RequeueEventBasedAddOnForMachine(eventBasedAddOnReconciler,
 			cpMachine)
