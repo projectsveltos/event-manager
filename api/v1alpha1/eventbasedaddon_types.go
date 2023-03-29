@@ -36,8 +36,32 @@ const (
 
 // EventBasedAddOnSpec defines the desired state of EventBasedAddOn
 type EventBasedAddOnSpec struct {
-	// ClusterSelector identifies clusters to associate to.
-	ClusterSelector libsveltosv1alpha1.Selector `json:"clusterSelector"`
+	// SourceClusterSelector identifies clusters to associate to.
+	// This represents the set of clusters where Sveltos will watch for
+	// events defined by referenced EventSource
+	SourceClusterSelector libsveltosv1alpha1.Selector `json:"sourceClusterSelector"`
+
+	// Multiple resources in a managed cluster can be a match for referenced
+	// EventSource. OneForEvent indicates whether a ClusterProfile for all
+	// resource (OneForEvent = false) or one per resource (OneForEvent = true)
+	// needs to be creted.
+	// +optional
+	OneForEvent bool `json:"oneForEvent,omitempty"`
+
+	// EventSourceName is the name of the referenced EventSource.
+	// Resources contained in the referenced ConfigMaps/Secrets and HelmCharts
+	// will be customized using information from resources matching the EventSource
+	// in the managed cluster.
+	EventSourceName string `json:"eventSourceName"`
+
+	// DestinationClusterSelector identifies the cluster where add-ons will be deployed.
+	// By default, this is nil and add-ons will be deployed in the very same cluster the
+	// event happened.
+	// If DestinationClusterSelector is set though, when an event happens in any of the
+	// cluster identified by SourceClusterSelector, add-ons will be deployed in each of
+	// the cluster indentified by DestinationClusterSelector.
+	// +omitempty
+	DestinationClusterSelector *libsveltosv1alpha1.Selector `json:"destinationClusterSelector,omitempty"`
 
 	// SyncMode specifies how features are synced in a matching workload cluster.
 	// - OneTime means, first time a workload cluster matches the ClusterProfile,
@@ -61,19 +85,6 @@ type EventBasedAddOnSpec struct {
 	// +optional
 	StopMatchingBehavior configv1alpha1.StopMatchingBehavior `json:"stopMatchingBehavior,omitempty"`
 
-	// Multiple resources in a managed cluster can be a match for referenced
-	// EventSource. OneForEvent indicates whether a ClusterProfile for all
-	// resource (OneForEvent = false) or one per resource (OneForEvent = true)
-	// needs to be creted.
-	// +optional
-	OneForEvent bool `json:"oneForEvent,omitempty"`
-
-	// EventSourceName is the name of the referenced EventSource.
-	// Resources contained in the referenced ConfigMaps/Secrets and HelmCharts
-	// will be customized using information from resources matching the EventSource
-	// in the managed cluster.
-	EventSourceName string `json:"eventSourceName"`
-
 	// PolicyRefs references all the ConfigMaps/Secrets containing kubernetes resources
 	// that need to be deployed in the matching clusters based on EventSource.
 	// +optional
@@ -86,12 +97,17 @@ type EventBasedAddOnSpec struct {
 // EventBasedAddOnStatus defines the observed state of EventBasedAddOn
 type EventBasedAddOnStatus struct {
 	// MatchingClusterRefs reference all the cluster-api Cluster currently matching
-	// ClusterProfile ClusterSelector
+	// ClusterProfile SourceClusterSelector
 	// +optional
 	MatchingClusterRefs []corev1.ObjectReference `json:"matchingClusters,omitempty"`
 
+	// DestinationMatchingClusterRefs reference all the cluster-api Cluster currently matching
+	// ClusterProfile DestinationClusterSelector
+	// +optional
+	DestinationMatchingClusterRefs []corev1.ObjectReference `json:"destinationMatchingClusterRefs,omitempty"`
+
 	// ClusterInfo represent the deployment status in each managed
-	// cluster
+	// cluster.
 	// +optional
 	ClusterInfo []libsveltosv1alpha1.ClusterInfo `json:"clusterInfo,omitempty"`
 }

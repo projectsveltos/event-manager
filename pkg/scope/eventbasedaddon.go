@@ -95,7 +95,7 @@ func (s *EventBasedAddOnScope) ControllerName() string {
 
 // GetSelector returns the ClusterSelector
 func (s *EventBasedAddOnScope) GetSelector() string {
-	return string(s.EventBasedAddOn.Spec.ClusterSelector)
+	return string(s.EventBasedAddOn.Spec.SourceClusterSelector)
 }
 
 // SetMatchingClusterRefs sets the MatchingClusterRefs status.

@@ -48,8 +48,8 @@ func getEventBasedAddOnInstance(name, eventSourceName string) *v1alpha1.EventBas
 			Name: name,
 		},
 		Spec: v1alpha1.EventBasedAddOnSpec{
-			ClusterSelector: libsveltosv1alpha1.Selector(selector),
-			EventSourceName: eventSourceName,
+			SourceClusterSelector: libsveltosv1alpha1.Selector(selector),
+			EventSourceName:       eventSourceName,
 		},
 	}
 }
@@ -296,7 +296,7 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 			Kind: libsveltosv1alpha1.EventSourceKind, APIVersion: libsveltosv1alpha1.GroupVersion.String()}
 		controllers.GetReferenceMapForEntry(&reconciler, eventSourceInfo).Insert(resourceRef)
 
-		reconciler.EventBasedAddOns[*resourceRef] = resource.Spec.ClusterSelector
+		reconciler.EventBasedAddOns[*resourceRef] = resource.Spec.SourceClusterSelector
 
 		controllers.CleanMaps(&reconciler, resourceScope)
 
