@@ -120,8 +120,8 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				Namespace: clusterNamespace,
 				Name:      randomString(),
 				Labels: map[string]string{
-					clusterv1.ClusterLabelName:             clusterName,
-					clusterv1.MachineControlPlaneLabelName: "ok",
+					clusterv1.ClusterNameLabel:         clusterName,
+					clusterv1.MachineControlPlaneLabel: "ok",
 				},
 			},
 		}
@@ -332,6 +332,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		}
 
 		config := render.AsCode(e.Spec)
+		config += render.AsCode(e.Labels)
 		config += render.AsCode(eventSource.Spec)
 		config += render.AsCode(eventReport.Spec)
 		config += render.AsCode(configMap.Data)

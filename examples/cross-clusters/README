@@ -1,0 +1,52 @@
+In this example:
+1. EventSource is matching any corev1 Service of type LoadBalancer
+1. EventBasedAddOn references such EventSource and a ConfigMap containing a selector-less Service and Endpoints template
+   
+EventSource gets deployed in each clusters matching EventBasedAddOn Spec.SourceClusterSelector.
+When a Service matching EventSource is detected in any of such clusters, it collectes matching Services and reports this information back to management cluster.
+
+Sveltos event-manager in the management cluster uses information from collected Service (in this example Service labels and ports) and instatiate the selector-less Service and Endpoints containined in the referenced ConfigMap. 
+
+The newly instantiated selector-less Service and Endpoints are deployed in all clusters matching Spec.DestinationClusterSelector.
+
+Using the Service listed in this example, following Sevice and Endpoints will be deployed then managed clusters:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-my-lb-service
+  namespace: external
+  ...
+spec:
+  clusterIP: 10.225.230.139
+  clusterIPs:
+  - 10.225.230.139
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - port: 60000
+    protocol: TCP
+    targetPort: 50001
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+ 
+and this Endpoints
+ 
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: external-my-lb-service
+  namespace: external
+  ...
+subsets:
+- addresses:
+  - ip: 34.172.32.172
+  ports:
+  - port: 60000
+    protocol: TCP
+  ```

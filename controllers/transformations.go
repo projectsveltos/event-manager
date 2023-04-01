@@ -187,9 +187,9 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForMachine(
 
 	logger.V(logs.LogDebug).Info("reacting to CAPI Machine change")
 
-	clusterLabelName, ok := machine.Labels[clusterv1.ClusterLabelName]
+	clusterLabelName, ok := machine.Labels[clusterv1.ClusterNameLabel]
 	if !ok {
-		logger.V(logs.LogVerbose).Info("Machine has not ClusterLabelName")
+		logger.V(logs.LogVerbose).Info("Machine has not ClusterNameLabel")
 		return nil
 	}
 

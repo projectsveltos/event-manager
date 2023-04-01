@@ -444,7 +444,7 @@ func (r *EventBasedAddOnReconciler) updateMaps(eventBasedAddOnScope *scope.Event
 	r.Mux.Lock()
 	defer r.Mux.Unlock()
 
-	r.EventBasedAddOns[*eventBasedAddOnInfo] = eventBasedAddOnScope.EventBasedAddOn.Spec.ClusterSelector
+	r.EventBasedAddOns[*eventBasedAddOnInfo] = eventBasedAddOnScope.EventBasedAddOn.Spec.SourceClusterSelector
 }
 
 func (r *EventBasedAddOnReconciler) updateClusterMaps(eventBasedAddOnScope *scope.EventBasedAddOnScope) {

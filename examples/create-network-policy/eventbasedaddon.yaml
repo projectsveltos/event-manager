@@ -8,7 +8,7 @@ kind: EventBasedAddOn
 metadata:
  name: service-network-policy
 spec:
- clusterSelector: env=fv
+ sourceClusterSelector: env=fv
  eventSourceName: sveltos-service
  policyRefs:
  - name: network-policy
