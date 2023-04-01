@@ -2,14 +2,14 @@ In this example:
 1. EventSource is matching any corev1 Service with labels sveltos=fv
 1. EventBasedAddOn references such EventSource and a ConfigMap containing a NetworkPolicy template
    
-EventSource gets deployed in each clusters matching EventBasedAddOn Spec.ClusterSelector.
+EventSource gets deployed in each clusters matching EventBasedAddOn Spec.SourceClusterSelector.
 When a Service matching EventSource is detected in any of such clusters, it collectes matching Services and reports this information back to management cluster.
 
 Sveltos event-manager in the management cluster uses information from collected Service (in this example Service labels and ports) and instatiate the NetworkPolicy containined in the referenced ConfigMap.
 
 Using the Service listed in this example, following NetworkPolicy will be deployed then managed clusters:
 
-```
+```yaml
 apiVersion: networking.k8s.io/v1
   kind: NetworkPolicy
   metadata:
