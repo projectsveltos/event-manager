@@ -1,0 +1,47 @@
+apiVersion: lib.projectsveltos.io/v1alpha1
+kind: EventBasedAddOn
+metadata:
+ name: service-policy
+spec:
+ sourceClusterSelector: env=production
+ destinationClusterSelector: dep=eng
+ eventSourceName: load-balancer-service
+ oneForEvent: true
+ policyRefs:
+ - name: service-policy
+   namespace: default
+   kind: ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-policy
+  namespace: default
+data:
+  service.yaml: |
+    kind: Service
+    apiVersion: v1
+    metadata:
+      name: external-{{ .Resource.metadata.name }}
+      namespace: external
+    spec:
+      selector: {}
+      ports:
+        {{ range $port := .Resource.spec.ports }}
+        - port: {{ $port.port }}
+          protocol: {{ $port.protocol }}
+          targetPort: {{ $port.targetPort }}
+        {{ end }}
+  endpoint.yaml: |
+    kind: Endpoints
+    apiVersion: v1
+    metadata:
+       name: external-{{ .Resource.metadata.name }}
+       namespace: external
+    subsets:
+    - addresses:
+      - ip: {{ (index .Resource.status.loadBalancer.ingress 0).ip }}
+      ports:
+        {{ range $port := .Resource.spec.ports }}
+        - port: {{ $port.port }}
+        {{ end }}
