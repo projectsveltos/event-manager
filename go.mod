@@ -7,11 +7,11 @@ require (
 	github.com/TwinProduction/go-color v1.0.0
 	github.com/gdexlab/go-render v1.0.1
 	github.com/go-logr/logr v1.2.3
-	github.com/onsi/ginkgo/v2 v2.9.1
-	github.com/onsi/gomega v1.27.4
+	github.com/onsi/ginkgo/v2 v2.9.2
+	github.com/onsi/gomega v1.27.5
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/libsveltos v0.8.1-0.20230401081813-e8d366a6d41e
-	github.com/projectsveltos/sveltos-manager v0.8.1-0.20230401131540-2854a585cb29
+	github.com/projectsveltos/addon-manager v0.8.1-0.20230413115359-9326201f2a38
+	github.com/projectsveltos/libsveltos v0.8.1-0.20230413131254-2ba7acd7d39b
 	github.com/prometheus/client_golang v1.14.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/text v0.8.0
@@ -22,7 +22,7 @@ require (
 	k8s.io/component-base v0.26.1
 	k8s.io/klog/v2 v2.80.1
 	k8s.io/utils v0.0.0-20221128185143-99ec85e7a448
-	sigs.k8s.io/cluster-api v1.4.0
+	sigs.k8s.io/cluster-api v1.4.1
 	sigs.k8s.io/controller-runtime v0.14.5
 )
 
@@ -61,7 +61,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.20.0 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
-	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
+	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/gobuffalo/flect v1.0.2 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect

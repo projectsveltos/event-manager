@@ -20,8 +20,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	configv1alpha1 "github.com/projectsveltos/addon-manager/api/v1alpha1"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
-	configv1alpha1 "github.com/projectsveltos/sveltos-manager/api/v1alpha1"
 )
 
 const (
@@ -88,7 +88,7 @@ type EventBasedAddOnSpec struct {
 	// PolicyRefs references all the ConfigMaps/Secrets containing kubernetes resources
 	// that need to be deployed in the matching clusters based on EventSource.
 	// +optional
-	PolicyRefs []libsveltosv1alpha1.PolicyRef `json:"policyRefs,omitempty"`
+	PolicyRefs []configv1alpha1.PolicyRef `json:"policyRefs,omitempty"`
 
 	// Helm charts to be deployed in the matching clusters based on EventSource.
 	HelmCharts []configv1alpha1.HelmChart `json:"helmCharts,omitempty"`

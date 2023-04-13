@@ -144,8 +144,8 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 	}
 
 	var remoteClient client.Client
-	remoteClient, err = clusterproxy.GetKubernetesClient(ctx, c, cluster.Namespace, cluster.Name, "",
-		clusterproxy.GetClusterType(clusterRef), logger)
+	remoteClient, err = clusterproxy.GetKubernetesClient(ctx, c, cluster.Namespace, cluster.Name,
+		"", "", clusterproxy.GetClusterType(clusterRef), logger)
 	if err != nil {
 		return err
 	}
@@ -196,14 +196,14 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 }
 
 func deleteEventReport(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
-	eventReportReport *libsveltosv1alpha1.EventReport, logger logr.Logger) error {
+	eventReport *libsveltosv1alpha1.EventReport, logger logr.Logger) error {
 
-	if eventReportReport.Labels == nil {
+	if eventReport.Labels == nil {
 		logger.V(logs.LogInfo).Info(eventReportMalformedLabelError)
 		return errors.New(eventReportMalformedLabelError)
 	}
 
-	eventSourceName, ok := eventReportReport.Labels[libsveltosv1alpha1.EventSourceLabelName]
+	eventSourceName, ok := eventReport.Labels[libsveltosv1alpha1.EventSourceLabelName]
 	if !ok {
 		logger.V(logs.LogInfo).Info(eventReportMissingLabelError)
 		return errors.New(eventReportMissingLabelError)
@@ -224,14 +224,21 @@ func deleteEventReport(ctx context.Context, c client.Client, cluster *corev1.Obj
 }
 
 func updateEventReport(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
-	eventReportReport *libsveltosv1alpha1.EventReport, logger logr.Logger) error {
+	eventReport *libsveltosv1alpha1.EventReport, logger logr.Logger) error {
 
-	if eventReportReport.Labels == nil {
+	if eventReport.Spec.ClusterName != "" {
+		// if ClusterName is set, this is coming from a
+		// managed cluster. If management cluster is in turn
+		// managed by another cluster, do not pull those.
+		return nil
+	}
+
+	if eventReport.Labels == nil {
 		logger.V(logs.LogInfo).Info(eventReportMalformedLabelError)
 		return errors.New(eventReportMalformedLabelError)
 	}
 
-	eventSourceName, ok := eventReportReport.Labels[libsveltosv1alpha1.EventSourceLabelName]
+	eventSourceName, ok := eventReport.Labels[libsveltosv1alpha1.EventSourceLabelName]
 	if !ok {
 		logger.V(logs.LogInfo).Info(eventReportMissingLabelError)
 		return errors.New(eventReportMissingLabelError)
@@ -263,7 +270,7 @@ func updateEventReport(ctx context.Context, c client.Client, cluster *corev1.Obj
 			currentEventReport.Name = eventReportName
 			currentEventReport.Labels = libsveltosv1alpha1.GetEventReportLabels(
 				eventSourceName, cluster.Name, &clusterType)
-			currentEventReport.Spec = eventReportReport.Spec
+			currentEventReport.Spec = eventReport.Spec
 			currentEventReport.Spec.ClusterNamespace = cluster.Namespace
 			currentEventReport.Spec.ClusterName = cluster.Name
 			currentEventReport.Spec.ClusterType = clusterType
@@ -273,7 +280,7 @@ func updateEventReport(ctx context.Context, c client.Client, cluster *corev1.Obj
 	}
 
 	logger.V(logs.LogDebug).Info("update EventReport in management cluster")
-	currentEventReport.Spec = eventReportReport.Spec
+	currentEventReport.Spec = eventReport.Spec
 	currentEventReport.Spec.ClusterNamespace = cluster.Namespace
 	currentEventReport.Spec.ClusterName = cluster.Name
 	currentEventReport.Spec.ClusterType = clusterType

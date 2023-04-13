@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	configv1alpha1 "github.com/projectsveltos/addon-manager/api/v1alpha1"
 	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
 	"github.com/projectsveltos/event-manager/controllers"
 	"github.com/projectsveltos/event-manager/pkg/scope"
@@ -377,7 +378,7 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		secretNamespace := randomString()
 		secretName := randomString()
 
-		resource.Spec.PolicyRefs = []libsveltosv1alpha1.PolicyRef{
+		resource.Spec.PolicyRefs = []configv1alpha1.PolicyRef{
 			{
 				Namespace: cmNamespace,
 				Name:      cmName,
