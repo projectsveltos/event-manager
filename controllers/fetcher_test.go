@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	configv1alpha1 "github.com/projectsveltos/addon-manager/api/v1alpha1"
 	"github.com/projectsveltos/event-manager/api/v1alpha1"
 	"github.com/projectsveltos/event-manager/controllers"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
@@ -105,7 +106,7 @@ var _ = Describe("Fetcher", func() {
 				Name: randomString(),
 			},
 			Spec: v1alpha1.EventBasedAddOnSpec{
-				PolicyRefs: []libsveltosv1alpha1.PolicyRef{
+				PolicyRefs: []configv1alpha1.PolicyRef{
 					{
 						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
 						Name:      configMap.Name,
@@ -247,7 +248,7 @@ var _ = Describe("Fetcher", func() {
 				Name: randomString(),
 			},
 			Spec: v1alpha1.EventBasedAddOnSpec{
-				PolicyRefs: []libsveltosv1alpha1.PolicyRef{
+				PolicyRefs: []configv1alpha1.PolicyRef{
 					{
 						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
 						Name:      configMap.Name,

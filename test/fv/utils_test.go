@@ -32,10 +32,10 @@ import (
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	configv1alpha1 "github.com/projectsveltos/addon-manager/api/v1alpha1"
+	sveltosmanagercontrollers "github.com/projectsveltos/addon-manager/controllers"
 	"github.com/projectsveltos/event-manager/api/v1alpha1"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
-	configv1alpha1 "github.com/projectsveltos/sveltos-manager/api/v1alpha1"
-	sveltosmanagercontrollers "github.com/projectsveltos/sveltos-manager/controllers"
 )
 
 const (
@@ -54,7 +54,7 @@ func randomString() string {
 }
 
 func getEventBasedAddOn(namePrefix, eventSourceName string, clusterLabels map[string]string,
-	policyRefs []libsveltosv1alpha1.PolicyRef) *v1alpha1.EventBasedAddOn {
+	policyRefs []configv1alpha1.PolicyRef) *v1alpha1.EventBasedAddOn {
 
 	selector := ""
 	for k := range clusterLabels {

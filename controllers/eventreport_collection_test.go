@@ -155,7 +155,7 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(testEnv.Create(context.TODO(), eventSource)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventSource)).To(Succeed())
 
-		eventReport := getEventReport(eventSourceName, cluster.Namespace, cluster.Name)
+		eventReport := getEventReport(eventSourceName, "", "")
 		eventReport.Namespace = eventReportNamespace
 		Expect(testEnv.Create(context.TODO(), eventReport)).To(Succeed())
 

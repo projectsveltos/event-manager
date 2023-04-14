@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	configv1alpha1 "github.com/projectsveltos/addon-manager/api/v1alpha1"
 	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
 	"github.com/projectsveltos/event-manager/controllers"
 	"github.com/projectsveltos/event-manager/pkg/scope"
@@ -50,7 +51,6 @@ import (
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	"github.com/projectsveltos/libsveltos/lib/utils"
 	libsveltosutils "github.com/projectsveltos/libsveltos/lib/utils"
-	configv1alpha1 "github.com/projectsveltos/sveltos-manager/api/v1alpha1"
 )
 
 const (
@@ -307,7 +307,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				Name: randomString(),
 			},
 			Spec: v1alpha1.EventBasedAddOnSpec{
-				PolicyRefs: []libsveltosv1alpha1.PolicyRef{
+				PolicyRefs: []configv1alpha1.PolicyRef{
 					{
 						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
 						Name:      configMap.Name,
@@ -529,7 +529,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		// We are using testEnv as both management cluster (where this test has already created EventSource)
 		// and managed cluster (where EventSource is supposed to be created).
 		// Existence of EventSource does not verify DeployEventSource. But DeployEventSource is also supposed
-		// to add EventBasedAddOn as OwnerReference of EventSource. So test verifies that.
+		// to add EventBasedAddOn as OwnerReference of EventSource and annotation. So test verifies that.
 		Expect(controllers.DeployEventSource(context.TODO(), testEnv.Client, clusterNamespace, clusterName,
 			clusterType, resource, klogr.New())).To(Succeed())
 
@@ -540,6 +540,12 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				return false
 			}
 			if !util.IsOwnedByObject(currentEventSource, resource) {
+				return false
+			}
+			if currentEventSource.Annotations == nil {
+				return false
+			}
+			if _, ok := currentEventSource.Annotations[libsveltosv1alpha1.DeployedBySveltosAnnotation]; !ok {
 				return false
 			}
 			return true
@@ -944,7 +950,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: eventBasedAddOnName},
 			Spec: v1alpha1.EventBasedAddOnSpec{
 				EventSourceName: randomString(),
-				PolicyRefs: []libsveltosv1alpha1.PolicyRef{
+				PolicyRefs: []configv1alpha1.PolicyRef{
 					{
 						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
 						Name:      configMap.Name,
@@ -1051,7 +1057,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			Spec: v1alpha1.EventBasedAddOnSpec{
 				EventSourceName: randomString(),
 				OneForEvent:     false,
-				PolicyRefs: []libsveltosv1alpha1.PolicyRef{
+				PolicyRefs: []configv1alpha1.PolicyRef{
 					{
 						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
 						Name:      configMap.Name,
