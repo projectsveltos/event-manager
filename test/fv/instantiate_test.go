@@ -30,9 +30,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	configv1alpha1 "github.com/projectsveltos/addon-manager/api/v1alpha1"
 	"github.com/projectsveltos/event-manager/api/v1alpha1"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
-	configv1alpha1 "github.com/projectsveltos/sveltos-manager/api/v1alpha1"
 )
 
 var (
@@ -116,7 +116,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 		}
 		Expect(k8sClient.Create(context.TODO(), cm)).To(Succeed())
 
-		policyRef := libsveltosv1alpha1.PolicyRef{
+		policyRef := configv1alpha1.PolicyRef{
 			Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
 			Namespace: cm.Namespace,
 			Name:      cm.Name,
@@ -124,14 +124,14 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 
 		Byf("Create a EventBasedAddOn referencing EventSource %s", eventSource.Name)
 		eventBasedAddOn := getEventBasedAddOn(namePrefix, eventSource.Name,
-			map[string]string{key: value}, []libsveltosv1alpha1.PolicyRef{policyRef})
+			map[string]string{key: value}, []configv1alpha1.PolicyRef{policyRef})
 		eventBasedAddOn.Spec.OneForEvent = true
 		eventBasedAddOn.Spec.HelmCharts = []configv1alpha1.HelmChart{
 			{
 				RepositoryURL:    "https://kyverno.github.io/kyverno/",
 				RepositoryName:   "kyverno",
 				ChartName:        "kyverno/kyverno",
-				ChartVersion:     "v2.5.0",
+				ChartVersion:     "v2.6.0",
 				ReleaseName:      "kyverno-latest",
 				ReleaseNamespace: "{{ .MatchingResource.Namespace }}",
 				HelmChartAction:  configv1alpha1.HelmChartActionInstall,
