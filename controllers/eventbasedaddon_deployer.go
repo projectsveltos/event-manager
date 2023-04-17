@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	configv1alpha1 "github.com/projectsveltos/addon-manager/api/v1alpha1"
 	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
 	"github.com/projectsveltos/event-manager/pkg/scope"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
@@ -51,7 +52,6 @@ import (
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	libsveltosutils "github.com/projectsveltos/libsveltos/lib/utils"
-	configv1alpha1 "github.com/projectsveltos/sveltos-manager/api/v1alpha1"
 )
 
 const (
@@ -569,8 +569,8 @@ func deployEventSource(ctx context.Context, c client.Client,
 	}
 
 	var remoteClient client.Client
-	remoteClient, err = clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName, "",
-		clusterType, logger)
+	remoteClient, err = clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
+		"", "", clusterType, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get managed cluster client: %v", err))
 		return err
@@ -601,6 +601,9 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 		// Copy labels. If admin-label is set, sveltos-agent will impersonate
 		// ServiceAccount representing the tenant admin when fetching resources
 		currentEventSource.Labels = eventSource.Labels
+		currentEventSource.Annotations = map[string]string{
+			libsveltosv1alpha1.DeployedBySveltosAnnotation: "true",
+		}
 		deployer.AddOwnerReference(currentEventSource, resource)
 		return remoteClient.Update(ctx, currentEventSource)
 	}
@@ -626,8 +629,8 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
 	resource *v1alpha1.EventBasedAddOn, logger logr.Logger) error {
 
-	remoteClient, err := clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName, "",
-		clusterType, logger)
+	remoteClient, err := clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
+		"", "", clusterType, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get managed cluster client: %v", err))
 		return err
@@ -830,8 +833,11 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 
 	// If EventBasedAddOn was created by tenant admin, copy label over to created ClusterProfile
 	if eventBasedAddOn.Labels != nil {
-		if admin, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.AdminLabel]; ok {
-			labels[libsveltosv1alpha1.AdminLabel] = admin
+		if serviceAccountName, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.ServiceAccountNameLabel]; ok {
+			labels[libsveltosv1alpha1.ServiceAccountNameLabel] = serviceAccountName
+		}
+		if serviceAccountNamespace, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel]; ok {
+			labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
 		}
 	}
 
@@ -913,8 +919,11 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 
 	// If EventBasedAddOn was created by tenant admin, copy label over to created ClusterProfile
 	if eventBasedAddOn.Labels != nil {
-		if admin, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.AdminLabel]; ok {
-			labels[libsveltosv1alpha1.AdminLabel] = admin
+		if serviceAccountName, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.ServiceAccountNameLabel]; ok {
+			labels[libsveltosv1alpha1.ServiceAccountNameLabel] = serviceAccountName
+		}
+		if serviceAccountNamespace, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel]; ok {
+			labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
 		}
 	}
 
@@ -959,8 +968,8 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	return []*configv1alpha1.ClusterProfile{clusterProfile}, updateClusterProfileSpec(ctx, c, clusterProfile, logger)
 }
 
-func getClusterProfilePolicyRefs(policyRef *libsveltosset.Set) []libsveltosv1alpha1.PolicyRef {
-	result := make([]libsveltosv1alpha1.PolicyRef, policyRef.Len())
+func getClusterProfilePolicyRefs(policyRef *libsveltosset.Set) []configv1alpha1.PolicyRef {
+	result := make([]configv1alpha1.PolicyRef, policyRef.Len())
 
 	items := policyRef.Items()
 	for i := range items {
@@ -968,7 +977,7 @@ func getClusterProfilePolicyRefs(policyRef *libsveltosset.Set) []libsveltosv1alp
 		if items[i].Kind == "Secret" {
 			kind = libsveltosv1alpha1.SecretReferencedResourceKind
 		}
-		result[i] = libsveltosv1alpha1.PolicyRef{
+		result[i] = configv1alpha1.PolicyRef{
 			Namespace: items[i].Namespace,
 			Name:      items[i].Name,
 			Kind:      string(kind),
@@ -1127,12 +1136,16 @@ func instantiateReferencedPolicies(ctx context.Context, c client.Client, templat
 		}
 
 		if create {
+			logger.V(logs.LogDebug).Info(fmt.Sprintf("create resource for %s %s:%s",
+				ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
 			err = createResource(ctx, c, ref, name, labels, instantiatedContent)
 			if err != nil {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create resource: %v", err))
 				return nil, err
 			}
 		} else {
+			logger.V(logs.LogDebug).Info(fmt.Sprintf("update resource for %s %s:%s",
+				ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
 			err = updateResource(ctx, c, ref, name, labels, instantiatedContent)
 			if err != nil {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update resource: %v", err))
@@ -1437,11 +1450,15 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 		return err
 	}
 
-	policyRefs := make(map[libsveltosv1alpha1.PolicyRef]bool)
+	policyRefs := make(map[libsveltosv1alpha1.PolicyRef]bool) // ignore deploymentType
 	for i := range clusterProfiles {
 		cp := clusterProfiles[i]
 		for j := range cp.Spec.PolicyRefs {
-			policyRefs[cp.Spec.PolicyRefs[j]] = true
+			policyRefs[libsveltosv1alpha1.PolicyRef{
+				Namespace: cp.Spec.PolicyRefs[j].Namespace,
+				Name:      cp.Spec.PolicyRefs[j].Name,
+				Kind:      cp.Spec.PolicyRefs[j].Kind,
+			}] = true
 		}
 	}
 
