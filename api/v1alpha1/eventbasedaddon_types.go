@@ -92,6 +92,9 @@ type EventBasedAddOnSpec struct {
 
 	// Helm charts to be deployed in the matching clusters based on EventSource.
 	HelmCharts []configv1alpha1.HelmChart `json:"helmCharts,omitempty"`
+
+	// Kustomization refs
+	KustomizationRefs []configv1alpha1.KustomizationRef `json:"kustomizationRefs,omitempty"`
 }
 
 // EventBasedAddOnStatus defines the observed state of EventBasedAddOn
