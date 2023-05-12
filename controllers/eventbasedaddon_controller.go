@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1b2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -654,6 +656,35 @@ func (r *EventBasedAddOnReconciler) getCurrentReferences(eventBasedAddOnScope *s
 				Namespace:  namespace,
 				Name:       referencedName,
 			})
+		}
+	}
+
+	for i := range eventBasedAddOnScope.EventBasedAddOn.Spec.KustomizationRefs {
+		referencedNamespace := eventBasedAddOnScope.EventBasedAddOn.Spec.KustomizationRefs[i].Namespace
+		referencedName := eventBasedAddOnScope.EventBasedAddOn.Spec.KustomizationRefs[i].Name
+
+		// If referenced resource namespace is empty, at instantiation time the cluster namespace will be used.
+		// Here to track referenced ConfigMaps/Resource, we use all current matching clusters
+		for j := range eventBasedAddOnScope.EventBasedAddOn.Status.MatchingClusterRefs {
+			clusterRef := eventBasedAddOnScope.EventBasedAddOn.Status.MatchingClusterRefs[j]
+			namespace := getReferenceResourceNamespace(clusterRef.Namespace, referencedNamespace)
+
+			ref := &corev1.ObjectReference{
+				Kind:      eventBasedAddOnScope.EventBasedAddOn.Spec.KustomizationRefs[i].Kind,
+				Namespace: namespace,
+				Name:      referencedName,
+			}
+
+			switch eventBasedAddOnScope.EventBasedAddOn.Spec.KustomizationRefs[i].Kind {
+			case sourcev1.GitRepositoryKind:
+				ref.APIVersion = sourcev1.GroupVersion.String()
+			case sourcev1b2.OCIRepositoryKind:
+				ref.APIVersion = sourcev1b2.GroupVersion.String()
+			case sourcev1b2.BucketKind:
+				ref.APIVersion = sourcev1b2.GroupVersion.String()
+			}
+
+			currentReferences.Insert(ref)
 		}
 	}
 	return currentReferences
