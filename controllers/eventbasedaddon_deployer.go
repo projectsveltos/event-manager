@@ -875,6 +875,9 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	}
 	clusterProfile.Spec.PolicyRefs = getClusterProfilePolicyRefs(policyRef)
 
+	// TODO: is it needed to instantiate kustomize files?
+	clusterProfile.Spec.KustomizationRefs = eventBasedAddOn.Spec.KustomizationRefs
+
 	if createClusterProfile {
 		return clusterProfile, c.Create(ctx, clusterProfile)
 	}
@@ -960,6 +963,9 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 		return nil, err
 	}
 	clusterProfile.Spec.PolicyRefs = getClusterProfilePolicyRefs(policyRef)
+
+	// TODO: is it needed to instantiate kustomize files?
+	clusterProfile.Spec.KustomizationRefs = eventBasedAddOn.Spec.KustomizationRefs
 
 	if createClusterProfile {
 		return []*configv1alpha1.ClusterProfile{clusterProfile}, c.Create(ctx, clusterProfile)
