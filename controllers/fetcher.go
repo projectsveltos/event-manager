@@ -74,9 +74,7 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 	if err != nil {
 		return nil, err
 	}
-	for i := range resources {
-		result = append(result, resources[i])
-	}
+	result = append(result, resources...)
 
 	return result, nil
 }
