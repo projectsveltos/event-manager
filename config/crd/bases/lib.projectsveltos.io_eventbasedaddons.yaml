@@ -120,8 +120,7 @@ spec:
                       type: string
                     kind:
                       description: 'Kind of the resource. Supported kinds are: - flux
-                        GitRepository;OCIRepository;Bucket - ConfigMap/Secret (which
-                        will be mounted as volume)'
+                        GitRepository;OCIRepository;Bucket - ConfigMap/Secret'
                       enum:
                       - GitRepository
                       - OCIRepository
@@ -130,7 +129,7 @@ spec:
                       - Secret
                       type: string
                     name:
-                      description: Name of the rreferenced resource.
+                      description: Name of the referenced resource.
                       minLength: 1
                       type: string
                     namespace:
@@ -185,7 +184,7 @@ spec:
                       - ConfigMap
                       type: string
                     name:
-                      description: Name of the rreferenced resource.
+                      description: Name of the referenced resource.
                       minLength: 1
                       type: string
                     namespace:
