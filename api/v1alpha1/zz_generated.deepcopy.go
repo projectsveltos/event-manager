@@ -22,7 +22,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	addon_managerapiv1alpha1 "github.com/projectsveltos/addon-manager/api/v1alpha1"
+	addon_controllerapiv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
 	apiv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
 	"k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -97,17 +97,17 @@ func (in *EventBasedAddOnSpec) DeepCopyInto(out *EventBasedAddOnSpec) {
 	}
 	if in.PolicyRefs != nil {
 		in, out := &in.PolicyRefs, &out.PolicyRefs
-		*out = make([]addon_managerapiv1alpha1.PolicyRef, len(*in))
+		*out = make([]addon_controllerapiv1alpha1.PolicyRef, len(*in))
 		copy(*out, *in)
 	}
 	if in.HelmCharts != nil {
 		in, out := &in.HelmCharts, &out.HelmCharts
-		*out = make([]addon_managerapiv1alpha1.HelmChart, len(*in))
+		*out = make([]addon_controllerapiv1alpha1.HelmChart, len(*in))
 		copy(*out, *in)
 	}
 	if in.KustomizationRefs != nil {
 		in, out := &in.KustomizationRefs, &out.KustomizationRefs
-		*out = make([]addon_managerapiv1alpha1.KustomizationRef, len(*in))
+		*out = make([]addon_controllerapiv1alpha1.KustomizationRef, len(*in))
 		copy(*out, *in)
 	}
 }
