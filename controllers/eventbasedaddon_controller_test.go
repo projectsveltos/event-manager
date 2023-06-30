@@ -69,7 +69,8 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 			resource,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
 		controllers.RegisterFeatures(dep, klogr.New())
@@ -123,7 +124,8 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 			cluster,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		resourceName := client.ObjectKey{
 			Name: resource.Name,
@@ -200,7 +202,8 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 			resource,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
 		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventBasedAddOn)).To(Succeed())
@@ -259,7 +262,8 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 			resource,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		Expect(addTypeInformationToObject(scheme, resource)).To(Succeed())
 
@@ -327,7 +331,8 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 			resource,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
 		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventBasedAddOn)).To(Succeed())
@@ -404,7 +409,8 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 			resource,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
 		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventBasedAddOn)).To(Succeed())

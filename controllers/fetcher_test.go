@@ -50,7 +50,8 @@ var _ = Describe("Fetcher", func() {
 			configMap,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		configMapName := types.NamespacedName{Namespace: configMap.Namespace, Name: configMap.Name}
 		r, err := controllers.GetConfigMap(context.TODO(), c, configMapName)
@@ -72,7 +73,8 @@ var _ = Describe("Fetcher", func() {
 			secret,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		secretName := types.NamespacedName{Namespace: secret.Namespace, Name: secret.Name}
 		r, err := controllers.GetSecret(context.TODO(), c, secretName)
@@ -127,7 +129,8 @@ var _ = Describe("Fetcher", func() {
 			e,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		cluster := &clusterv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -168,7 +171,8 @@ var _ = Describe("Fetcher", func() {
 			eventSource, eventReport,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		eventReports, err := controllers.FetchEventReports(context.TODO(), c, cluster.Namespace, cluster.Name, eventSource.Name,
 			clusterType)
@@ -194,7 +198,8 @@ var _ = Describe("Fetcher", func() {
 
 		initObjects := []client.Object{eventSource}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		es, err := controllers.FetchEventSource(context.TODO(), c, e.Spec.EventSourceName)
 		Expect(err).To(BeNil())
@@ -272,7 +277,8 @@ var _ = Describe("Fetcher", func() {
 			eventReport,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 		Expect(addTypeInformationToObject(c.Scheme(), cluster)).To(Succeed())
 
 		result, err := controllers.FetchReferencedResources(context.TODO(), c, e, getClusterRef(cluster), klogr.New())

@@ -28,6 +28,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/projectsveltos/event-manager/internal/test/helpers"
 	libsveltoscrd "github.com/projectsveltos/libsveltos/lib/crd"
@@ -53,6 +55,8 @@ func TestControllers(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	By("bootstrapping test environment")
+
+	ctrl.SetLogger(klog.Background())
 
 	ctx, cancel = context.WithCancel(context.TODO())
 
@@ -99,6 +103,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).To(BeNil())
 	Expect(testEnv.Create(context.TODO(), dcCRD)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv, dcCRD)).To(Succeed())
+
+	time.Sleep(time.Second)
 
 	if synced := testEnv.GetCache().WaitForCacheSync(ctx); !synced {
 		time.Sleep(time.Second)

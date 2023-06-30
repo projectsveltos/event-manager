@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +33,7 @@ import (
 )
 
 func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventReport(
-	o client.Object,
+	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
 	eventReport := o.(*libsveltosv1alpha1.EventReport)
@@ -72,7 +73,7 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventReport(
 }
 
 func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventSource(
-	o client.Object,
+	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
 	eventSource := o.(*libsveltosv1alpha1.EventSource)
@@ -109,7 +110,7 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventSource(
 }
 
 func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForCluster(
-	o client.Object,
+	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
 	cluster := o
@@ -170,7 +171,7 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForCluster(
 }
 
 func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForMachine(
-	o client.Object,
+	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
 	machine := o.(*clusterv1.Machine)
@@ -233,7 +234,7 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForMachine(
 }
 
 func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForReference(
-	o client.Object,
+	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
 	logger := klogr.New().WithValues(

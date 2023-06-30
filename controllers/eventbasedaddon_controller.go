@@ -285,7 +285,7 @@ func (r *EventBasedAddOnReconciler) SetupWithManager(mgr ctrl.Manager) (controll
 	}
 	// When projectsveltos cluster changes, according to SveltosClusterPredicates,
 	// one or more EventBasedAddOns need to be reconciled.
-	err = c.Watch(&source.Kind{Type: &libsveltosv1alpha1.SveltosCluster{}},
+	err = c.Watch(source.Kind(mgr.GetCache(), &libsveltosv1alpha1.SveltosCluster{}),
 		handler.EnqueueRequestsFromMapFunc(r.requeueEventBasedAddOnForCluster),
 		SveltosClusterPredicates(mgr.GetLogger().WithValues("predicate", "sveltosclusterpredicate")),
 	)
@@ -307,7 +307,7 @@ func (r *EventBasedAddOnReconciler) SetupWithManager(mgr ctrl.Manager) (controll
 
 	// When projectsveltos EventReports changes, according to EventPredicates,
 	// one or more EventBasedAddOns need to be reconciled.
-	err = c.Watch(&source.Kind{Type: &libsveltosv1alpha1.EventReport{}},
+	err = c.Watch(source.Kind(mgr.GetCache(), &libsveltosv1alpha1.EventReport{}),
 		handler.EnqueueRequestsFromMapFunc(r.requeueEventBasedAddOnForEventReport),
 		EventReportPredicates(mgr.GetLogger().WithValues("predicate", "eventreportpredicate")),
 	)
@@ -317,7 +317,7 @@ func (r *EventBasedAddOnReconciler) SetupWithManager(mgr ctrl.Manager) (controll
 
 	// When projectsveltos EventSources changes, according to EventSourcePredicates,
 	// one or more EventBasedAddOns need to be reconciled.
-	err = c.Watch(&source.Kind{Type: &libsveltosv1alpha1.EventSource{}},
+	err = c.Watch(source.Kind(mgr.GetCache(), &libsveltosv1alpha1.EventSource{}),
 		handler.EnqueueRequestsFromMapFunc(r.requeueEventBasedAddOnForEventSource),
 		EventSourcePredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
 	)
@@ -327,7 +327,7 @@ func (r *EventBasedAddOnReconciler) SetupWithManager(mgr ctrl.Manager) (controll
 
 	// When ConfigMap changes, according to ConfigMapPredicates,
 	// one or more EventBasedAddOns need to be reconciled.
-	err = c.Watch(&source.Kind{Type: &corev1.ConfigMap{}},
+	err = c.Watch(source.Kind(mgr.GetCache(), &corev1.ConfigMap{}),
 		handler.EnqueueRequestsFromMapFunc(r.requeueEventBasedAddOnForReference),
 		ConfigMapPredicates(mgr.GetLogger().WithValues("predicate", "configmappredicate")),
 	)
@@ -337,7 +337,7 @@ func (r *EventBasedAddOnReconciler) SetupWithManager(mgr ctrl.Manager) (controll
 
 	// When Secret changes, according to SecretPredicates,
 	// one or more EventBasedAddOns need to be reconciled.
-	err = c.Watch(&source.Kind{Type: &corev1.Secret{}},
+	err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Secret{}),
 		handler.EnqueueRequestsFromMapFunc(r.requeueEventBasedAddOnForReference),
 		SecretPredicates(mgr.GetLogger().WithValues("predicate", "secretpredicate")),
 	)
@@ -355,7 +355,7 @@ func (r *EventBasedAddOnReconciler) SetupWithManager(mgr ctrl.Manager) (controll
 func (r *EventBasedAddOnReconciler) WatchForCAPI(mgr ctrl.Manager, c controller.Controller) error {
 	// When cluster-api cluster changes, according to ClusterPredicates,
 	// one or more EventBasedAddOns need to be reconciled.
-	if err := c.Watch(&source.Kind{Type: &clusterv1.Cluster{}},
+	if err := c.Watch(source.Kind(mgr.GetCache(), &clusterv1.Cluster{}),
 		handler.EnqueueRequestsFromMapFunc(r.requeueEventBasedAddOnForCluster),
 		ClusterPredicates(mgr.GetLogger().WithValues("predicate", "clusterpredicate")),
 	); err != nil {
@@ -364,7 +364,7 @@ func (r *EventBasedAddOnReconciler) WatchForCAPI(mgr ctrl.Manager, c controller.
 
 	// When cluster-api machine changes, according to MachinePredicates,
 	// one or more EventBasedAddOn need to be reconciled.
-	if err := c.Watch(&source.Kind{Type: &clusterv1.Machine{}},
+	if err := c.Watch(source.Kind(mgr.GetCache(), &clusterv1.Machine{}),
 		handler.EnqueueRequestsFromMapFunc(r.requeueEventBasedAddOnForMachine),
 		MachinePredicates(mgr.GetLogger().WithValues("predicate", "machinepredicate")),
 	); err != nil {
