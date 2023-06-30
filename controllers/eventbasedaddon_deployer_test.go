@@ -201,7 +201,8 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			resource,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		length := len(resource.Status.ClusterInfo)
 
@@ -341,7 +342,8 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		h.Write([]byte(config))
 		expectedHash := h.Sum(nil)
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 		Expect(addTypeInformationToObject(c.Scheme(), cluster)).To(Succeed())
 
 		hash, err := controllers.EventBasedAddOnHash(context.TODO(), c, e, getClusterRef(cluster), klogr.New())
@@ -878,7 +880,8 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			clusterProfile, toBeRemovedClusterProfile, eventBasedAddOn,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		Expect(controllers.RemoveClusterProfiles(context.TODO(), c, clusterNamespace, clusterName, clusterType, eventBasedAddOn,
 			[]*configv1alpha1.ClusterProfile{clusterProfile}, klogr.New())).To(Succeed())
@@ -976,7 +979,8 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			secret, configMap, eventBasedAddOn,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		object := &controllers.CurrentObject{
 			MatchingResource: corev1.ObjectReference{
@@ -1078,7 +1082,8 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			configMap, eventBasedAddOn,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		httpsService1 := `apiVersion: v1
 kind: Service
@@ -1183,7 +1188,8 @@ spec:
 			configMap, toBeRemovedConfigMap,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		eventBasedAddOn := v1alpha1.EventBasedAddOn{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1245,7 +1251,8 @@ spec:
 			secret, toBeRemovedSecret,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		eventBasedAddOn := v1alpha1.EventBasedAddOn{
 			ObjectMeta: metav1.ObjectMeta{
