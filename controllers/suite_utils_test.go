@@ -314,7 +314,8 @@ func prepareClient(clusterNamespace, clusterName string, clusterType libsveltosv
 		cluster,
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+		WithObjects(initObjects...).Build()
 	return c
 }
 

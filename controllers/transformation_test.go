@@ -81,7 +81,8 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 			cluster,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		reconciler := &controllers.EventBasedAddOnReconciler{
 			Client:             c,
@@ -121,7 +122,7 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		reconciler.ToClusterMap[types.NamespacedName{Name: matchingInfo.Name}] = clusterSet2
 
 		By("Expect only matchingEventBasedAddOn to be requeued")
-		requests := controllers.RequeueEventBasedAddOnForCluster(reconciler, cluster)
+		requests := controllers.RequeueEventBasedAddOnForCluster(reconciler, context.TODO(), cluster)
 		expected := reconcile.Request{NamespacedName: types.NamespacedName{Name: matchingEventBasedAddOn.Name}}
 		Expect(requests).To(ContainElement(expected))
 
@@ -137,7 +138,7 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		eventBasedAddOnSet.Insert(&nonMatchingInfo)
 		reconciler.ClusterMap[clusterInfo] = eventBasedAddOnSet
 
-		requests = controllers.RequeueEventBasedAddOnForCluster(reconciler, cluster)
+		requests = controllers.RequeueEventBasedAddOnForCluster(reconciler, context.TODO(), cluster)
 		expected = reconcile.Request{NamespacedName: types.NamespacedName{Name: matchingEventBasedAddOn.Name}}
 		Expect(requests).To(ContainElement(expected))
 		expected = reconcile.Request{NamespacedName: types.NamespacedName{Name: nonMatchingEventBasedAddOn.Name}}
@@ -157,7 +158,7 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		reconciler.EventBasedAddOns[matchingInfo] = matchingEventBasedAddOn.Spec.SourceClusterSelector
 		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.SourceClusterSelector
 
-		requests = controllers.RequeueEventBasedAddOnForCluster(reconciler, cluster)
+		requests = controllers.RequeueEventBasedAddOnForCluster(reconciler, context.TODO(), cluster)
 		Expect(requests).To(HaveLen(0))
 	})
 
@@ -218,7 +219,7 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		eventBasedAddOnReconciler.EventBasedAddOns[eventBasedAddOnInfo] = eventBasedAddOn.Spec.SourceClusterSelector
 
 		eventBasedAddOnList := controllers.RequeueEventBasedAddOnForMachine(eventBasedAddOnReconciler,
-			cpMachine)
+			context.TODO(), cpMachine)
 		Expect(len(eventBasedAddOnList)).To(Equal(1))
 	})
 })

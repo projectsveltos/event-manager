@@ -63,7 +63,8 @@ var _ = Describe("EventSource Deployer", func() {
 			eventReport,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		currentEventReport := &libsveltosv1alpha1.EventReport{}
 		Expect(c.Get(context.TODO(), types.NamespacedName{Namespace: clusterNamespace, Name: eventReportName},
@@ -92,7 +93,8 @@ var _ = Describe("EventSource Deployer", func() {
 			eventReport2,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		Expect(controllers.RemoveEventReports(context.TODO(), c, eventSource.Name, klogr.New())).To(Succeed())
 
@@ -123,7 +125,8 @@ var _ = Describe("EventSource Deployer", func() {
 			eventReport2,
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		Expect(controllers.RemoveEventReportsFromCluster(context.TODO(), c, clusterNamespace, clusterName,
 			clusterType, map[string]bool{}, klogr.New())).To(Succeed())

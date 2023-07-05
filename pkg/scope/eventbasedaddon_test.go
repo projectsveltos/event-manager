@@ -49,7 +49,8 @@ var _ = Describe("EventBasedAddOnScope", func() {
 		}
 		scheme := setupScheme()
 		initObjects := []client.Object{eventBasedAddOn}
-		c = fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+		c = fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 	})
 
 	It("Return nil,error if EventBasedAddOn is not specified", func() {
