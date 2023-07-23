@@ -162,8 +162,8 @@ endif
 
 KIND_CONFIG ?= kind-cluster.yaml
 CONTROL_CLUSTER_NAME ?= sveltos-management
-WORKLOAD_CLUSTER_NAME ?= sveltos-management-workload
-KIND_CLUSTER_YAML ?= test/sveltos-management-workload.yaml
+WORKLOAD_CLUSTER_NAME ?= clusterapi-workload
+KIND_CLUSTER_YAML ?= test/$(WORKLOAD_CLUSTER_NAME).yaml
 TIMEOUT ?= 10m
 NUM_NODES ?= 5
 
