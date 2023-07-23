@@ -326,7 +326,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 })
 
 func getEventReportName(eventSourceName string) string {
-	return fmt.Sprintf("capi--%s--sveltos-management-workload", eventSourceName)
+	return fmt.Sprintf("capi--%s--clusterapi-workload", eventSourceName)
 }
 
 // getInstantiatedObjectLabels returns the labels to add to a ClusterProfile created
