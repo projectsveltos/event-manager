@@ -58,10 +58,12 @@ const (
 	// Namespace where reports will be generated
 	ReportNamespace = "projectsveltos"
 
-	eventBasedAddOnNameLabel = "eventbasedaddon.lib.projectsveltos.io/eventbasedaddonname"
-	clusterNamespaceLabel    = "eventbasedaddon.lib.projectsveltos.io/clusterNamespace"
-	clusterNameLabel         = "eventbasedaddon.lib.projectsveltos.io/clustername"
-	clusterTypeLabel         = "eventbasedaddon.lib.projectsveltos.io/clustertype"
+	eventBasedAddOnNameLabel         = "eventbasedaddon.lib.projectsveltos.io/eventbasedaddonname"
+	clusterNamespaceLabel            = "eventbasedaddon.lib.projectsveltos.io/clusterNamespace"
+	clusterNameLabel                 = "eventbasedaddon.lib.projectsveltos.io/clustername"
+	clusterTypeLabel                 = "eventbasedaddon.lib.projectsveltos.io/clustertype"
+	referencedResourceNamespaceLabel = "eventbasedaddon.lib.projectsveltos.io/refnamespace"
+	referencedResourceNameLabel      = "eventbasedaddon.lib.projectsveltos.io/refname"
 )
 
 type getCurrentHash func(tx context.Context, c client.Client,
@@ -1127,13 +1129,36 @@ func instantiateReferencedPolicies(ctx context.Context, c client.Client, templat
 	// and create/update corresponding ConfigMap/Secret in managemenent cluster
 	for i := range refs {
 		ref := refs[i]
+		apiVersion, kind := ref.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 
+		// TODO: "projectsveltos.io/template" should be move out and a method
+		// added in libsveltos to identify whether a referenced ConfigMap/Secret
+		// is a template
+		if _, ok := ref.GetAnnotations()["projectsveltos.io/template"]; !ok {
+			// referenced ConfigMap/Secret is not a template. So there is no
+			// need to instantiate a new one. Generated ClusterProfile can directly
+			// reference this one
+			result.Insert(&corev1.ObjectReference{APIVersion: apiVersion, Kind: kind,
+				Namespace: ref.GetNamespace(), Name: ref.GetName()})
+			continue
+		}
+
+		// If referenced resource is a template, assume it needs to be instantiated using
+		// information from the resources in the managed cluster that generated the event.
+		// Generate then a new ConfigMap/Secret. The autocreated ClusterProfile will reference
+		// this new resource.
 		content := getDataSection(ref)
 
 		instantiatedContent, err := instantiateDataSection(templateName, content, objects, logger)
 		if err != nil {
 			return nil, err
 		}
+
+		// Resource name must depend on reference resource name as well. So add those labels.
+		// If an EventBasedAddOn is referencing N configMaps/Secrets, N equivalent referenced
+		// resources must be created
+		labels[referencedResourceNamespaceLabel] = ref.GetNamespace()
+		labels[referencedResourceNameLabel] = ref.GetName()
 
 		name, create, err := getResourceName(ctx, c, ref, labels)
 		if err != nil {
@@ -1158,7 +1183,6 @@ func instantiateReferencedPolicies(ctx context.Context, c client.Client, templat
 				return nil, err
 			}
 		}
-		apiVersion, kind := ref.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 		result.Insert(&corev1.ObjectReference{APIVersion: apiVersion, Kind: kind, Namespace: ReportNamespace, Name: name})
 	}
 
