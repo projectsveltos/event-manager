@@ -111,6 +111,11 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
 				Name:      randomString(),
+				// Mark resource as template so instantiateReferencedPolicies
+				// will generate a new one in projectsveltos namespace
+				Annotations: map[string]string{
+					"projectsveltos.io/template": "ok",
+				},
 			},
 			Data: map[string]string{
 				"ingress": fmt.Sprintf(ingress, serviceNamespace),

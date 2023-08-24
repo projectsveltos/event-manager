@@ -66,6 +66,11 @@ var (
 	UnstructuredToTyped           = unstructuredToTyped
 )
 
+const (
+	ReferencedResourceNamespaceLabel = referencedResourceNamespaceLabel
+	ReferencedResourceNameLabel      = referencedResourceNameLabel
+)
+
 // fetcher
 var (
 	GetConfigMap             = getConfigMap
