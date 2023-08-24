@@ -46,6 +46,7 @@ import (
 	"github.com/projectsveltos/event-manager/controllers"
 	"github.com/projectsveltos/event-manager/pkg/scope"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	fakedeployer "github.com/projectsveltos/libsveltos/lib/deployer/fake"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
@@ -932,6 +933,11 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Name:      randomString(),
+				// Mark resource as template so instantiateReferencedPolicies
+				// will generate a new one in projectsveltos namespace
+				Annotations: map[string]string{
+					"projectsveltos.io/template": "ok",
+				},
 			},
 			Data: map[string]string{
 				"policy": randomString(),
@@ -942,6 +948,11 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Name:      randomString(),
+				// Mark resource as template so instantiateReferencedPolicies
+				// will generate a new one in projectsveltos namespace
+				Annotations: map[string]string{
+					"projectsveltos.io/template": "ok",
+				},
 			},
 			Type: libsveltosv1alpha1.ClusterProfileSecretType,
 			Data: map[string][]byte{
@@ -1007,11 +1018,13 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		configMaps := &corev1.ConfigMapList{}
 		Expect(c.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
 		Expect(len(configMaps.Items)).To(Equal(1))
+		validateLabels(configMaps.Items[0].Labels, clusterRef, eventBasedAddOnName, configMap)
 		Expect(reflect.DeepEqual(configMaps.Items[0].Data, configMap.Data)).To(BeTrue())
 
 		secrets := &corev1.SecretList{}
 		Expect(c.List(context.TODO(), secrets, listOptions...)).To(Succeed())
 		Expect(len(secrets.Items)).To(Equal(1))
+		validateLabels(secrets.Items[0].Labels, clusterRef, eventBasedAddOnName, secret)
 		Expect(reflect.DeepEqual(secrets.Items[0].Data, secret.Data)).To(BeTrue())
 	})
 
@@ -1050,6 +1063,11 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Name:      randomString(),
+				// Mark resource as template so instantiateReferencedPolicies
+				// will generate a new one in projectsveltos namespace
+				Annotations: map[string]string{
+					"projectsveltos.io/template": "ok",
+				},
 			},
 			Data: map[string]string{
 				"policy": fmt.Sprintf(ingress, namespace),
@@ -1359,5 +1377,22 @@ func getClusterInfo(clusterNamespace, clusterName string, clusterType libsveltos
 			Kind:       kind,
 			APIVersion: apiVersion,
 		},
+	}
+}
+
+func validateLabels(labels map[string]string, clusterRef *corev1.ObjectReference,
+	eventBasedAddOnName string, referencedResource client.Object) {
+
+	v := labels[controllers.ReferencedResourceNamespaceLabel]
+	Expect(v).To(Equal(referencedResource.GetNamespace()))
+	v = labels[controllers.ReferencedResourceNameLabel]
+	Expect(v).To(Equal(referencedResource.GetName()))
+
+	expectedLabels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace,
+		clusterRef.Name, eventBasedAddOnName, clusterproxy.GetClusterType(clusterRef))
+
+	for k := range expectedLabels {
+		v = labels[k]
+		Expect(v).To(Equal(expectedLabels[k]))
 	}
 }
