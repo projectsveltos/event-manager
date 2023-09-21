@@ -112,7 +112,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					"projectsveltos.io/template": "ok",
+					libsveltosv1alpha1.PolicyTemplateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{
