@@ -1131,10 +1131,7 @@ func instantiateReferencedPolicies(ctx context.Context, c client.Client, templat
 		ref := refs[i]
 		apiVersion, kind := ref.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 
-		// TODO: "projectsveltos.io/template" should be move out and a method
-		// added in libsveltos to identify whether a referenced ConfigMap/Secret
-		// is a template
-		if _, ok := ref.GetAnnotations()["projectsveltos.io/template"]; !ok {
+		if _, ok := ref.GetAnnotations()[libsveltosv1alpha1.PolicyTemplateAnnotation]; !ok {
 			// referenced ConfigMap/Secret is not a template. So there is no
 			// need to instantiate a new one. Generated ClusterProfile can directly
 			// reference this one
@@ -1213,7 +1210,7 @@ func createConfigMap(ctx context.Context, c client.Client, ref client.Object, na
 			Name:        name,
 			Namespace:   ReportNamespace,
 			Labels:      labels,
-			Annotations: ref.GetAnnotations(), //  "projectsveltos.io/template" might be set
+			Annotations: ref.GetAnnotations(), //  libsveltosv1alpha1.PolicyTemplateAnnotation might be set
 		},
 		Data: content,
 	}
@@ -1234,7 +1231,7 @@ func createSecret(ctx context.Context, c client.Client, ref client.Object, name 
 			Name:        name,
 			Namespace:   ReportNamespace,
 			Labels:      labels,
-			Annotations: ref.GetAnnotations(), //  "projectsveltos.io/template" might be set
+			Annotations: ref.GetAnnotations(), //  libsveltosv1alpha1.PolicyTemplateAnnotation might be set
 		},
 		Data: data,
 		Type: libsveltosv1alpha1.ClusterProfileSecretType,
