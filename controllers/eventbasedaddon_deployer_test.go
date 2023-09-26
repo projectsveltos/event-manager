@@ -936,7 +936,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					"projectsveltos.io/template": "ok",
+					libsveltosv1alpha1.PolicyTemplateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{
@@ -951,7 +951,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					"projectsveltos.io/template": "ok",
+					libsveltosv1alpha1.PolicyTemplateAnnotation: "ok",
 				},
 			},
 			Type: libsveltosv1alpha1.ClusterProfileSecretType,
@@ -1066,7 +1066,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					"projectsveltos.io/template": "ok",
+					libsveltosv1alpha1.PolicyTemplateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{

@@ -11,8 +11,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.11.0
 	github.com/onsi/gomega v1.27.8
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/addon-controller v0.16.1-0.20230918121900-46fff656f484
-	github.com/projectsveltos/libsveltos v0.16.1-0.20230918112609-93a8300779a8
+	github.com/projectsveltos/addon-controller v0.17.1-0.20230926115409-5181bce17c5d
+	github.com/projectsveltos/libsveltos v0.17.1-0.20230926100809-8226974e7fde
 	github.com/prometheus/client_golang v1.16.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/text v0.11.0
@@ -49,6 +49,7 @@ require (
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/containerd/containerd v1.7.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
+	github.com/dariubs/percent v1.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/cli v23.0.1+incompatible // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
