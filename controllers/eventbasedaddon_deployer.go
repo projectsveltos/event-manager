@@ -880,6 +880,9 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	// TODO: is it needed to instantiate kustomize files?
 	clusterProfile.Spec.KustomizationRefs = eventBasedAddOn.Spec.KustomizationRefs
 
+	clusterProfile.Spec.MaxUpdate = eventBasedAddOn.Spec.MaxUpdate
+	clusterProfile.Spec.ValidateHealths = eventBasedAddOn.Spec.ValidateHealths
+
 	if createClusterProfile {
 		return clusterProfile, c.Create(ctx, clusterProfile)
 	}
@@ -968,6 +971,9 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 
 	// TODO: is it needed to instantiate kustomize files?
 	clusterProfile.Spec.KustomizationRefs = eventBasedAddOn.Spec.KustomizationRefs
+
+	clusterProfile.Spec.MaxUpdate = eventBasedAddOn.Spec.MaxUpdate
+	clusterProfile.Spec.ValidateHealths = eventBasedAddOn.Spec.ValidateHealths
 
 	if createClusterProfile {
 		return []*configv1alpha1.ClusterProfile{clusterProfile}, c.Create(ctx, clusterProfile)
