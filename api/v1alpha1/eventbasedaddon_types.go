@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
@@ -77,6 +78,17 @@ type EventBasedAddOnSpec struct {
 	// +optional
 	SyncMode configv1alpha1.SyncMode `json:"syncMode,omitempty"`
 
+	// The maximum number of clusters that can be updated concurrently.
+	// Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%).
+	// Defaults to 100%.
+	// Example: when this is set to 30%, when list of add-ons/applications in ClusterProfile
+	// changes, only 30% of matching clusters will be updated in parallel. Only when updates
+	// in those cluster succeed, other matching clusters are updated.
+	// +kubebuilder:validation:XIntOrString
+	// +kubebuilder:validation:Pattern="^((100|[0-9]{1,2})%|[0-9]+)$"
+	// +optional
+	MaxUpdate *intstr.IntOrString `json:"maxUpdate,omitempty"`
+
 	// StopMatchingBehavior indicates what behavior should be when a Cluster stop matching
 	// the ClusterProfile. By default all deployed Helm charts and Kubernetes resources will
 	// be withdrawn from Cluster. Setting StopMatchingBehavior to LeavePolicies will instead
@@ -95,6 +107,12 @@ type EventBasedAddOnSpec struct {
 
 	// Kustomization refs
 	KustomizationRefs []configv1alpha1.KustomizationRef `json:"kustomizationRefs,omitempty"`
+
+	// ValidateHealths is a slice of Lua functions to run against
+	// the managed cluster to validate the state of those add-ons/applications
+	// is healthy
+	// +optional
+	ValidateHealths []configv1alpha1.ValidateHealth `json:"validateHealths,omitempty"`
 }
 
 // EventBasedAddOnStatus defines the observed state of EventBasedAddOn
