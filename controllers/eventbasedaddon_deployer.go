@@ -51,6 +51,7 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
+	"github.com/projectsveltos/libsveltos/lib/sharding"
 	libsveltosutils "github.com/projectsveltos/libsveltos/lib/utils"
 )
 
@@ -76,6 +77,22 @@ type feature struct {
 	undeploy    deployer.RequestHandler
 }
 
+func (r *EventBasedAddOnReconciler) isClusterAShardMatch(ctx context.Context,
+	clusterInfo *libsveltosv1alpha1.ClusterInfo) (bool, error) {
+
+	clusterType := clusterproxy.GetClusterType(&clusterInfo.Cluster)
+	cluster, err := clusterproxy.GetCluster(ctx, r.Client, clusterInfo.Cluster.Namespace,
+		clusterInfo.Cluster.Name, clusterType)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, err
+	}
+
+	return sharding.IsShardAMatch(r.ShardKey, cluster), nil
+}
+
 // deployEventBasedAddon update necessary resources in managed clusters
 func (r *EventBasedAddOnReconciler) deployEventBasedAddOn(ctx context.Context, eScope *scope.EventBasedAddOnScope,
 	f feature, logger logr.Logger) error {
@@ -89,16 +106,34 @@ func (r *EventBasedAddOnReconciler) deployEventBasedAddOn(ctx context.Context, e
 	allProcessed := true
 
 	for i := range resource.Status.ClusterInfo {
-		c := resource.Status.ClusterInfo[i]
+		c := &resource.Status.ClusterInfo[i]
 
-		clusterInfo, err := r.processEventBasedAddOn(ctx, eScope, &c.Cluster, f, logger)
+		shardMatch, err := r.isClusterAShardMatch(ctx, c)
 		if err != nil {
-			errorSeen = err
+			return err
 		}
-		if clusterInfo != nil {
-			resource.Status.ClusterInfo[i] = *clusterInfo
+
+		var clusterInfo *libsveltosv1alpha1.ClusterInfo
+		if !shardMatch {
+			l := logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s",
+				c.Cluster.Kind, c.Cluster.Namespace, c.Cluster.Name))
+			l.V(logs.LogDebug).Info("cluster is not a shard match")
+			// Since cluster is not a shard match, another deployment will deploy and update
+			// this specific clusterInfo status. Here we simply return current status.
+			clusterInfo = c
 			if clusterInfo.Status != libsveltosv1alpha1.SveltosStatusProvisioned {
 				allProcessed = false
+			}
+		} else {
+			clusterInfo, err = r.processEventBasedAddOn(ctx, eScope, &c.Cluster, f, logger)
+			if err != nil {
+				errorSeen = err
+			}
+			if clusterInfo != nil {
+				resource.Status.ClusterInfo[i] = *clusterInfo
+				if clusterInfo.Status != libsveltosv1alpha1.SveltosStatusProvisioned {
+					allProcessed = false
+				}
 			}
 		}
 	}
@@ -128,12 +163,26 @@ func (r *EventBasedAddOnReconciler) undeployEventBasedAddOn(ctx context.Context,
 
 	var err error
 	for i := range resource.Status.ClusterInfo {
+		var shardMatch bool
+		shardMatch, err = r.isClusterAShardMatch(ctx, &resource.Status.ClusterInfo[i])
+		if err != nil {
+			return err
+		}
+
+		if !shardMatch && resource.Status.ClusterInfo[i].Status != libsveltosv1alpha1.SveltosStatusRemoved {
+			// If shard is not a match, wait for other controller to remove
+			err = fmt.Errorf("remove pending")
+			continue
+		}
+
 		c := &resource.Status.ClusterInfo[i].Cluster
 
 		_, tmpErr := r.removeEventBasedAddOn(ctx, eScope, c, f, logger)
 		if tmpErr != nil {
 			err = tmpErr
 		}
+
+		resource.Status.ClusterInfo[i].Status = libsveltosv1alpha1.SveltosStatusRemoved
 	}
 
 	return err

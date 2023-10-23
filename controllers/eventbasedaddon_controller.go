@@ -81,6 +81,7 @@ type EventBasedAddOnReconciler struct {
 	ConcurrentReconciles int
 	Deployer             deployer.DeployerInterface
 	EventReportMode      ReportMode
+	ShardKey             string
 
 	// use a Mutex to update Map as MaxConcurrentReconciles is higher than one
 	Mux sync.Mutex
@@ -346,7 +347,7 @@ func (r *EventBasedAddOnReconciler) SetupWithManager(mgr ctrl.Manager) (controll
 	}
 
 	if r.EventReportMode == CollectFromManagementCluster {
-		go collectEventReports(mgr.GetClient(), mgr.GetLogger())
+		go collectEventReports(mgr.GetClient(), r.ShardKey, mgr.GetLogger())
 	}
 
 	return c, nil
