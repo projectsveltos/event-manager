@@ -536,44 +536,6 @@ metadata:
   namespace: projectsveltos
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: event-leader-election-role
-  namespace: projectsveltos
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
----
-apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: event-manager-role
@@ -751,20 +713,6 @@ rules:
   - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: event-leader-election-rolebinding
-  namespace: projectsveltos
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: event-leader-election-role
-subjects:
-- kind: ServiceAccount
-  name: event-manager
-  namespace: projectsveltos
----
-apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: event-manager-rolebinding
@@ -788,35 +736,6 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: event-manager
-  namespace: projectsveltos
----
-apiVersion: v1
-data:
-  controller_manager_config.yaml: |
-    apiVersion: controller-runtime.sigs.k8s.io/v1alpha1
-    kind: ControllerManagerConfig
-    health:
-      healthProbeBindAddress: :8081
-    metrics:
-      bindAddress: 127.0.0.1:8080
-    webhook:
-      port: 9443
-    leaderElection:
-      leaderElect: true
-      resourceName: bfaea346.projectsveltos.io
-    # leaderElectionReleaseOnCancel defines if the leader should step down volume
-    # when the Manager ends. This requires the binary to immediately end when the
-    # Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-    # speeds up voluntary leader transitions as the new leader don't have to wait
-    # LeaseDuration time first.
-    # In the default scaffold provided, the program ends immediately after
-    # the manager stops, so would be fine to enable this option. However,
-    # if you are doing or is intended to do any operation such as perform cleanups
-    # after the manager stops then its usage might be unsafe.
-    # leaderElectionReleaseOnCancel: true
-kind: ConfigMap
-metadata:
-  name: event-manager-config
   namespace: projectsveltos
 ---
 apiVersion: v1
@@ -858,11 +777,10 @@ spec:
       - args:
         - --health-probe-bind-address=:8081
         - --metrics-bind-address=127.0.0.1:8080
-        - --leader-elect
         - --v=5
         command:
         - /manager
-        image: projectsveltos/event-manager-amd64:main
+        image: projectsveltos/event-manager-amd64:dev
         livenessProbe:
           httpGet:
             path: /healthz

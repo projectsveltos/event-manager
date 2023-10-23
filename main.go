@@ -57,7 +57,7 @@ import (
 var (
 	setupLog             = ctrl.Log.WithName("setup")
 	metricsAddr          string
-	enableLeaderElection bool
+	shardKey             string
 	probeAddr            string
 	workers              int
 	concurrentReconciles int
@@ -88,8 +88,6 @@ func main() {
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "bfaea346.projectsveltos.io",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -111,6 +109,7 @@ func main() {
 		Client:               mgr.GetClient(),
 		Scheme:               mgr.GetScheme(),
 		ConcurrentReconciles: concurrentReconciles,
+		ShardKey:             shardKey,
 		Mux:                  sync.Mutex{},
 		Deployer:             d,
 		ClusterMap:           make(map[corev1.ObjectReference]*libsveltosset.Set),
@@ -165,9 +164,10 @@ func initFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&probeAddr, "health-probe-bind-address", ":8081",
 		"The address the probe endpoint binds to.")
 
-	fs.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
+	fs.StringVar(&shardKey,
+		"shard-key",
+		"",
+		"If set this deployment will reconcile only clusters matching this shard")
 
 	fs.IntVar(&workers, "worker-number", defaultWorkers,
 		"Number of worker. Workers are used to verify health checks in managed clusters")
