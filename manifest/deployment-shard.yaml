@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   labels:
     control-plane: event-manager
-  name: event-manager-shard
+  name: event-manager-{{.SHARD}}
   namespace: projectsveltos
 spec:
   replicas: 1
@@ -21,7 +21,7 @@ spec:
       - args:
         - --health-probe-bind-address=:8081
         - --metrics-bind-address=127.0.0.1:8080
-        - --shard-key=shard1
+        - --shard-key={{.SHARD}}
         - --v=5
         command:
         - /manager

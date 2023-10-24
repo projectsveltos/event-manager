@@ -121,6 +121,7 @@ manifests: $(CONTROLLER_GEN) $(KUSTOMIZE) $(ENVSUBST) fmt generate ## Generate W
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	MANIFEST_IMG=$(CONTROLLER_IMG)-$(ARCH) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
 	$(KUSTOMIZE) build config/default | $(ENVSUBST) > manifest/manifest.yaml
+	./scripts/extract_deployment.sh manifest/manifest.yaml manifest/deployment-shard.yaml
 
 .PHONY: generate
 generate: $(CONTROLLER_GEN) ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -170,7 +171,9 @@ fv: $(GINKGO) ## Run Sveltos Controller tests using existing cluster
 .PHONY: fv-sharding
 fv-sharding: $(KUBECTL) $(GINKGO) ## Run Sveltos Controller tests using existing cluster
 	$(KUBECTL) patch cluster  clusterapi-workload  -n default --type json -p '[{ "op": "add", "path": "/metadata/annotations/sharding.projectsveltos.io~1key", "value": "shard1" }]'
-	$(KUBECTL) apply -f test/eventmanager-shard.yaml
+	sed -e "s/{{.SHARD}}/shard1/g"  manifest/deployment-shard.yaml > test/em-deployment-shard.yaml
+	$(KUBECTL) apply -f test/em-deployment-shard.yaml
+	rm -f test/em-deployment-shard.yaml
 	cd test/fv; $(GINKGO) -nodes $(NUM_NODES) --label-filter='FV' --v --trace --randomize-all
 
 .PHONY: test
@@ -314,8 +317,13 @@ deploy-projectsveltos: $(KUSTOMIZE)
 	# Install addon-compliance-controller
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/addon-compliance-controller/$(TAG)/manifest/manifest.yaml
 
-	# Install projectsveltos sveltos-manager
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/sveltos-manager/$(TAG)/manifest/manifest.yaml
+	# Install projectsveltos addon-controller
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/manifest.yaml
+	curl https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/deployment-shard.yaml -o ac-deployment-shard.yaml
+	sed -e "s/{{.SHARD}}/shard1/g"  ac-deployment-shard.yaml > tmp-ac-deployment-shard.yaml
+	$(KUBECTL) apply -f tmp-ac-deployment-shard.yaml
+	rm ac-deployment-shard.yaml
+	rm tmp-ac-deployment-shard.yaml
 
 	# Install projectsveltos event-manager components
 	@echo 'Install projectsveltos event-manager components'

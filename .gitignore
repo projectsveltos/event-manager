@@ -32,3 +32,6 @@ manager_pull_policy.yaml-e
 version.txt
 
 .dockerignore
+
+ac-deployment-shard.yaml
+tmp-ac-deployment-shard.yaml
