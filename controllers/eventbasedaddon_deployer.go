@@ -166,6 +166,7 @@ func (r *EventBasedAddOnReconciler) undeployEventBasedAddOn(ctx context.Context,
 		shardMatch, tmpErr := r.isClusterAShardMatch(ctx, &resource.Status.ClusterInfo[i])
 		if tmpErr != nil {
 			err = tmpErr
+			continue
 		}
 
 		if !shardMatch && resource.Status.ClusterInfo[i].Status != libsveltosv1alpha1.SveltosStatusRemoved {
@@ -179,6 +180,7 @@ func (r *EventBasedAddOnReconciler) undeployEventBasedAddOn(ctx context.Context,
 		_, tmpErr = r.removeEventBasedAddOn(ctx, eScope, c, f, logger)
 		if tmpErr != nil {
 			err = tmpErr
+			continue
 		}
 
 		resource.Status.ClusterInfo[i].Status = libsveltosv1alpha1.SveltosStatusRemoved
