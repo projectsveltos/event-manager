@@ -25,7 +25,7 @@ spec:
         - --v=5
         command:
         - /manager
-        image: projectsveltos/event-manager-amd64:dev
+        image: projectsveltos/event-manager-amd64:v0.19.0
         livenessProbe:
           httpGet:
             path: /healthz
