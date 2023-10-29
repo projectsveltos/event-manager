@@ -193,6 +193,7 @@ func (r *EventBasedAddOnReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// changes.
 	defer func() {
 		if err := eventBasedAddOnScope.Close(ctx); err != nil {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update: %v", err))
 			reterr = err
 		}
 	}()
