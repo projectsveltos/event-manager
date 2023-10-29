@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -123,6 +124,12 @@ func (r *EventBasedAddOnReconciler) deployEventBasedAddOn(ctx context.Context, e
 			clusterInfo = c
 			if clusterInfo.Status != libsveltosv1alpha1.SveltosStatusProvisioned {
 				allProcessed = false
+			}
+			// This is a required parameter. It is set by the deployment matching the
+			// cluster shard. if not set yet, set it to empty
+			if clusterInfo.Hash == nil {
+				str := base64.StdEncoding.EncodeToString([]byte("empty"))
+				clusterInfo.Hash = []byte(str)
 			}
 		} else {
 			clusterInfo, err = r.processEventBasedAddOn(ctx, eScope, &c.Cluster, f, logger)
