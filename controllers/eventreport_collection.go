@@ -99,13 +99,17 @@ func removeEventReportsFromCluster(ctx context.Context, c client.Client, cluster
 }
 
 // Periodically collects EventReports from each CAPI cluster.
-func collectEventReports(c client.Client, logger logr.Logger) {
-	const interval = 20 * time.Second
+func collectEventReports(c client.Client, shardKey string, logger logr.Logger) {
+	interval := 20 * time.Second
+	if shardKey != "" {
+		// Make sharded controllers more aggressive in fetching
+		interval = 10 * time.Second
+	}
 
 	ctx := context.TODO()
 	for {
 		logger.V(logs.LogDebug).Info("collecting EventReports")
-		clusterList, err := clusterproxy.GetListOfClusters(ctx, c, logger)
+		clusterList, err := clusterproxy.GetListOfClustersForShardKey(ctx, c, shardKey, logger)
 		if err != nil {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get clusters: %v", err))
 		}

@@ -16,9 +16,9 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
     - name: Set up Go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v4
       with:
-        go-version: 1.20.0
+        go-version: 1.20.8
     - name: Build
       run: make build
     - name: FMT
@@ -35,9 +35,9 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
     - name: Set up Go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v4
       with:
-        go-version: 1.20.0
+        go-version: 1.20.8
     - name: ut
       run: make test
       env:
@@ -48,10 +48,23 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
     - name: Set up Go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v4
       with:
-        go-version: 1.20.0
+        go-version: 1.20.8
     - name: fv
       run: make create-cluster fv
+      env:
+        FV: true
+  FV-SHARDING:
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.20.8
+    - name: fv
+      run: make create-cluster fv-sharding
       env:
         FV: true
