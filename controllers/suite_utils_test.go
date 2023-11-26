@@ -156,7 +156,7 @@ func getEventReport(eventSourceName, clusterNamespace, clusterName string) *libs
 			Name:      eventSourceName,
 			Namespace: clusterNamespace,
 			Labels: map[string]string{
-				libsveltosv1alpha1.EventSourceLabelName: eventSourceName,
+				libsveltosv1alpha1.EventSourceNameLabel: eventSourceName,
 			},
 		},
 		Spec: libsveltosv1alpha1.EventReportSpec{
