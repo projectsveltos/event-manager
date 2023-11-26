@@ -201,7 +201,7 @@ func validateEventReports(eventSourceName string, cluster *clusterv1.Cluster, cl
 			By("Spec ClusterNamespace and ClusterName not set")
 			return false
 		}
-		v, ok := currentEventReport.Labels[libsveltosv1alpha1.EventSourceLabelName]
+		v, ok := currentEventReport.Labels[libsveltosv1alpha1.EventSourceNameLabel]
 		return ok && v == eventSourceName
 	}, timeout, pollingInterval).Should(BeTrue())
 }
