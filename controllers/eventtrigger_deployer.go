@@ -60,16 +60,16 @@ const (
 	// Namespace where reports will be generated
 	ReportNamespace = "projectsveltos"
 
-	eventBasedAddOnNameLabel         = "eventbasedaddon.lib.projectsveltos.io/eventbasedaddonname"
-	clusterNamespaceLabel            = "eventbasedaddon.lib.projectsveltos.io/clusterNamespace"
-	clusterNameLabel                 = "eventbasedaddon.lib.projectsveltos.io/clustername"
-	clusterTypeLabel                 = "eventbasedaddon.lib.projectsveltos.io/clustertype"
-	referencedResourceNamespaceLabel = "eventbasedaddon.lib.projectsveltos.io/refnamespace"
-	referencedResourceNameLabel      = "eventbasedaddon.lib.projectsveltos.io/refname"
+	eventTriggerNameLabel            = "eventtrigger.lib.projectsveltos.io/eventtriggername"
+	clusterNamespaceLabel            = "eventtrigger.lib.projectsveltos.io/clusterNamespace"
+	clusterNameLabel                 = "eventtrigger.lib.projectsveltos.io/clustername"
+	clusterTypeLabel                 = "eventtrigger.lib.projectsveltos.io/clustertype"
+	referencedResourceNamespaceLabel = "eventtrigger.lib.projectsveltos.io/refnamespace"
+	referencedResourceNameLabel      = "eventtrigger.lib.projectsveltos.io/refname"
 )
 
 type getCurrentHash func(tx context.Context, c client.Client,
-	chc *v1alpha1.EventBasedAddOn, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error)
+	chc *v1alpha1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error)
 
 type feature struct {
 	id          string
@@ -78,7 +78,7 @@ type feature struct {
 	undeploy    deployer.RequestHandler
 }
 
-func (r *EventBasedAddOnReconciler) isClusterAShardMatch(ctx context.Context,
+func (r *EventTriggerReconciler) isClusterAShardMatch(ctx context.Context,
 	clusterInfo *libsveltosv1alpha1.ClusterInfo) (bool, error) {
 
 	clusterType := clusterproxy.GetClusterType(&clusterInfo.Cluster)
@@ -95,12 +95,12 @@ func (r *EventBasedAddOnReconciler) isClusterAShardMatch(ctx context.Context,
 }
 
 // deployEventBasedAddon update necessary resources in managed clusters
-func (r *EventBasedAddOnReconciler) deployEventBasedAddOn(ctx context.Context, eScope *scope.EventBasedAddOnScope,
+func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
 	f feature, logger logr.Logger) error {
 
-	resource := eScope.EventBasedAddOn
+	resource := eScope.EventTrigger
 
-	logger = logger.WithValues("eventbasedaddon", resource.Name)
+	logger = logger.WithValues("eventTrigger", resource.Name)
 	logger.V(logs.LogDebug).Info("request to evaluate/deploy")
 
 	var errorSeen error
@@ -132,7 +132,7 @@ func (r *EventBasedAddOnReconciler) deployEventBasedAddOn(ctx context.Context, e
 				clusterInfo.Hash = []byte(str)
 			}
 		} else {
-			clusterInfo, err = r.processEventBasedAddOn(ctx, eScope, &c.Cluster, f, logger)
+			clusterInfo, err = r.processEventTrigger(ctx, eScope, &c.Cluster, f, logger)
 			if err != nil {
 				errorSeen = err
 			}
@@ -153,19 +153,19 @@ func (r *EventBasedAddOnReconciler) deployEventBasedAddOn(ctx context.Context, e
 	}
 
 	if !allProcessed {
-		return fmt.Errorf("request to process EventBasedAddOn is still queued in one ore more clusters")
+		return fmt.Errorf("request to process EventTrigger is still queued in one ore more clusters")
 	}
 
 	return nil
 }
 
 // undeployEventBasedAddon clean resources in managed clusters
-func (r *EventBasedAddOnReconciler) undeployEventBasedAddOn(ctx context.Context, eScope *scope.EventBasedAddOnScope,
+func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
 	f feature, logger logr.Logger) error {
 
-	resource := eScope.EventBasedAddOn
+	resource := eScope.EventTrigger
 
-	logger = logger.WithValues("eventbasedaddon", resource.Name)
+	logger = logger.WithValues("eventTrigger", resource.Name)
 	logger.V(logs.LogDebug).Info("request to undeploy")
 
 	var err error
@@ -184,7 +184,7 @@ func (r *EventBasedAddOnReconciler) undeployEventBasedAddOn(ctx context.Context,
 
 		c := &resource.Status.ClusterInfo[i].Cluster
 
-		_, tmpErr = r.removeEventBasedAddOn(ctx, eScope, c, f, logger)
+		_, tmpErr = r.removeEventTrigger(ctx, eScope, c, f, logger)
 		if tmpErr != nil {
 			err = tmpErr
 			continue
@@ -196,30 +196,30 @@ func (r *EventBasedAddOnReconciler) undeployEventBasedAddOn(ctx context.Context,
 	return err
 }
 
-// processEventBasedAddOnForCluster deploys necessary resources in managed cluster.
-func processEventBasedAddOnForCluster(ctx context.Context, c client.Client,
+// processEventTriggerForCluster deploys necessary resources in managed cluster.
+func processEventTriggerForCluster(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName, applicant, featureID string,
 	clusterType libsveltosv1alpha1.ClusterType, options deployer.Options, logger logr.Logger) error {
 
-	logger = logger.WithValues("eventbasedaddon", applicant)
+	logger = logger.WithValues("eventTrigger", applicant)
 	logger = logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s", clusterType, clusterNamespace, clusterName))
 
-	resource := &v1alpha1.EventBasedAddOn{}
+	resource := &v1alpha1.EventTrigger{}
 	err := c.Get(ctx, types.NamespacedName{Name: applicant}, resource)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.V(logs.LogDebug).Info("eventBasedAddOn not found")
+			logger.V(logs.LogDebug).Info("eventTrigger not found")
 			return nil
 		}
 		return err
 	}
 
 	if !resource.DeletionTimestamp.IsZero() {
-		logger.V(logs.LogDebug).Info("eventBasedAddOn marked for deletion")
+		logger.V(logs.LogDebug).Info("eventTrigger marked for deletion")
 		return nil
 	}
 
-	logger.V(logs.LogDebug).Info("Deploy eventBasedAddOn")
+	logger.V(logs.LogDebug).Info("Deploy eventTrigger")
 
 	err = deployEventSource(ctx, c, clusterNamespace, clusterName, clusterType, resource, logger)
 	if err != nil {
@@ -233,29 +233,29 @@ func processEventBasedAddOnForCluster(ctx context.Context, c client.Client,
 		return err
 	}
 
-	logger.V(logs.LogDebug).Info("Deployed eventBasedAddOn. Updating ClusterProfiles")
+	logger.V(logs.LogDebug).Info("Deployed eventTrigger. Updating ClusterProfiles")
 	return updateClusterProfiles(ctx, c, clusterNamespace, clusterName, clusterType, resource, logger)
 }
 
-// undeployEventBasedAddOnResourcesFromCluster cleans resources associtated with EventBasedAddOn instance from cluster
-func undeployEventBasedAddOnResourcesFromCluster(ctx context.Context, c client.Client,
+// undeployEventTriggerResourcesFromCluster cleans resources associtated with EventTrigger instance from cluster
+func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName, applicant, featureID string,
 	clusterType libsveltosv1alpha1.ClusterType, options deployer.Options, logger logr.Logger) error {
 
-	logger = logger.WithValues("eventbasedaddon", applicant)
+	logger = logger.WithValues("eventTrigger", applicant)
 
-	resource := &v1alpha1.EventBasedAddOn{}
+	resource := &v1alpha1.EventTrigger{}
 	err := c.Get(ctx, types.NamespacedName{Name: applicant}, resource)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.V(logs.LogDebug).Info("eventBasedAddOn not found")
+			logger.V(logs.LogDebug).Info("eventTrigger not found")
 			return nil
 		}
 		return err
 	}
 
 	logger = logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s", clusterType, clusterNamespace, clusterName))
-	logger.V(logs.LogDebug).Info("Undeploy eventBasedAddOn")
+	logger.V(logs.LogDebug).Info("Undeploy eventTrigger")
 
 	err = removeStaleEventSources(ctx, c, clusterNamespace, clusterName, clusterType, resource, logger)
 	if err != nil {
@@ -263,15 +263,15 @@ func undeployEventBasedAddOnResourcesFromCluster(ctx context.Context, c client.C
 		return err
 	}
 
-	logger.V(logs.LogDebug).Info("Undeployed eventBasedAddOn.")
+	logger.V(logs.LogDebug).Info("Undeployed eventTrigger.")
 
 	logger.V(logs.LogDebug).Info("Clearing instantiated ClusterProfile/ConfigMap/Secret instances")
 	return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType, resource, nil, logger)
 }
 
-// eventBasedAddOnHash returns the EventBasedAddOn hash
-func eventBasedAddOnHash(ctx context.Context, c client.Client,
-	e *v1alpha1.EventBasedAddOn, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error) {
+// eventTriggerHash returns the EventTrigger hash
+func eventTriggerHash(ctx context.Context, c client.Client,
+	e *v1alpha1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error) {
 
 	resources, err := fetchReferencedResources(ctx, c, e, cluster, logger)
 	if err != nil {
@@ -301,19 +301,19 @@ func eventBasedAddOnHash(ctx context.Context, c client.Client,
 	return h.Sum(nil), nil
 }
 
-// processEventBasedAddOn detects whether it is needed to deploy EventBasedAddon resources in current passed cluster.
-func (r *EventBasedAddOnReconciler) processEventBasedAddOn(ctx context.Context, eScope *scope.EventBasedAddOnScope,
+// processEventTrigger detects whether it is needed to deploy EventBasedAddon resources in current passed cluster.
+func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
 	cluster *corev1.ObjectReference, f feature, logger logr.Logger,
 ) (*libsveltosv1alpha1.ClusterInfo, error) {
 
 	if !isClusterStillMatching(eScope, cluster) {
-		return r.removeEventBasedAddOn(ctx, eScope, cluster, f, logger)
+		return r.removeEventTrigger(ctx, eScope, cluster, f, logger)
 	}
 
-	resource := eScope.EventBasedAddOn
+	resource := eScope.EventTrigger
 
-	// Get EventBasedAddOn Spec hash (at this very precise moment)
-	currentHash, err := eventBasedAddOnHash(ctx, r.Client, resource, cluster, logger)
+	// Get EventTrigger Spec hash (at this very precise moment)
+	currentHash, err := eventTriggerHash(ctx, r.Client, resource, cluster, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -333,11 +333,11 @@ func (r *EventBasedAddOnReconciler) processEventBasedAddOn(ctx context.Context, 
 		return nil, fmt.Errorf("cleanup of %s in cluster still in progress. Wait before redeploying", f.id)
 	}
 
-	// Get the EventBasedAddOn hash when EventBasedAddOn was last deployed/evaluated in this cluster (if ever)
+	// Get the EventTrigger hash when EventTrigger was last deployed/evaluated in this cluster (if ever)
 	hash, currentStatus := r.getClusterHashAndStatus(resource, cluster)
 	isConfigSame := reflect.DeepEqual(hash, currentHash)
 	if !isConfigSame {
-		logger.V(logs.LogDebug).Info(fmt.Sprintf("EventBasedAddOn has changed. Current hash %x. Previous hash %x",
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("EventTrigger has changed. Current hash %x. Previous hash %x",
 			currentHash, hash))
 	}
 
@@ -345,7 +345,7 @@ func (r *EventBasedAddOnReconciler) processEventBasedAddOn(ctx context.Context, 
 	var result deployer.Result
 
 	if isConfigSame {
-		logger.V(logs.LogInfo).Info("EventBasedAddOn has not changed")
+		logger.V(logs.LogInfo).Info("EventTrigger has not changed")
 		result = r.Deployer.GetResult(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id,
 			clusterproxy.GetClusterType(cluster), false)
 		status = r.convertResultStatus(result)
@@ -368,7 +368,7 @@ func (r *EventBasedAddOnReconciler) processEventBasedAddOn(ctx context.Context, 
 			return clusterInfo, nil
 		}
 		if *status == libsveltosv1alpha1.SveltosStatusProvisioning {
-			return clusterInfo, fmt.Errorf("EventBasedAddOn is still being provisioned")
+			return clusterInfo, fmt.Errorf("EventTrigger is still being provisioned")
 		}
 	} else if isConfigSame && currentStatus != nil && *currentStatus == libsveltosv1alpha1.SveltosStatusProvisioned {
 		logger.V(logs.LogInfo).Info("already deployed")
@@ -379,10 +379,10 @@ func (r *EventBasedAddOnReconciler) processEventBasedAddOn(ctx context.Context, 
 		s := libsveltosv1alpha1.SveltosStatusProvisioning
 		status = &s
 
-		// Getting here means either EventBasedAddOn failed to be deployed or EventBasedAddOn has changed.
-		// EventBasedAddOn must be (re)deployed.
+		// Getting here means either EventTrigger failed to be deployed or EventTrigger has changed.
+		// EventTrigger must be (re)deployed.
 		if err := r.Deployer.Deploy(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id, clusterproxy.GetClusterType(cluster),
-			false, processEventBasedAddOnForCluster, programDuration, deployer.Options{}); err != nil {
+			false, processEventTriggerForCluster, programDuration, deployer.Options{}); err != nil {
 			return nil, err
 		}
 	}
@@ -397,12 +397,12 @@ func (r *EventBasedAddOnReconciler) processEventBasedAddOn(ctx context.Context, 
 	return clusterInfo, nil
 }
 
-func (r *EventBasedAddOnReconciler) removeEventBasedAddOn(ctx context.Context, eScope *scope.EventBasedAddOnScope,
+func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
 	cluster *corev1.ObjectReference, f feature, logger logr.Logger) (*libsveltosv1alpha1.ClusterInfo, error) {
 
-	resource := eScope.EventBasedAddOn
+	resource := eScope.EventTrigger
 
-	logger = logger.WithValues("eventbasedaddon", resource.Name)
+	logger = logger.WithValues("eventTrigger", resource.Name)
 	logger.V(logs.LogDebug).Info("request to undeploy")
 
 	// Remove any queued entry to deploy/evaluate
@@ -454,7 +454,7 @@ func (r *EventBasedAddOnReconciler) removeEventBasedAddOn(ctx context.Context, e
 	logger.V(logs.LogDebug).Info("queueing request to un-deploy")
 	if err := r.Deployer.Deploy(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id,
 		clusterproxy.GetClusterType(cluster), true,
-		undeployEventBasedAddOnResourcesFromCluster, programDuration, deployer.Options{}); err != nil {
+		undeployEventTriggerResourcesFromCluster, programDuration, deployer.Options{}); err != nil {
 		return nil, err
 	}
 
@@ -462,7 +462,7 @@ func (r *EventBasedAddOnReconciler) removeEventBasedAddOn(ctx context.Context, e
 }
 
 // isClusterEntryRemoved returns true if feature is there is no entry for cluster in Status.ClusterInfo
-func (r *EventBasedAddOnReconciler) isClusterEntryRemoved(resource *v1alpha1.EventBasedAddOn,
+func (r *EventTriggerReconciler) isClusterEntryRemoved(resource *v1alpha1.EventTrigger,
 	cluster *corev1.ObjectReference) bool {
 
 	for i := range resource.Status.ClusterInfo {
@@ -474,7 +474,7 @@ func (r *EventBasedAddOnReconciler) isClusterEntryRemoved(resource *v1alpha1.Eve
 	return true
 }
 
-func (r *EventBasedAddOnReconciler) convertResultStatus(result deployer.Result) *libsveltosv1alpha1.SveltosFeatureStatus {
+func (r *EventTriggerReconciler) convertResultStatus(result deployer.Result) *libsveltosv1alpha1.SveltosFeatureStatus {
 	switch result.ResultStatus {
 	case deployer.Deployed:
 		s := libsveltosv1alpha1.SveltosStatusProvisioned
@@ -495,9 +495,9 @@ func (r *EventBasedAddOnReconciler) convertResultStatus(result deployer.Result) 
 	return nil
 }
 
-// getClusterHashAndStatus returns the hash of the EventBasedAddOn that was deployed/evaluated in a given
+// getClusterHashAndStatus returns the hash of the EventTrigger that was deployed/evaluated in a given
 // Cluster (if ever deployed/evaluated)
-func (r *EventBasedAddOnReconciler) getClusterHashAndStatus(resource *v1alpha1.EventBasedAddOn,
+func (r *EventTriggerReconciler) getClusterHashAndStatus(resource *v1alpha1.EventTrigger,
 	cluster *corev1.ObjectReference) ([]byte, *libsveltosv1alpha1.SveltosFeatureStatus) {
 
 	for i := range resource.Status.ClusterInfo {
@@ -510,9 +510,9 @@ func (r *EventBasedAddOnReconciler) getClusterHashAndStatus(resource *v1alpha1.E
 	return nil, nil
 }
 
-// isPaused returns true if Sveltos/CAPI Cluster is paused or EventBasedAddOn has paused annotation.
-func (r *EventBasedAddOnReconciler) isPaused(ctx context.Context, cluster *corev1.ObjectReference,
-	resource *v1alpha1.EventBasedAddOn) (bool, error) {
+// isPaused returns true if Sveltos/CAPI Cluster is paused or EventTrigger has paused annotation.
+func (r *EventTriggerReconciler) isPaused(ctx context.Context, cluster *corev1.ObjectReference,
+	resource *v1alpha1.EventTrigger) (bool, error) {
 
 	isClusterPaused, err := clusterproxy.IsClusterPaused(ctx, r.Client, cluster.Namespace, cluster.Name,
 		clusterproxy.GetClusterType(cluster))
@@ -532,18 +532,18 @@ func (r *EventBasedAddOnReconciler) isPaused(ctx context.Context, cluster *corev
 }
 
 // canProceed returns true if cluster is ready to be programmed and it is not paused.
-func (r *EventBasedAddOnReconciler) canProceed(ctx context.Context, eScope *scope.EventBasedAddOnScope,
+func (r *EventTriggerReconciler) canProceed(ctx context.Context, eScope *scope.EventTriggerScope,
 	cluster *corev1.ObjectReference, logger logr.Logger) (bool, error) {
 
 	logger = logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s", cluster.Kind, cluster.Namespace, cluster.Name))
 
-	paused, err := r.isPaused(ctx, cluster, eScope.EventBasedAddOn)
+	paused, err := r.isPaused(ctx, cluster, eScope.EventTrigger)
 	if err != nil {
 		return false, err
 	}
 
 	if paused {
-		logger.V(logs.LogDebug).Info("Cluster/EventBasedAddOn is paused")
+		logger.V(logs.LogDebug).Info("Cluster/EventTrigger is paused")
 		return false, nil
 	}
 
@@ -562,9 +562,9 @@ func (r *EventBasedAddOnReconciler) canProceed(ctx context.Context, eScope *scop
 
 // isClusterStillMatching returns true if cluster is still matching by looking at EventBasedAddon
 // Status MatchingClusterRefs
-func isClusterStillMatching(eScope *scope.EventBasedAddOnScope, cluster *corev1.ObjectReference) bool {
-	for i := range eScope.EventBasedAddOn.Status.MatchingClusterRefs {
-		matchingCluster := &eScope.EventBasedAddOn.Status.MatchingClusterRefs[i]
+func isClusterStillMatching(eScope *scope.EventTriggerScope, cluster *corev1.ObjectReference) bool {
+	for i := range eScope.EventTrigger.Status.MatchingClusterRefs {
+		matchingCluster := &eScope.EventTrigger.Status.MatchingClusterRefs[i]
 		if reflect.DeepEqual(*matchingCluster, *cluster) {
 			return true
 		}
@@ -584,10 +584,10 @@ func isClusterInfoForCluster(clusterInfo *libsveltosv1alpha1.ClusterInfo, cluste
 
 func removeClusterInfoEntry(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
-	resource *v1alpha1.EventBasedAddOn, logger logr.Logger) error {
+	resource *v1alpha1.EventTrigger, logger logr.Logger) error {
 
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		currentResource := &v1alpha1.EventBasedAddOn{}
+		currentResource := &v1alpha1.EventTrigger{}
 		err := c.Get(ctx, types.NamespacedName{Name: resource.Name}, currentResource)
 		if err != nil {
 			return err
@@ -615,7 +615,7 @@ func remove(s []libsveltosv1alpha1.ClusterInfo, i int) []libsveltosv1alpha1.Clus
 // deployEventSource deploys (creates or updates) referenced EventSource.
 func deployEventSource(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
-	resource *v1alpha1.EventBasedAddOn, logger logr.Logger) error {
+	resource *v1alpha1.EventTrigger, logger logr.Logger) error {
 
 	currentReferenced, err := fetchEventSource(ctx, c, resource.Spec.EventSourceName)
 	if err != nil {
@@ -647,7 +647,7 @@ func deployEventSource(ctx context.Context, c client.Client,
 	return nil
 }
 
-func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, resource *v1alpha1.EventBasedAddOn,
+func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, resource *v1alpha1.EventTrigger,
 	eventSource *libsveltosv1alpha1.EventSource, logger logr.Logger) error {
 
 	logger = logger.WithValues("eventSource", eventSource.Name)
@@ -679,14 +679,14 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 }
 
 // removeStaleEventSources removes stale EventSources.
-// - If EventBasedAddOn is deleted, EventBasedAddOn will be removed as OwnerReference from any
+// - If EventTrigger is deleted, EventTrigger will be removed as OwnerReference from any
 // EventSource instance;
-// - If EventBasedAddOn is still existing, EventBasedAddOn will be removed as OwnerReference from any
+// - If EventTrigger is still existing, EventTrigger will be removed as OwnerReference from any
 // EventSource instance it used to referenced and it is not referencing anymore.
 // An EventSource with zero OwnerReference will be deleted from managed cluster.
 func removeStaleEventSources(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
-	resource *v1alpha1.EventBasedAddOn, logger logr.Logger) error {
+	resource *v1alpha1.EventTrigger, logger logr.Logger) error {
 
 	remoteClient, err := clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
 		"", "", clusterType, logger)
@@ -708,7 +708,7 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 
 		if resource.DeletionTimestamp.IsZero() &&
 			es.Name == resource.Spec.EventSourceName {
-			// eventBasedAddOn still exists and eventSource is still referenced
+			// eventTrigger still exists and eventSource is still referenced
 			continue
 		}
 
@@ -721,7 +721,7 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 
 		if len(es.GetOwnerReferences()) != 0 {
 			l.V(logs.LogDebug).Info("updating")
-			// Other EventBasedAddOn are still deploying this very same policy
+			// Other EventTrigger are still deploying this very same policy
 			err = remoteClient.Update(ctx, es)
 			if err != nil {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get update EventSource: %v", err))
@@ -758,17 +758,17 @@ type currentObject struct {
 }
 
 // updateClusterProfiles creates/updates ClusterProfile(s).
-// One or more clusterProfiles will be created/updated depending on eventBasedAddOn.Spec.OneForEvent flag.
+// One or more clusterProfiles will be created/updated depending on eventTrigger.Spec.OneForEvent flag.
 // ClusterProfile(s) content will have:
 // - ClusterRef set to reference passed in cluster;
-// - HelmCharts instantiated from EventBasedAddOn.Spec.HelmCharts using values from resources, collected
-// from the managed cluster, matching the EventSource referenced by EventBasedAddOn
+// - HelmCharts instantiated from EventTrigger.Spec.HelmCharts using values from resources, collected
+// from the managed cluster, matching the EventSource referenced by EventTrigger
 func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventBasedAddOn *v1alpha1.EventBasedAddOn,
+	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
 	logger logr.Logger) error {
 
 	// Get EventReport
-	eventReports, err := fetchEventReports(ctx, c, clusterNamespace, clusterName, eventBasedAddOn.Spec.EventSourceName,
+	eventReports, err := fetchEventReports(ctx, c, clusterNamespace, clusterName, eventTrigger.Spec.EventSourceName,
 		clusterType)
 	if err != nil {
 		return err
@@ -776,7 +776,7 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 
 	if len(eventReports.Items) == 0 {
 		return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType,
-			eventBasedAddOn, nil, logger)
+			eventTrigger, nil, logger)
 	}
 
 	if len(eventReports.Items) > 1 {
@@ -788,29 +788,29 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 	// If no resource is currently matching, clear all
 	if len(eventReports.Items[0].Spec.MatchingResources) == 0 {
 		return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType,
-			eventBasedAddOn, nil, logger)
+			eventTrigger, nil, logger)
 	}
 
 	var clusterProfiles []*configv1alpha1.ClusterProfile
-	if eventBasedAddOn.Spec.OneForEvent {
+	if eventTrigger.Spec.OneForEvent {
 		clusterProfiles, err = instantiateOneClusterProfilePerResource(ctx, c, clusterNamespace, clusterName,
-			clusterType, eventBasedAddOn, &eventReports.Items[0], logger)
+			clusterType, eventTrigger, &eventReports.Items[0], logger)
 		if err != nil {
 			logger.V(logs.LogInfo).Info("failed to create one clusterProfile instance per macthing resource")
 			return err
 		}
 	} else {
 		clusterProfiles, err = instantiateOneClusterProfilePerAllResource(ctx, c, clusterNamespace,
-			clusterName, clusterType, eventBasedAddOn, &eventReports.Items[0], logger)
+			clusterName, clusterType, eventTrigger, &eventReports.Items[0], logger)
 		if err != nil {
 			logger.V(logs.LogInfo).Info("failed to create one clusterProfile instance per macthing resource")
 			return err
 		}
 	}
 
-	// Remove stale ClusterProfiles/ConfigMaps/Secrets, i.e, resources previously created by this EventBasedAddOn
+	// Remove stale ClusterProfiles/ConfigMaps/Secrets, i.e, resources previously created by this EventTrigger
 	// instance for this cluster but currently not needed anymore
-	return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType, eventBasedAddOn,
+	return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 		clusterProfiles, logger)
 }
 
@@ -821,7 +821,7 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 // - "Resource" references an unstructured.Unstructured referencing the resource (available only if EventSource.Spec.CollectResources
 // is set to true)
 func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventBasedAddOn *v1alpha1.EventBasedAddOn,
+	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
 	eventReport *libsveltosv1alpha1.EventReport, logger logr.Logger) ([]*configv1alpha1.ClusterProfile, error) {
 
 	clusterProfiles := make([]*configv1alpha1.ClusterProfile, 0)
@@ -834,7 +834,7 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 	if len(resources) == 0 {
 		for i := range eventReport.Spec.MatchingResources {
 			var clusterProfile *configv1alpha1.ClusterProfile
-			clusterProfile, err = instantiateClusterProfileForResource(ctx, c, clusterNamespace, clusterName, clusterType, eventBasedAddOn,
+			clusterProfile, err = instantiateClusterProfileForResource(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 				&eventReport.Spec.MatchingResources[i], nil, logger)
 			if err != nil {
 				return nil, err
@@ -848,7 +848,7 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 		r := &resources[i]
 		var clusterProfile *configv1alpha1.ClusterProfile
 		matchingResource := corev1.ObjectReference{APIVersion: r.GetAPIVersion(), Kind: r.GetKind(), Namespace: r.GetNamespace(), Name: r.GetName()}
-		clusterProfile, err = instantiateClusterProfileForResource(ctx, c, clusterNamespace, clusterName, clusterType, eventBasedAddOn,
+		clusterProfile, err = instantiateClusterProfileForResource(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 			&matchingResource, r, logger)
 		if err != nil {
 			return nil, err
@@ -861,13 +861,13 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 
 // instantiateClusterProfileForResource creates one ClusterProfile by:
 // - setting Spec.ClusterRef reference passed in cluster clusterNamespace/clusterName/ClusterType
-// - instantiating eventBasedAddOn.Spec.HelmCharts with passed in resource (one of the resource matching referenced EventSource)
+// - instantiating eventTrigger.Spec.HelmCharts with passed in resource (one of the resource matching referenced EventSource)
 // and copying this value to ClusterProfile.Spec.HelmCharts
-// - instantiating eventBasedAddOn.Spec.PolicyRefs with passed in resource (one of the resource matching referenced EventSource)
+// - instantiating eventTrigger.Spec.PolicyRefs with passed in resource (one of the resource matching referenced EventSource)
 // in new ConfigMaps/Secrets and have ClusterProfile.Spec.PolicyRefs reference those;
 // - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EventAddOn
 func instantiateClusterProfileForResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventBasedAddOn *v1alpha1.EventBasedAddOn,
+	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
 	matchingResource *corev1.ObjectReference, resource *unstructured.Unstructured, logger logr.Logger,
 ) (*configv1alpha1.ClusterProfile, error) {
 
@@ -878,7 +878,7 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		object.Resource = resource.UnstructuredContent()
 	}
 
-	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOn.Name, clusterType)
+	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 	tmpLabels := getInstantiatedObjectLabelsForResource(matchingResource.Namespace, matchingResource.Name)
 	for k, v := range tmpLabels {
 		labels[k] = v
@@ -890,12 +890,12 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		return nil, err
 	}
 
-	// If EventBasedAddOn was created by tenant admin, copy label over to created ClusterProfile
-	if eventBasedAddOn.Labels != nil {
-		if serviceAccountName, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.ServiceAccountNameLabel]; ok {
+	// If EventTrigger was created by tenant admin, copy label over to created ClusterProfile
+	if eventTrigger.Labels != nil {
+		if serviceAccountName, ok := eventTrigger.Labels[libsveltosv1alpha1.ServiceAccountNameLabel]; ok {
 			labels[libsveltosv1alpha1.ServiceAccountNameLabel] = serviceAccountName
 		}
-		if serviceAccountNamespace, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel]; ok {
+		if serviceAccountNamespace, ok := eventTrigger.Labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel]; ok {
 			labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
 		}
 	}
@@ -905,22 +905,26 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 			Name:   clusterProfileName,
 			Labels: labels,
 		},
-		Spec: configv1alpha1.ClusterProfileSpec{
-			StopMatchingBehavior: eventBasedAddOn.Spec.StopMatchingBehavior,
-			SyncMode:             eventBasedAddOn.Spec.SyncMode,
+		Spec: configv1alpha1.Spec{
+			StopMatchingBehavior: eventTrigger.Spec.StopMatchingBehavior,
+			SyncMode:             eventTrigger.Spec.SyncMode,
+			Reloader:             eventTrigger.Spec.Reloader,
+			MaxUpdate:            eventTrigger.Spec.MaxUpdate,
+			TemplateResourceRefs: eventTrigger.Spec.TemplateResourceRefs,
+			ValidateHealths:      eventTrigger.Spec.ValidateHealths,
 		},
 	}
 
-	if eventBasedAddOn.Spec.DestinationClusterSelector == nil || *eventBasedAddOn.Spec.DestinationClusterSelector == "" {
+	if eventTrigger.Spec.DestinationClusterSelector == nil || *eventTrigger.Spec.DestinationClusterSelector == "" {
 		clusterProfile.Spec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
 		clusterProfile.Spec.ClusterSelector = ""
 	} else {
 		clusterProfile.Spec.ClusterRefs = nil
-		clusterProfile.Spec.ClusterSelector = *eventBasedAddOn.Spec.DestinationClusterSelector
+		clusterProfile.Spec.ClusterSelector = *eventTrigger.Spec.DestinationClusterSelector
 	}
 
-	templateName := getTemplateName(clusterNamespace, clusterName, eventBasedAddOn.Name)
-	instantiateHelmChartsWithResource, err := instantiateHelmChartsWithResource(templateName, eventBasedAddOn.Spec.HelmCharts,
+	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
+	instantiateHelmChartsWithResource, err := instantiateHelmChartsWithResource(templateName, eventTrigger.Spec.HelmCharts,
 		object, logger)
 	if err != nil {
 		return nil, err
@@ -928,17 +932,14 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	clusterProfile.Spec.HelmCharts = instantiateHelmChartsWithResource
 
 	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
-	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventBasedAddOn, clusterRef, object, labels, logger)
+	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventTrigger, clusterRef, object, labels, logger)
 	if err != nil {
 		return nil, err
 	}
 	clusterProfile.Spec.PolicyRefs = getClusterProfilePolicyRefs(policyRef)
 
 	// TODO: is it needed to instantiate kustomize files?
-	clusterProfile.Spec.KustomizationRefs = eventBasedAddOn.Spec.KustomizationRefs
-
-	clusterProfile.Spec.MaxUpdate = eventBasedAddOn.Spec.MaxUpdate
-	clusterProfile.Spec.ValidateHealths = eventBasedAddOn.Spec.ValidateHealths
+	clusterProfile.Spec.KustomizationRefs = eventTrigger.Spec.KustomizationRefs
 
 	if createClusterProfile {
 		return clusterProfile, c.Create(ctx, clusterProfile)
@@ -949,13 +950,13 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 
 // instantiateOneClusterProfilePerAllResource creates one ClusterProfile by:
 // - setting Spec.ClusterRef reference passed in cluster clusterNamespace/clusterName/ClusterType
-// - instantiating eventBasedAddOn.Spec.HelmCharts with passed in resource (one of the resource matching referenced EventSource)
+// - instantiating eventTrigger.Spec.HelmCharts with passed in resource (one of the resource matching referenced EventSource)
 // and copying this value to ClusterProfile.Spec.HelmCharts
-// - instantiating eventBasedAddOn.Spec.PolicyRefs with passed in resource (one of the resource matching referenced EventSource)
+// - instantiating eventTrigger.Spec.PolicyRefs with passed in resource (one of the resource matching referenced EventSource)
 // in new ConfigMaps/Secrets and have ClusterProfile.Spec.PolicyRefs reference those;
 // - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EventAddOn
 func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventBasedAddOn *v1alpha1.EventBasedAddOn,
+	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
 	eventReport *libsveltosv1alpha1.EventReport, logger logr.Logger) ([]*configv1alpha1.ClusterProfile, error) {
 
 	resources, err := getResources(eventReport, logger)
@@ -974,7 +975,7 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 		Resources:         values,
 	}
 
-	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOn.Name, clusterType)
+	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 
 	clusterProfileName, createClusterProfile, err := getClusterProfileName(ctx, c, labels)
 	if err != nil {
@@ -982,12 +983,12 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 		return nil, err
 	}
 
-	// If EventBasedAddOn was created by tenant admin, copy label over to created ClusterProfile
-	if eventBasedAddOn.Labels != nil {
-		if serviceAccountName, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.ServiceAccountNameLabel]; ok {
+	// If EventTrigger was created by tenant admin, copy label over to created ClusterProfile
+	if eventTrigger.Labels != nil {
+		if serviceAccountName, ok := eventTrigger.Labels[libsveltosv1alpha1.ServiceAccountNameLabel]; ok {
 			labels[libsveltosv1alpha1.ServiceAccountNameLabel] = serviceAccountName
 		}
-		if serviceAccountNamespace, ok := eventBasedAddOn.Labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel]; ok {
+		if serviceAccountNamespace, ok := eventTrigger.Labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel]; ok {
 			labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
 		}
 	}
@@ -997,22 +998,26 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 			Name:   clusterProfileName,
 			Labels: labels,
 		},
-		Spec: configv1alpha1.ClusterProfileSpec{
-			StopMatchingBehavior: eventBasedAddOn.Spec.StopMatchingBehavior,
-			SyncMode:             eventBasedAddOn.Spec.SyncMode,
+		Spec: configv1alpha1.Spec{
+			StopMatchingBehavior: eventTrigger.Spec.StopMatchingBehavior,
+			SyncMode:             eventTrigger.Spec.SyncMode,
+			Reloader:             eventTrigger.Spec.Reloader,
+			MaxUpdate:            eventTrigger.Spec.MaxUpdate,
+			TemplateResourceRefs: eventTrigger.Spec.TemplateResourceRefs,
+			ValidateHealths:      eventTrigger.Spec.ValidateHealths,
 		},
 	}
 
-	if eventBasedAddOn.Spec.DestinationClusterSelector == nil || *eventBasedAddOn.Spec.DestinationClusterSelector == "" {
+	if eventTrigger.Spec.DestinationClusterSelector == nil || *eventTrigger.Spec.DestinationClusterSelector == "" {
 		clusterProfile.Spec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
 		clusterProfile.Spec.ClusterSelector = ""
 	} else {
 		clusterProfile.Spec.ClusterRefs = nil
-		clusterProfile.Spec.ClusterSelector = *eventBasedAddOn.Spec.DestinationClusterSelector
+		clusterProfile.Spec.ClusterSelector = *eventTrigger.Spec.DestinationClusterSelector
 	}
 
-	templateName := getTemplateName(clusterNamespace, clusterName, eventBasedAddOn.Name)
-	instantiateHelmChartsWithResources, err := instantiateHelmChartsWithAllResources(templateName, eventBasedAddOn.Spec.HelmCharts,
+	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
+	instantiateHelmChartsWithResources, err := instantiateHelmChartsWithAllResources(templateName, eventTrigger.Spec.HelmCharts,
 		objects, logger)
 	if err != nil {
 		return nil, err
@@ -1020,17 +1025,14 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	clusterProfile.Spec.HelmCharts = instantiateHelmChartsWithResources
 
 	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
-	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventBasedAddOn, clusterRef, objects, labels, logger)
+	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventTrigger, clusterRef, objects, labels, logger)
 	if err != nil {
 		return nil, err
 	}
 	clusterProfile.Spec.PolicyRefs = getClusterProfilePolicyRefs(policyRef)
 
 	// TODO: is it needed to instantiate kustomize files?
-	clusterProfile.Spec.KustomizationRefs = eventBasedAddOn.Spec.KustomizationRefs
-
-	clusterProfile.Spec.MaxUpdate = eventBasedAddOn.Spec.MaxUpdate
-	clusterProfile.Spec.ValidateHealths = eventBasedAddOn.Spec.ValidateHealths
+	clusterProfile.Spec.KustomizationRefs = eventTrigger.Spec.KustomizationRefs
 
 	if createClusterProfile {
 		return []*configv1alpha1.ClusterProfile{clusterProfile}, c.Create(ctx, clusterProfile)
@@ -1158,7 +1160,7 @@ func instantiateDataSection(templateName string, content map[string]string, data
 	return instantiatedContent, nil
 }
 
-// instantiateHelmChartsWithResource instantiate eventBasedAddOn.Spec.HelmCharts using information from passed in object
+// instantiateHelmChartsWithResource instantiate eventTrigger.Spec.HelmCharts using information from passed in object
 // which represents one of the resource matching referenced EventSource in the managed cluster.
 func instantiateHelmChartsWithResource(templateName string, helmCharts []configv1alpha1.HelmChart, object *currentObject,
 	logger logr.Logger) ([]configv1alpha1.HelmChart, error) {
@@ -1166,7 +1168,7 @@ func instantiateHelmChartsWithResource(templateName string, helmCharts []configv
 	return instantiateHelmChart(templateName, helmCharts, object, logger)
 }
 
-// instantiateHelmChartsWithAllResources instantiate eventBasedAddOn.Spec.HelmCharts using information from passed in objects
+// instantiateHelmChartsWithAllResources instantiate eventTrigger.Spec.HelmCharts using information from passed in objects
 // which represent all of the resources matching referenced EventSource in the managed cluster.
 func instantiateHelmChartsWithAllResources(templateName string, helmCharts []configv1alpha1.HelmChart, objects *currentObjects,
 	logger logr.Logger) ([]configv1alpha1.HelmChart, error) {
@@ -1174,16 +1176,16 @@ func instantiateHelmChartsWithAllResources(templateName string, helmCharts []con
 	return instantiateHelmChart(templateName, helmCharts, objects, logger)
 }
 
-// instantiateReferencedPolicies instantiate eventBasedAddOn.Spec.PolicyRefs using information from passed in objects
+// instantiateReferencedPolicies instantiate eventTrigger.Spec.PolicyRefs using information from passed in objects
 // which represent all of the resources matching referenced EventSource in the managed cluster.
 func instantiateReferencedPolicies(ctx context.Context, c client.Client, templateName string,
-	eventBasedAddOn *v1alpha1.EventBasedAddOn, cluster *corev1.ObjectReference, objects any,
+	eventTrigger *v1alpha1.EventTrigger, cluster *corev1.ObjectReference, objects any,
 	labels map[string]string, logger logr.Logger) (*libsveltosset.Set, error) {
 
 	result := libsveltosset.Set{}
 
 	// fetches all referenced ConfigMaps/Secrets
-	refs, err := fetchPolicyRefs(ctx, c, eventBasedAddOn, cluster, logger)
+	refs, err := fetchPolicyRefs(ctx, c, eventTrigger, cluster, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1215,7 +1217,7 @@ func instantiateReferencedPolicies(ctx context.Context, c client.Client, templat
 		}
 
 		// Resource name must depend on reference resource name as well. So add those labels.
-		// If an EventBasedAddOn is referencing N configMaps/Secrets, N equivalent referenced
+		// If an EventTrigger is referencing N configMaps/Secrets, N equivalent referenced
 		// resources must be created
 		labels[referencedResourceNamespaceLabel] = ref.GetNamespace()
 		labels[referencedResourceNameLabel] = ref.GetName()
@@ -1504,15 +1506,15 @@ func getInstantiatedObjectName(objects []client.Object) (name string, create boo
 }
 
 // getInstantiatedObjectLabels returns the labels to add to a ClusterProfile created
-// by an EventBasedAddOn for a given cluster
-func getInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOnName string,
+// by an EventTrigger for a given cluster
+func getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName string,
 	clusterType libsveltosv1alpha1.ClusterType) map[string]string {
 
 	return map[string]string{
-		eventBasedAddOnNameLabel: eventBasedAddOnName,
-		clusterNamespaceLabel:    clusterNamespace,
-		clusterNameLabel:         clusterName,
-		clusterTypeLabel:         string(clusterType),
+		eventTriggerNameLabel: eventTriggerName,
+		clusterNamespaceLabel: clusterNamespace,
+		clusterNameLabel:      clusterName,
+		clusterTypeLabel:      string(clusterType),
 	}
 }
 
@@ -1520,21 +1522,21 @@ func getInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOnN
 // for a specific resource
 func getInstantiatedObjectLabelsForResource(resourceNamespace, resourceName string) map[string]string {
 	labels := map[string]string{
-		"eventbasedaddon.lib.projectsveltos.io/resourcename": resourceName,
+		"eventtrigger.lib.projectsveltos.io/resourcename": resourceName,
 	}
 
 	if resourceNamespace != "" {
-		labels["eventbasedaddon.lib.projectsveltos.io/resourcenamespace"] = resourceNamespace
+		labels["eventtrigger.lib.projectsveltos.io/resourcenamespace"] = resourceNamespace
 	}
 
 	return labels
 }
 
 func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventBasedAddOn *v1alpha1.EventBasedAddOn,
+	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
 	clusterProfiles []*configv1alpha1.ClusterProfile, logger logr.Logger) error {
 
-	if err := removeClusterProfiles(ctx, c, clusterNamespace, clusterName, clusterType, eventBasedAddOn,
+	if err := removeClusterProfiles(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 		clusterProfiles, logger); err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to remove stale clusterProfiles: %v", err))
 		return err
@@ -1552,13 +1554,13 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 		}
 	}
 
-	if err := removeConfigMaps(ctx, c, clusterNamespace, clusterName, clusterType, eventBasedAddOn,
+	if err := removeConfigMaps(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 		policyRefs, logger); err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to remove stale configMaps: %v", err))
 		return err
 	}
 
-	if err := removeSecrets(ctx, c, clusterNamespace, clusterName, clusterType, eventBasedAddOn,
+	if err := removeSecrets(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 		policyRefs, logger); err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to remove stale secrets: %v", err))
 		return err
@@ -1567,16 +1569,16 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 	return nil
 }
 
-// removeConfigMaps fetches all ConfigMaps created by EventBasedAddOn instance for a given cluster.
+// removeConfigMaps fetches all ConfigMaps created by EventTrigger instance for a given cluster.
 // It deletes all stale ConfigMaps (all ConfigMap instances currently present and not in the policyRefs
 // list).
-// policyRefs arg represents all the ConfigMap the EventBasedAddOn instance is currently managing for the
+// policyRefs arg represents all the ConfigMap the EventTrigger instance is currently managing for the
 // given cluster
 func removeConfigMaps(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventBasedAddOn *v1alpha1.EventBasedAddOn,
+	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
 	policyRefs map[libsveltosv1alpha1.PolicyRef]bool, logger logr.Logger) error {
 
-	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOn.Name, clusterType)
+	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
@@ -1603,16 +1605,16 @@ func removeConfigMaps(ctx context.Context, c client.Client, clusterNamespace, cl
 	return nil
 }
 
-// removeSecrets fetches all Secrets created by EventBasedAddOn instance for a given cluster.
+// removeSecrets fetches all Secrets created by EventTrigger instance for a given cluster.
 // It deletes all stale Secrets (all Secret instances currently present and not in the policyRefs
 // list).
-// policyRefs arg represents all the ConfigMap the EventBasedAddOn instance is currently managing for the
+// policyRefs arg represents all the ConfigMap the EventTrigger instance is currently managing for the
 // given cluster
 func removeSecrets(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventBasedAddOn *v1alpha1.EventBasedAddOn,
+	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
 	policyRefs map[libsveltosv1alpha1.PolicyRef]bool, logger logr.Logger) error {
 
-	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOn.Name, clusterType)
+	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
@@ -1639,24 +1641,24 @@ func removeSecrets(ctx context.Context, c client.Client, clusterNamespace, clust
 	return nil
 }
 
-// removeClusterProfiles fetches all ClusterProfiles created by EventBasedAddOn instance for a given cluster.
+// removeClusterProfiles fetches all ClusterProfiles created by EventTrigger instance for a given cluster.
 // It deletes all stale ClusterProfiles (all ClusterProfile instances currently present and not in the clusterProfiles
 // list).
-// clusterProfiles arg represents all the ClusterProfiles the EventBasedAddOn instance is currently managing for the
+// clusterProfiles arg represents all the ClusterProfiles the EventTrigger instance is currently managing for the
 // given cluster
 func removeClusterProfiles(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventBasedAddOn *v1alpha1.EventBasedAddOn,
+	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
 	clusterProfiles []*configv1alpha1.ClusterProfile, logger logr.Logger) error {
 
 	// Build a map of current ClusterProfiles for faster indexing
-	// Those are the clusterProfiles current eventBasedAddOn instance is programming
+	// Those are the clusterProfiles current eventTrigger instance is programming
 	// for this cluster and need to not be removed
 	currentClusterProfiles := make(map[string]bool)
 	for i := range clusterProfiles {
 		currentClusterProfiles[clusterProfiles[i].Name] = true
 	}
 
-	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOn.Name, clusterType)
+	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),

@@ -71,7 +71,7 @@ spec:
   end
 ```
 
-[EventBasedAddOn](https://github.com/projectsveltos/libsveltos/blob/main/api/v1alpha1/eventbasedaddon_type.go) is the CRD introduced to define what add-ons to deploy when an event happens.
+[EventTrigger](https://github.com/projectsveltos/libsveltos/blob/main/api/v1alpha1/eventtrigger_type.go) is the CRD introduced to define what add-ons to deploy when an event happens.
 
 ![Sveltos Event Driven Framework](https://github.com/projectsveltos/demos/blob/main//event-driven/event_driven_framework.gif)
 

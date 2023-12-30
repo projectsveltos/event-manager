@@ -20,13 +20,14 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,26 +43,28 @@ import (
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
-func getEventBasedAddOnInstance(name, eventSourceName string) *v1alpha1.EventBasedAddOn {
+func getEventTriggerInstance(name, eventSourceName string) *v1alpha1.EventTrigger {
 	selector := "bar=foo"
-	return &v1alpha1.EventBasedAddOn{
+	return &v1alpha1.EventTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-		Spec: v1alpha1.EventBasedAddOnSpec{
+		Spec: v1alpha1.EventTriggerSpec{
 			SourceClusterSelector: libsveltosv1alpha1.Selector(selector),
 			EventSourceName:       eventSourceName,
 		},
 	}
 }
 
-var _ = Describe("EventBasedAddOn: Reconciler", func() {
-	var resource *v1alpha1.EventBasedAddOn
+var _ = Describe("EventTrigger: Reconciler", func() {
+	var resource *v1alpha1.EventTrigger
 	var eventSourceName string
+	var logger logr.Logger
 
 	BeforeEach(func() {
 		eventSourceName = randomString()
-		resource = getEventBasedAddOnInstance(randomString(), eventSourceName)
+		resource = getEventTriggerInstance(randomString(), eventSourceName)
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 	})
 
 	It("Adds finalizer", func() {
@@ -72,21 +75,21 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
-		controllers.RegisterFeatures(dep, klogr.New())
+		dep := fakedeployer.GetClient(context.TODO(), logger, c)
+		controllers.RegisterFeatures(dep, logger)
 
-		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:             c,
-			Deployer:           dep,
-			Scheme:             c.Scheme(),
-			Mux:                sync.Mutex{},
-			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 		resourceName := client.ObjectKey{
 			Name: resource.Name,
@@ -96,19 +99,19 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		currentChc := &v1alpha1.EventBasedAddOn{}
+		currentChc := &v1alpha1.EventTrigger{}
 		err = c.Get(context.TODO(), resourceName, currentChc)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(
 			controllerutil.ContainsFinalizer(
 				currentChc,
-				v1alpha1.EventBasedAddOnFinalizer,
+				v1alpha1.EventTriggerFinalizer,
 			),
 		).Should(BeTrue())
 	})
 
 	It("Remove finalizer", func() {
-		Expect(controllerutil.AddFinalizer(resource, v1alpha1.EventBasedAddOnFinalizer)).To(BeTrue())
+		Expect(controllerutil.AddFinalizer(resource, v1alpha1.EventTriggerFinalizer)).To(BeTrue())
 
 		cluster := &clusterv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -131,7 +134,7 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 			Name: resource.Name,
 		}
 
-		currentResource := &v1alpha1.EventBasedAddOn{}
+		currentResource := &v1alpha1.EventTrigger{}
 
 		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
 		Expect(c.Delete(context.TODO(), currentResource)).To(Succeed())
@@ -152,24 +155,24 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 
 		Expect(c.Status().Update(context.TODO(), currentResource)).To(Succeed())
 
-		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventBasedAddOn)).To(Succeed())
+		dep := fakedeployer.GetClient(context.TODO(), logger, c)
+		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
 
-		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:             c,
-			Deployer:           dep,
-			Scheme:             c.Scheme(),
-			Mux:                sync.Mutex{},
-			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
-		// Because EventBasedAddOn is currently deployed in a Cluster (Status.ClusterCondition is set
+		// Because EventTrigger is currently deployed in a Cluster (Status.ClusterCondition is set
 		// indicating that) Reconcile won't be removed Finalizer
 		_, err := reconciler.Reconcile(context.TODO(), ctrl.Request{
 			NamespacedName: resourceName,
@@ -178,14 +181,14 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 
 		err = c.Get(context.TODO(), resourceName, currentResource)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(controllerutil.ContainsFinalizer(currentResource, v1alpha1.EventBasedAddOnFinalizer)).To(BeTrue())
+		Expect(controllerutil.ContainsFinalizer(currentResource, v1alpha1.EventTriggerFinalizer)).To(BeTrue())
 
 		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
 
 		currentResource.Status.ClusterInfo = []libsveltosv1alpha1.ClusterInfo{}
 		Expect(c.Status().Update(context.TODO(), currentResource)).To(Succeed())
 
-		// Because EventBasedAddOn is currently deployed nowhere (Status.ClusterCondition is set
+		// Because EventTrigger is currently deployed nowhere (Status.ClusterCondition is set
 		// indicating that) Reconcile will be removed Finalizer
 		_, err = reconciler.Reconcile(context.TODO(), ctrl.Request{
 			NamespacedName: resourceName,
@@ -197,7 +200,7 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	})
 
-	It("updateClusterInfo updates EventBasedAddOn Status.ClusterInfo field", func() {
+	It("updateClusterInfo updates EventTrigger Status.ClusterInfo field", func() {
 		initObjects := []client.Object{
 			resource,
 		}
@@ -205,10 +208,10 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventBasedAddOn)).To(Succeed())
+		dep := fakedeployer.GetClient(context.TODO(), logger, c)
+		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
 
-		currentResource := &v1alpha1.EventBasedAddOn{}
+		currentResource := &v1alpha1.EventTrigger{}
 		Expect(c.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentResource)).To(Succeed())
 		currentResource.Status.MatchingClusterRefs = []corev1.ObjectReference{
 			{
@@ -227,25 +230,25 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 
 		Expect(c.Status().Update(context.TODO(), currentResource)).To(Succeed())
 
-		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:             c,
-			Deployer:           dep,
-			Scheme:             c.Scheme(),
-			Mux:                sync.Mutex{},
-			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
-		resourceScope, err := scope.NewEventBasedAddOnScope(scope.EventBasedAddOnScopeParams{
-			Client:          c,
-			Logger:          klogr.New(),
-			EventBasedAddOn: currentResource,
-			ControllerName:  "classifier",
+		resourceScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
+			Client:         c,
+			Logger:         logger,
+			EventTrigger:   currentResource,
+			ControllerName: "classifier",
 		})
 		Expect(err).To(BeNil())
 
@@ -257,7 +260,7 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		Expect(len(currentResource.Status.ClusterInfo)).To(Equal(len(currentResource.Status.MatchingClusterRefs)))
 	})
 
-	It("cleanMaps cleans EventBasedAddOnReconciler maps", func() {
+	It("cleanMaps cleans EventTriggerReconciler maps", func() {
 		initObjects := []client.Object{
 			resource,
 		}
@@ -267,27 +270,27 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 
 		Expect(addTypeInformationToObject(scheme, resource)).To(Succeed())
 
-		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventBasedAddOn)).To(Succeed())
+		dep := fakedeployer.GetClient(context.TODO(), logger, c)
+		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
 
-		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:             c,
-			Deployer:           dep,
-			Scheme:             c.Scheme(),
-			Mux:                sync.Mutex{},
-			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
-		resourceScope, err := scope.NewEventBasedAddOnScope(scope.EventBasedAddOnScopeParams{
-			Client:          c,
-			Logger:          klogr.New(),
-			EventBasedAddOn: resource,
-			ControllerName:  "classifier",
+		resourceScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
+			Client:         c,
+			Logger:         logger,
+			EventTrigger:   resource,
+			ControllerName: "classifier",
 		})
 		Expect(err).To(BeNil())
 
@@ -301,16 +304,16 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 			Kind: libsveltosv1alpha1.EventSourceKind, APIVersion: libsveltosv1alpha1.GroupVersion.String()}
 		controllers.GetReferenceMapForEntry(&reconciler, eventSourceInfo).Insert(resourceRef)
 
-		reconciler.EventBasedAddOns[*resourceRef] = resource.Spec.SourceClusterSelector
+		reconciler.EventTriggers[*resourceRef] = resource.Spec.SourceClusterSelector
 
 		controllers.CleanMaps(&reconciler, resourceScope)
 
 		Expect(len(reconciler.ToClusterMap)).To(Equal(0))
 		Expect(len(reconciler.ToEventSourceMap)).To(Equal(0))
-		Expect(len(reconciler.EventBasedAddOns)).To(Equal(0))
+		Expect(len(reconciler.EventTriggers)).To(Equal(0))
 	})
 
-	It("updateMaps updates EventBasedAddOnReconciler maps", func() {
+	It("updateMaps updates EventTriggerReconciler maps", func() {
 		esName := randomString()
 
 		resource.Spec.EventSourceName = esName
@@ -334,27 +337,27 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventBasedAddOn)).To(Succeed())
+		dep := fakedeployer.GetClient(context.TODO(), logger, c)
+		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
 
-		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:             c,
-			Deployer:           dep,
-			Scheme:             c.Scheme(),
-			Mux:                sync.Mutex{},
-			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
-		resourceScope, err := scope.NewEventBasedAddOnScope(scope.EventBasedAddOnScopeParams{
-			Client:          c,
-			Logger:          klogr.New(),
-			EventBasedAddOn: resource,
-			ControllerName:  "classifier",
+		resourceScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
+			Client:         c,
+			Logger:         logger,
+			EventTrigger:   resource,
+			ControllerName: "classifier",
 		})
 		Expect(err).To(BeNil())
 
@@ -412,34 +415,34 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventBasedAddOn)).To(Succeed())
+		dep := fakedeployer.GetClient(context.TODO(), logger, c)
+		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
 
-		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:             c,
-			Deployer:           dep,
-			Scheme:             c.Scheme(),
-			Mux:                sync.Mutex{},
-			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
-		resourceScope, err := scope.NewEventBasedAddOnScope(scope.EventBasedAddOnScopeParams{
-			Client:          c,
-			Logger:          klogr.New(),
-			EventBasedAddOn: resource,
-			ControllerName:  "classifier",
+		resourceScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
+			Client:         c,
+			Logger:         logger,
+			EventTrigger:   resource,
+			ControllerName: "classifier",
 		})
 		Expect(err).To(BeNil())
 
 		controllers.UpdateReferencedResourceMap(&reconciler, resourceScope)
 
-		eventBasedAddOnName := types.NamespacedName{Name: resourceScope.Name()}
-		v, ok := reconciler.EventBasedAddOnMap[eventBasedAddOnName]
+		eventTriggerName := types.NamespacedName{Name: resourceScope.Name()}
+		v, ok := reconciler.EventTriggerMap[eventTriggerName]
 		Expect(ok).To(BeTrue())
 		Expect(v.Len()).To(Equal(2))
 
@@ -454,7 +457,7 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		Expect(ok).To(BeTrue())
 		Expect(v.Items()).To(ContainElement(corev1.ObjectReference{
 			APIVersion: v1alpha1.GroupVersion.String(),
-			Kind:       v1alpha1.EventBasedAddOnKind,
+			Kind:       v1alpha1.EventTriggerKind,
 			Name:       resourceScope.Name(),
 		}))
 
@@ -468,7 +471,7 @@ var _ = Describe("EventBasedAddOn: Reconciler", func() {
 		Expect(ok).To(BeTrue())
 		Expect(v.Items()).To(ContainElement(corev1.ObjectReference{
 			APIVersion: v1alpha1.GroupVersion.String(),
-			Kind:       v1alpha1.EventBasedAddOnKind,
+			Kind:       v1alpha1.EventTriggerKind,
 			Name:       resourceScope.Name(),
 		}))
 

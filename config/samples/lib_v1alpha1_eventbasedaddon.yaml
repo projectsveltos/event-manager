@@ -1,6 +1,6 @@
 apiVersion: lib.projectsveltos.io/v1alpha1
-kind: EventBasedAddOn
+kind: EventTrigger
 metadata:
-  name: eventbasedaddon-sample
+  name: eventTrigger-sample
 spec:
   # TODO(user): Add fields here

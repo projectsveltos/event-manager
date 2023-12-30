@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/gdexlab/go-render/render"
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -35,7 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -106,13 +107,19 @@ spec:
         {{ end }}`
 )
 
-var _ = Describe("EventBasedAddOn deployer", func() {
-	It("processEventBasedAddOn queues job", func() {
+var _ = Describe("EventTrigger deployer", func() {
+	var logger logr.Logger
+
+	BeforeEach(func() {
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+	})
+
+	It("processEventTrigger queues job", func() {
 		clusterNamespace := randomString()
 		clusterName := randomString()
 		clusterType := libsveltosv1alpha1.ClusterTypeCapi
 
-		// Following creates a ClusterSummary and an EventBasedAddOn
+		// Following creates a ClusterSummary and an EventTrigger
 		c := prepareClient(clusterNamespace, clusterName, clusterType)
 
 		// Add machine to mark Cluster ready
@@ -130,35 +137,35 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 
 		Expect(c.Create(context.TODO(), cpMachine)).To(Succeed())
 
-		// Verify eventBasedAddOn has been created
-		resources := &v1alpha1.EventBasedAddOnList{}
+		// Verify eventTrigger has been created
+		resources := &v1alpha1.EventTriggerList{}
 		Expect(c.List(context.TODO(), resources)).To(Succeed())
 		Expect(len(resources.Items)).To(Equal(1))
 
 		resource := resources.Items[0]
 
-		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), testEnv.Client)
-		controllers.RegisterFeatures(dep, klogr.New())
+		dep := fakedeployer.GetClient(context.TODO(), logger, testEnv.Client)
+		controllers.RegisterFeatures(dep, logger)
 
-		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:             c,
-			Deployer:           dep,
-			Scheme:             c.Scheme(),
-			Mux:                sync.Mutex{},
-			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
-		eScope, err := scope.NewEventBasedAddOnScope(scope.EventBasedAddOnScopeParams{
-			Client:          c,
-			Logger:          klogr.New(),
-			EventBasedAddOn: &resource,
-			ControllerName:  "eventBasedAddOn",
+		eScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
+			Client:         c,
+			Logger:         logger,
+			EventTrigger:   &resource,
+			ControllerName: "eventTrigger",
 		})
 		Expect(err).To(BeNil())
 
@@ -166,16 +173,16 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		Expect(c.Get(context.TODO(), types.NamespacedName{Namespace: clusterNamespace, Name: clusterName}, currentCluster)).To(Succeed())
 		Expect(addTypeInformationToObject(c.Scheme(), currentCluster)).To(Succeed())
 
-		f := controllers.GetHandlersForFeature(v1alpha1.FeatureEventBasedAddOn)
-		clusterInfo, err := controllers.ProcessEventBasedAddOn(&reconciler, context.TODO(), eScope,
-			controllers.GetKeyFromObject(c.Scheme(), currentCluster), f, klogr.New())
+		f := controllers.GetHandlersForFeature(v1alpha1.FeatureEventTrigger)
+		clusterInfo, err := controllers.ProcessEventTrigger(&reconciler, context.TODO(), eScope,
+			controllers.GetKeyFromObject(c.Scheme(), currentCluster), f, logger)
 		Expect(err).To(BeNil())
 
 		Expect(clusterInfo).ToNot(BeNil())
 		Expect(clusterInfo.Status).To(Equal(libsveltosv1alpha1.SveltosStatusProvisioning))
 
 		// Expect job to be queued
-		Expect(dep.IsInProgress(clusterNamespace, clusterName, resource.Name, v1alpha1.FeatureEventBasedAddOn,
+		Expect(dep.IsInProgress(clusterNamespace, clusterName, resource.Name, v1alpha1.FeatureEventTrigger,
 			clusterType, false)).To(BeTrue())
 	})
 
@@ -184,11 +191,11 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		clusterName := randomString()
 		clusterType := libsveltosv1alpha1.ClusterTypeCapi
 
-		resource := &v1alpha1.EventBasedAddOn{
+		resource := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Status: v1alpha1.EventBasedAddOnStatus{
+			Status: v1alpha1.EventTriggerStatus{
 				ClusterInfo: []libsveltosv1alpha1.ClusterInfo{
 					*getClusterInfo(clusterNamespace, clusterName, clusterType),
 					*getClusterInfo(clusterNamespace, randomString(), clusterType),
@@ -208,41 +215,41 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		length := len(resource.Status.ClusterInfo)
 
 		Expect(controllers.RemoveClusterInfoEntry(context.TODO(), c, clusterNamespace, clusterName,
-			clusterType, resource, klogr.New())).To(Succeed())
+			clusterType, resource, logger)).To(Succeed())
 
-		currentChc := &v1alpha1.EventBasedAddOn{}
+		currentChc := &v1alpha1.EventTrigger{}
 		Expect(c.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)).To(Succeed())
 
 		Expect(len(currentChc.Status.ClusterInfo)).To(Equal(length - 1))
 	})
 
-	It("isClusterEntryRemoved returns true when there is no entry for a Cluster in EventBasedAddOn status", func() {
+	It("isClusterEntryRemoved returns true when there is no entry for a Cluster in EventTrigger status", func() {
 		clusterNamespace := randomString()
 		clusterName := randomString()
 		clusterType := libsveltosv1alpha1.ClusterTypeCapi
 
-		// Following creates a ClusterSummary and an empty EventBasedAddOn
+		// Following creates a ClusterSummary and an empty EventTrigger
 		c := prepareClient(clusterNamespace, clusterName, clusterType)
 
-		dep := fakedeployer.GetClient(context.TODO(), klogr.New(), testEnv.Client)
-		controllers.RegisterFeatures(dep, klogr.New())
+		dep := fakedeployer.GetClient(context.TODO(), logger, testEnv.Client)
+		controllers.RegisterFeatures(dep, logger)
 
-		reconciler := controllers.EventBasedAddOnReconciler{
-			Client:             c,
-			Deployer:           dep,
-			Scheme:             c.Scheme(),
-			Mux:                sync.Mutex{},
-			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
-		// Verify eventBasedAddOn has been created
-		chcs := &v1alpha1.EventBasedAddOnList{}
+		// Verify eventTrigger has been created
+		chcs := &v1alpha1.EventTriggerList{}
 		Expect(c.List(context.TODO(), chcs)).To(Succeed())
 		Expect(len(chcs.Items)).To(Equal(1))
 
@@ -264,7 +271,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		Expect(controllers.IsClusterEntryRemoved(&reconciler, &chc, controllers.GetKeyFromObject(c.Scheme(), currentCluster))).To(BeFalse())
 	})
 
-	It("eventBasedAddOnHash returns current EventAddBasedAddOn hash", func() {
+	It("eventTriggerHash returns current EventAddBasedAddOn hash", func() {
 		clusterNamespace := randomString()
 
 		secret := &corev1.Secret{
@@ -304,11 +311,11 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			},
 		}
 
-		e := &v1alpha1.EventBasedAddOn{
+		e := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				PolicyRefs: []configv1alpha1.PolicyRef{
 					{
 						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
@@ -347,7 +354,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			WithObjects(initObjects...).Build()
 		Expect(addTypeInformationToObject(c.Scheme(), cluster)).To(Succeed())
 
-		hash, err := controllers.EventBasedAddOnHash(context.TODO(), c, e, getClusterRef(cluster), klogr.New())
+		hash, err := controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
 		Expect(err).To(BeNil())
 		Expect(hash).ToNot(BeNil())
 		Expect(reflect.DeepEqual(hash, expectedHash)).To(BeTrue())
@@ -359,9 +366,13 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				Name: randomString(),
 			},
 			Spec: libsveltosv1alpha1.EventSourceSpec{
-				Kind:    randomString(),
-				Group:   randomString(),
-				Version: randomString(),
+				ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+					{
+						Kind:    randomString(),
+						Group:   randomString(),
+						Version: randomString(),
+					},
+				},
 			},
 		}
 
@@ -389,14 +400,14 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
 
-		resource := &v1alpha1.EventBasedAddOn{
+		resource := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				EventSourceName: eventSource.Name,
 			},
-			Status: v1alpha1.EventBasedAddOnStatus{
+			Status: v1alpha1.EventTriggerStatus{
 				MatchingClusterRefs: []corev1.ObjectReference{
 					{
 						Kind: ClusterKind, APIVersion: clusterv1.GroupVersion.String(), Namespace: clusterNamespace, Name: clusterName,
@@ -411,8 +422,8 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 
 		Expect(addTypeInformationToObject(scheme, resource)).To(Succeed())
 
-		// Add EventBasedAddOn as owner of EventSource. This indicates previously EventSource was
-		// deployed because of this EventBasedAddOn instance
+		// Add EventTrigger as owner of EventSource. This indicates previously EventSource was
+		// deployed because of this EventTrigger instance
 		deployer.AddOwnerReference(eventSource, resource)
 		Expect(testEnv.Client.Update(context.TODO(), eventSource)).To(Succeed())
 
@@ -427,12 +438,12 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 
 		createSecretWithKubeconfig(clusterNamespace, clusterName)
 
-		// Test created EventSource instance and added EventBasedAddOn as ownerReference, indicating EventSource was deployed
-		// because of the EventBasedAddOn instance.
-		// Test has EventBasedAddOn instance reference this EventSource instance.
+		// Test created EventSource instance and added EventTrigger as ownerReference, indicating EventSource was deployed
+		// because of the EventTrigger instance.
+		// Test has EventTrigger instance reference this EventSource instance.
 		// RemoveStaleEventSources will not remove the EventSource test created.
 		Expect(controllers.RemoveStaleEventSources(context.TODO(), testEnv.Client, clusterNamespace, clusterName, clusterType,
-			resource, klogr.New())).To(Succeed())
+			resource, logger)).To(Succeed())
 
 		Consistently(func() bool {
 			currentEventSource := &libsveltosv1alpha1.EventSource{}
@@ -440,7 +451,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			return err == nil
 		}, timeout, pollingInterval).Should(BeTrue())
 
-		currentResource := &v1alpha1.EventBasedAddOn{}
+		currentResource := &v1alpha1.EventTrigger{}
 		Expect(testEnv.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentResource)).To(Succeed())
 		currentResource.Spec.EventSourceName = randomString()
 		Expect(testEnv.Update(context.TODO(), currentResource)).To(Succeed())
@@ -451,12 +462,12 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			return err == nil && currentResource.Spec.EventSourceName != eventSource.Name
 		}, timeout, pollingInterval).Should(BeTrue())
 
-		// Test created EventSource instance and added EventBasedAddOn as ownerReference, indicating EventSource was deployed
-		// because of the EventBasedAddOn instance.
-		// Test has EventBasedAddOn instance reference a different EventSource.
+		// Test created EventSource instance and added EventTrigger as ownerReference, indicating EventSource was deployed
+		// because of the EventTrigger instance.
+		// Test has EventTrigger instance reference a different EventSource.
 		// RemoveStaleEventSources will remove the EventSource test created.
 		Expect(controllers.RemoveStaleEventSources(context.TODO(), testEnv.Client, clusterNamespace, clusterName, clusterType,
-			currentResource, klogr.New())).To(Succeed())
+			currentResource, logger)).To(Succeed())
 
 		Eventually(func() bool {
 			currentEventSource := &libsveltosv1alpha1.EventSource{}
@@ -474,9 +485,13 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				Name: randomString(),
 			},
 			Spec: libsveltosv1alpha1.EventSourceSpec{
-				Kind:    randomString(),
-				Group:   randomString(),
-				Version: randomString(),
+				ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+					{
+						Kind:    randomString(),
+						Group:   randomString(),
+						Version: randomString(),
+					},
+				},
 			},
 		}
 
@@ -504,14 +519,14 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
 
-		resource := &v1alpha1.EventBasedAddOn{
+		resource := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				EventSourceName: eventSource.Name,
 			},
-			Status: v1alpha1.EventBasedAddOnStatus{
+			Status: v1alpha1.EventTriggerStatus{
 				MatchingClusterRefs: []corev1.ObjectReference{
 					{
 						Kind: ClusterKind, APIVersion: clusterv1.GroupVersion.String(), Namespace: clusterNamespace, Name: clusterName,
@@ -532,9 +547,9 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		// We are using testEnv as both management cluster (where this test has already created EventSource)
 		// and managed cluster (where EventSource is supposed to be created).
 		// Existence of EventSource does not verify DeployEventSource. But DeployEventSource is also supposed
-		// to add EventBasedAddOn as OwnerReference of EventSource and annotation. So test verifies that.
+		// to add EventTrigger as OwnerReference of EventSource and annotation. So test verifies that.
 		Expect(controllers.DeployEventSource(context.TODO(), testEnv.Client, clusterNamespace, clusterName,
-			clusterType, resource, klogr.New())).To(Succeed())
+			clusterType, resource, logger)).To(Succeed())
 
 		Eventually(func() bool {
 			currentEventSource := &libsveltosv1alpha1.EventSource{}
@@ -555,7 +570,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		}, timeout, pollingInterval).Should(BeTrue())
 	})
 
-	It("processEventBasedAddOnForCluster deploys referenced EventSource and remove stale EventSources", func() {
+	It("processEventTriggerForCluster deploys referenced EventSource and remove stale EventSources", func() {
 		clusterNamespace := randomString()
 		clusterName := randomString()
 		clusterType := libsveltosv1alpha1.ClusterTypeCapi
@@ -584,15 +599,15 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		currentEventSourceName := randomString()
 		staleEventSourceName := randomString()
 
-		// Create an EventBasedAddOn referencing above EventSource
-		resource := &v1alpha1.EventBasedAddOn{
+		// Create an EventTrigger referencing above EventSource
+		resource := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				EventSourceName: currentEventSourceName,
 			},
-			Status: v1alpha1.EventBasedAddOnStatus{
+			Status: v1alpha1.EventTriggerStatus{
 				MatchingClusterRefs: []corev1.ObjectReference{
 					{
 						Kind: ClusterKind, APIVersion: clusterv1.GroupVersion.String(),
@@ -614,15 +629,19 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				Name: staleEventSourceName,
 			},
 			Spec: libsveltosv1alpha1.EventSourceSpec{
-				Kind:    randomString(),
-				Group:   randomString(),
-				Version: randomString(),
+				ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+					{
+						Kind:    randomString(),
+						Group:   randomString(),
+						Version: randomString(),
+					},
+				},
 			},
 		}
 		Expect(testEnv.Create(context.TODO(), staleEventSource)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, staleEventSource)).To(Succeed())
 
-		// Add EventBasedAddOn as OwnerReference of the staleEventSource
+		// Add EventTrigger as OwnerReference of the staleEventSource
 		deployer.AddOwnerReference(staleEventSource, resource)
 		Expect(testEnv.Update(context.TODO(), staleEventSource)).To(Succeed())
 
@@ -631,21 +650,25 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 				Name: currentEventSourceName,
 			},
 			Spec: libsveltosv1alpha1.EventSourceSpec{
-				Kind:    randomString(),
-				Group:   randomString(),
-				Version: randomString(),
+				ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+					{
+						Kind:    randomString(),
+						Group:   randomString(),
+						Version: randomString(),
+					},
+				},
 			},
 		}
 		Expect(testEnv.Create(context.TODO(), eventSource)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventSource)).To(Succeed())
 
-		// Test created staleEventSource pretending it was created by EventBasedAddOn instance (set as OwnerReference)
+		// Test created staleEventSource pretending it was created by EventTrigger instance (set as OwnerReference)
 		// Test created eventSource
-		// EventBasedAddOn is now referencing eventSource, so ProcessEventBasedAddOnForCluster will:
+		// EventTrigger is now referencing eventSource, so ProcessEventTriggerForCluster will:
 		// - remove staleEventSource
-		// - add EventBasedAddOn as OwnerReference for eventSource
-		Expect(controllers.ProcessEventBasedAddOnForCluster(context.TODO(), testEnv.Client, clusterNamespace, clusterName,
-			resource.Name, v1alpha1.FeatureEventBasedAddOn, clusterType, deployer.Options{}, klogr.New())).To(Succeed())
+		// - add EventTrigger as OwnerReference for eventSource
+		Expect(controllers.ProcessEventTriggerForCluster(context.TODO(), testEnv.Client, clusterNamespace, clusterName,
+			resource.Name, v1alpha1.FeatureEventTrigger, clusterType, deployer.Options{}, logger)).To(Succeed())
 
 		currentEventSource := &libsveltosv1alpha1.EventSource{}
 		Eventually(func() bool {
@@ -707,9 +730,9 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			},
 		}
 
-		eventBasedAddOn := &v1alpha1.EventBasedAddOn{
+		eventTrigger := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{Name: randomString()},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				EventSourceName: eventSourceName,
 				HelmCharts: []configv1alpha1.HelmChart{
 					{
@@ -726,10 +749,10 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		_, err = controllers.InstantiateOneClusterProfilePerAllResource(context.TODO(), c, clusterNamespace, clusterName, clusterType,
-			eventBasedAddOn, eventReport, klogr.New())
+			eventTrigger, eventReport, logger)
 		Expect(err).To(BeNil())
 
-		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOn.Name, clusterType)
+		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 
 		listOptions := []client.ListOption{
 			client.MatchingLabels(labels),
@@ -795,9 +818,9 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			},
 		}
 
-		eventBasedAddOn := &v1alpha1.EventBasedAddOn{
+		eventTrigger := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{Name: randomString()},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				EventSourceName: eventSourceName,
 				HelmCharts: []configv1alpha1.HelmChart{
 					{
@@ -816,10 +839,10 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		_, err = controllers.InstantiateOneClusterProfilePerResource(context.TODO(), c, clusterNamespace, clusterName, clusterType,
-			eventBasedAddOn, eventReport, klogr.New())
+			eventTrigger, eventReport, logger)
 		Expect(err).To(BeNil())
 
-		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOn.Name, clusterType)
+		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 
 		listOptions := []client.ListOption{
 			client.MatchingLabels(labels),
@@ -840,7 +863,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 	})
 
 	It("removeClusterProfiles removes stales clusterProfiles", func() {
-		eventBasedAddOnName := randomString()
+		eventTriggerName := randomString()
 		clusterNamespace := randomString()
 		clusterName := randomString()
 		clusterType := libsveltosv1alpha1.ClusterTypeSveltos
@@ -848,20 +871,20 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		clusterProfile := &configv1alpha1.ClusterProfile{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   randomString(),
-				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOnName, clusterType),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName, clusterType),
 			},
 		}
 
 		toBeRemovedClusterProfile := &configv1alpha1.ClusterProfile{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   randomString(),
-				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOnName, clusterType),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName, clusterType),
 			},
 		}
 
-		eventBasedAddOn := &v1alpha1.EventBasedAddOn{
-			ObjectMeta: metav1.ObjectMeta{Name: eventBasedAddOnName},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+		eventTrigger := &v1alpha1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
+			Spec: v1alpha1.EventTriggerSpec{
 				EventSourceName: randomString(),
 				HelmCharts: []configv1alpha1.HelmChart{
 					{
@@ -878,14 +901,14 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		}
 
 		initObjects := []client.Object{
-			clusterProfile, toBeRemovedClusterProfile, eventBasedAddOn,
+			clusterProfile, toBeRemovedClusterProfile, eventTrigger,
 		}
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		Expect(controllers.RemoveClusterProfiles(context.TODO(), c, clusterNamespace, clusterName, clusterType, eventBasedAddOn,
-			[]*configv1alpha1.ClusterProfile{clusterProfile}, klogr.New())).To(Succeed())
+		Expect(controllers.RemoveClusterProfiles(context.TODO(), c, clusterNamespace, clusterName, clusterType, eventTrigger,
+			[]*configv1alpha1.ClusterProfile{clusterProfile}, logger)).To(Succeed())
 
 		clusterProfiles := &configv1alpha1.ClusterProfileList{}
 		Expect(c.List(context.TODO(), clusterProfiles)).To(Succeed())
@@ -894,14 +917,14 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 	})
 
 	It("getClusterProfileName returns the correct name for a clusterProfile", func() {
-		eventBasedAddOnName := randomString()
+		eventTriggerName := randomString()
 		clusterNamespace := randomString()
 		clusterName := randomString()
 		clusterType := libsveltosv1alpha1.ClusterTypeSveltos
 
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOnName, clusterType)
+		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName, clusterType)
 
 		name, create, err := controllers.GetClusterProfileName(context.TODO(), c, labels)
 		Expect(err).To(BeNil())
@@ -911,7 +934,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		clusterProfile := &configv1alpha1.ClusterProfile{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   name,
-				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventBasedAddOnName, clusterType),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName, clusterType),
 			},
 		}
 
@@ -925,7 +948,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 	})
 
 	It("instantiateReferencedPolicies instantiates referenced configMap/secret", func() {
-		eventBasedAddOnName := randomString()
+		eventTriggerName := randomString()
 
 		namespace := randomString()
 
@@ -960,9 +983,9 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			},
 		}
 
-		eventBasedAddOn := &v1alpha1.EventBasedAddOn{
-			ObjectMeta: metav1.ObjectMeta{Name: eventBasedAddOnName},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+		eventTrigger := &v1alpha1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
+			Spec: v1alpha1.EventTriggerSpec{
 				EventSourceName: randomString(),
 				PolicyRefs: []configv1alpha1.PolicyRef{
 					{
@@ -987,7 +1010,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		}
 
 		initObjects := []client.Object{
-			secret, configMap, eventBasedAddOn,
+			secret, configMap, eventTrigger,
 		}
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
@@ -1002,11 +1025,11 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			},
 		}
 
-		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventBasedAddOn.Name,
+		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventTrigger.Name,
 			libsveltosv1alpha1.ClusterTypeCapi)
 
-		set, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventBasedAddOn,
-			clusterRef, object, labels, klogr.New())
+		set, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventTrigger,
+			clusterRef, object, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(set).ToNot(BeNil())
 		Expect(set.Len()).To(Equal(2))
@@ -1018,18 +1041,18 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		configMaps := &corev1.ConfigMapList{}
 		Expect(c.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
 		Expect(len(configMaps.Items)).To(Equal(1))
-		validateLabels(configMaps.Items[0].Labels, clusterRef, eventBasedAddOnName, configMap)
+		validateLabels(configMaps.Items[0].Labels, clusterRef, eventTriggerName, configMap)
 		Expect(reflect.DeepEqual(configMaps.Items[0].Data, configMap.Data)).To(BeTrue())
 
 		secrets := &corev1.SecretList{}
 		Expect(c.List(context.TODO(), secrets, listOptions...)).To(Succeed())
 		Expect(len(secrets.Items)).To(Equal(1))
-		validateLabels(secrets.Items[0].Labels, clusterRef, eventBasedAddOnName, secret)
+		validateLabels(secrets.Items[0].Labels, clusterRef, eventTriggerName, secret)
 		Expect(reflect.DeepEqual(secrets.Items[0].Data, secret.Data)).To(BeTrue())
 	})
 
 	It("instantiateReferencedPolicies, one for all resources, instantiates referenced configMap", func() {
-		eventBasedAddOnName := randomString()
+		eventTriggerName := randomString()
 
 		namespace := randomString()
 
@@ -1074,9 +1097,9 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 			},
 		}
 
-		eventBasedAddOn := &v1alpha1.EventBasedAddOn{
-			ObjectMeta: metav1.ObjectMeta{Name: eventBasedAddOnName},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+		eventTrigger := &v1alpha1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
+			Spec: v1alpha1.EventTriggerSpec{
 				EventSourceName: randomString(),
 				OneForEvent:     false,
 				PolicyRefs: []configv1alpha1.PolicyRef{
@@ -1097,7 +1120,7 @@ var _ = Describe("EventBasedAddOn deployer", func() {
 		}
 
 		initObjects := []client.Object{
-			configMap, eventBasedAddOn,
+			configMap, eventTrigger,
 		}
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
@@ -1151,11 +1174,11 @@ spec:
 			},
 		}
 
-		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventBasedAddOn.Name,
+		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventTrigger.Name,
 			libsveltosv1alpha1.ClusterTypeCapi)
 
-		set, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventBasedAddOn,
-			clusterRef, objects, labels, klogr.New())
+		set, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventTrigger,
+			clusterRef, objects, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(set).ToNot(BeNil())
 		Expect(set.Len()).To(Equal(1))
@@ -1176,14 +1199,14 @@ spec:
 		clusterNamespace := randomString()
 		clusterName := randomString()
 		clusterType := libsveltosv1alpha1.ClusterTypeCapi
-		eventBasedAddOnName := randomString()
+		eventTriggerName := randomString()
 
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: controllers.ReportNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
-					clusterName, eventBasedAddOnName, clusterType),
+					clusterName, eventTriggerName, clusterType),
 			},
 			Data: map[string]string{
 				randomString(): randomString(),
@@ -1195,7 +1218,7 @@ spec:
 				Namespace: controllers.ReportNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
-					clusterName, eventBasedAddOnName, clusterType),
+					clusterName, eventTriggerName, clusterType),
 			},
 			Data: map[string]string{
 				randomString(): randomString(),
@@ -1209,9 +1232,9 @@ spec:
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		eventBasedAddOn := v1alpha1.EventBasedAddOn{
+		eventTrigger := v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: eventBasedAddOnName,
+				Name: eventTriggerName,
 			},
 		}
 		policyRef := libsveltosv1alpha1.PolicyRef{
@@ -1222,7 +1245,7 @@ spec:
 		policyRefs := map[libsveltosv1alpha1.PolicyRef]bool{policyRef: true}
 
 		Expect(controllers.RemoveConfigMaps(context.TODO(), c, clusterNamespace, clusterName, clusterType,
-			&eventBasedAddOn, policyRefs, klogr.New())).To(Succeed())
+			&eventTrigger, policyRefs, logger)).To(Succeed())
 
 		listOptions := []client.ListOption{
 			client.InNamespace(controllers.ReportNamespace),
@@ -1237,14 +1260,14 @@ spec:
 		clusterNamespace := randomString()
 		clusterName := randomString()
 		clusterType := libsveltosv1alpha1.ClusterTypeCapi
-		eventBasedAddOnName := randomString()
+		eventTriggerName := randomString()
 
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: controllers.ReportNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
-					clusterName, eventBasedAddOnName, clusterType),
+					clusterName, eventTriggerName, clusterType),
 			},
 			Type: libsveltosv1alpha1.ClusterProfileSecretType,
 			Data: map[string][]byte{
@@ -1257,7 +1280,7 @@ spec:
 				Namespace: controllers.ReportNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
-					clusterName, eventBasedAddOnName, clusterType),
+					clusterName, eventTriggerName, clusterType),
 			},
 			Type: libsveltosv1alpha1.ClusterProfileSecretType,
 			Data: map[string][]byte{
@@ -1272,9 +1295,9 @@ spec:
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		eventBasedAddOn := v1alpha1.EventBasedAddOn{
+		eventTrigger := v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: eventBasedAddOnName,
+				Name: eventTriggerName,
 			},
 		}
 		policyRef := libsveltosv1alpha1.PolicyRef{
@@ -1285,7 +1308,7 @@ spec:
 		policyRefs := map[libsveltosv1alpha1.PolicyRef]bool{policyRef: true}
 
 		Expect(controllers.RemoveSecrets(context.TODO(), c, clusterNamespace, clusterName, clusterType,
-			&eventBasedAddOn, policyRefs, klogr.New())).To(Succeed())
+			&eventTrigger, policyRefs, logger)).To(Succeed())
 
 		listOptions := []client.ListOption{
 			client.InNamespace(controllers.ReportNamespace),
@@ -1323,7 +1346,7 @@ spec:
 		}
 
 		var instantiatedContent map[string]string
-		instantiatedContent, err = controllers.InstantiateDataSection(randomString(), content, object, klogr.New())
+		instantiatedContent, err = controllers.InstantiateDataSection(randomString(), content, object, logger)
 		Expect(err).To(BeNil())
 		Expect(instantiatedContent).ToNot(BeEmpty())
 
@@ -1381,7 +1404,7 @@ func getClusterInfo(clusterNamespace, clusterName string, clusterType libsveltos
 }
 
 func validateLabels(labels map[string]string, clusterRef *corev1.ObjectReference,
-	eventBasedAddOnName string, referencedResource client.Object) {
+	eventTriggerName string, referencedResource client.Object) {
 
 	v := labels[controllers.ReferencedResourceNamespaceLabel]
 	Expect(v).To(Equal(referencedResource.GetNamespace()))
@@ -1389,7 +1412,7 @@ func validateLabels(labels map[string]string, clusterRef *corev1.ObjectReference
 	Expect(v).To(Equal(referencedResource.GetName()))
 
 	expectedLabels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace,
-		clusterRef.Name, eventBasedAddOnName, clusterproxy.GetClusterType(clusterRef))
+		clusterRef.Name, eventTriggerName, clusterproxy.GetClusterType(clusterRef))
 
 	for k := range expectedLabels {
 		v = labels[k]

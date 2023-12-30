@@ -96,11 +96,15 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 				Name: randomString(),
 			},
 			Spec: libsveltosv1alpha1.EventSourceSpec{
-				Group:            "",
-				Version:          "v1",
-				Kind:             "Service",
-				Namespace:        serviceNamespace,
-				Script:           httpServiceLuaScript,
+				ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+					{
+						Group:     "",
+						Version:   "v1",
+						Kind:      "Service",
+						Namespace: serviceNamespace,
+						Evaluate:  httpServiceLuaScript,
+					},
+				},
 				CollectResources: true,
 			},
 		}
@@ -129,12 +133,12 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 			Name:      cm.Name,
 		}
 
-		Byf("Create a EventBasedAddOn referencing EventSource %s", eventSource.Name)
-		eventBasedAddOn := getEventBasedAddOn(namePrefix, eventSource.Name,
+		Byf("Create a EventTrigger referencing EventSource %s", eventSource.Name)
+		eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
 			map[string]string{key: value}, []configv1alpha1.PolicyRef{policyRef})
-		eventBasedAddOn.Spec.OneForEvent = false
-		eventBasedAddOn.Spec.HelmCharts = nil
-		Expect(k8sClient.Create(context.TODO(), eventBasedAddOn)).To(Succeed())
+		eventTrigger.Spec.OneForEvent = false
+		eventTrigger.Spec.HelmCharts = nil
+		Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
 
 		Byf("Getting client to access the workload cluster")
 		workloadClient, err := getKindWorkloadClusterKubeconfig()
@@ -249,7 +253,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		By("Verifying ClusterProfile has been created")
 		Eventually(func() bool {
 			listOptions := []client.ListOption{
-				client.MatchingLabels(getInstantiatedObjectLabels(eventBasedAddOn.Name)),
+				client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
 			}
 			clusterProfileList := &configv1alpha1.ClusterProfileList{}
 			err = k8sClient.List(context.TODO(), clusterProfileList, listOptions...)
@@ -260,7 +264,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		}, timeout, pollingInterval).Should(BeTrue())
 
 		listOptions := []client.ListOption{
-			client.MatchingLabels(getInstantiatedObjectLabels(eventBasedAddOn.Name)),
+			client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
 		}
 		clusterProfileList := &configv1alpha1.ClusterProfileList{}
 		Expect(k8sClient.List(context.TODO(), clusterProfileList, listOptions...)).To(Succeed())
@@ -278,11 +282,11 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		Expect(workloadClient.List(context.TODO(), ingresses, listOptions...)).To(Succeed())
 		Expect(len(ingresses.Items)).To(Equal(1))
 
-		Byf("Deleting EventBasedAddOn %s", eventBasedAddOn.Name)
-		currentEventBasedAddOn := &v1alpha1.EventBasedAddOn{}
-		Expect(k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventBasedAddOn.Name},
-			currentEventBasedAddOn)).To(Succeed())
-		Expect(k8sClient.Delete(context.TODO(), currentEventBasedAddOn)).To(Succeed())
+		Byf("Deleting EventTrigger %s", eventTrigger.Name)
+		currentEventTrigger := &v1alpha1.EventTrigger{}
+		Expect(k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name},
+			currentEventTrigger)).To(Succeed())
+		Expect(k8sClient.Delete(context.TODO(), currentEventTrigger)).To(Succeed())
 
 		Byf("Verifying EventSource %s is removed from the managed cluster", eventSource.Name)
 		Eventually(func() bool {
@@ -301,10 +305,10 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 			return err != nil && apierrors.IsNotFound(err)
 		}, timeout, pollingInterval).Should(BeTrue())
 
-		Byf("Verifying EventBasedAddOn %s is removed from the management cluster", eventBasedAddOn.Name)
+		Byf("Verifying EventTrigger %s is removed from the management cluster", eventTrigger.Name)
 		Eventually(func() bool {
-			err = k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventBasedAddOn.Name},
-				currentEventBasedAddOn)
+			err = k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name},
+				currentEventTrigger)
 			return err != nil && apierrors.IsNotFound(err)
 		}, timeout, pollingInterval).Should(BeTrue())
 
@@ -326,7 +330,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		By("Verifying ClusterProfile has been removed")
 		Eventually(func() bool {
 			listOptions = []client.ListOption{
-				client.MatchingLabels(getInstantiatedObjectLabels(eventBasedAddOn.Name)),
+				client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
 			}
 			err = k8sClient.List(context.TODO(), clusterProfileList, listOptions...)
 			if err != nil {

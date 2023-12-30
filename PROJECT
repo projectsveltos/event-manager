@@ -10,7 +10,7 @@ resources:
   controller: true
   domain: projectsveltos.io
   group: lib
-  kind: EventBasedAddOn
+  kind: EventTrigger
   path: github.com/projectsveltos/event-manager/api/v1alpha1
   version: v1alpha1
 - controller: true

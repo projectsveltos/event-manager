@@ -32,17 +32,17 @@ import (
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
 
-// fetchReferencedResources fetches resources referenced by EventBasedAddOn.
+// fetchReferencedResources fetches resources referenced by EventTrigger.
 // This includes:
 // - EventSource and corresponding EventReports (from the passed in cluster only);
 // - ConfigMaps/Secrets
 func fetchReferencedResources(ctx context.Context, c client.Client,
-	e *v1alpha1.EventBasedAddOn, cluster *corev1.ObjectReference, logger logr.Logger) ([]client.Object, error) {
+	e *v1alpha1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]client.Object, error) {
 
 	result := make([]client.Object, 0)
 
 	if e == nil {
-		return nil, fmt.Errorf("nil EventBasedAddOn")
+		return nil, fmt.Errorf("nil EventTrigger")
 	}
 
 	logger.V(logs.LogDebug).Info("fetch EventSource")
@@ -113,7 +113,7 @@ func fetchEventReports(ctx context.Context, c client.Client, clusterNamespace, c
 }
 
 // fetchPolicyRefs fetches referenced ConfigMaps/Secrets
-func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1alpha1.EventBasedAddOn,
+func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1alpha1.EventTrigger,
 	cluster *corev1.ObjectReference, logger logr.Logger) ([]client.Object, error) {
 
 	result := make([]client.Object, 0)

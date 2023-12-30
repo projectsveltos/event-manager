@@ -125,8 +125,8 @@ func main() {
 	d := deployer.GetClient(ctx, ctrl.Log.WithName("deployer"), mgr.GetClient(), workers)
 	controllers.RegisterFeatures(d, setupLog)
 
-	var eventBasedAddOnController controller.Controller
-	eventBasedAddOnReconciler := &controllers.EventBasedAddOnReconciler{
+	var eventTriggerController controller.Controller
+	eventTriggerReconciler := &controllers.EventTriggerReconciler{
 		Client:               mgr.GetClient(),
 		Scheme:               mgr.GetScheme(),
 		ConcurrentReconciles: concurrentReconciles,
@@ -135,17 +135,17 @@ func main() {
 		Deployer:             d,
 		ClusterMap:           make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ToClusterMap:         make(map[types.NamespacedName]*libsveltosset.Set),
-		EventBasedAddOns:     make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+		EventTriggers:        make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
 		ClusterLabels:        make(map[corev1.ObjectReference]map[string]string),
 		EventSourceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ToEventSourceMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-		EventBasedAddOnMap:   make(map[types.NamespacedName]*libsveltosset.Set),
+		EventTriggerMap:      make(map[types.NamespacedName]*libsveltosset.Set),
 		ReferenceMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
 	}
 
-	eventBasedAddOnController, err = eventBasedAddOnReconciler.SetupWithManager(mgr)
+	eventTriggerController, err = eventTriggerReconciler.SetupWithManager(mgr)
 	if err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "EventBasedAddOn")
+		setupLog.Error(err, "unable to create controller", "controller", "EventTrigger")
 		os.Exit(1)
 	}
 
@@ -168,7 +168,7 @@ func main() {
 	setupChecks(mgr)
 
 	go capiWatchers(ctx, mgr,
-		eventBasedAddOnReconciler, eventBasedAddOnController,
+		eventTriggerReconciler, eventTriggerController,
 		setupLog)
 
 	setupLog.Info("starting manager")
@@ -251,8 +251,8 @@ func isCAPIInstalled(ctx context.Context, c client.Client) (bool, error) {
 	return true, nil
 }
 
-func capiWatchers(ctx context.Context, mgr ctrl.Manager, eventBasedAddOnReconciler *controllers.EventBasedAddOnReconciler,
-	eventBasedAddOnController controller.Controller, logger logr.Logger) {
+func capiWatchers(ctx context.Context, mgr ctrl.Manager, eventTriggerReconciler *controllers.EventTriggerReconciler,
+	eventTriggerController controller.Controller, logger logr.Logger) {
 
 	const maxRetries = 20
 	retries := 0
@@ -270,7 +270,7 @@ func capiWatchers(ctx context.Context, mgr ctrl.Manager, eventBasedAddOnReconcil
 				go crd.WatchCustomResourceDefinition(ctx, mgr.GetConfig(), capiCRDHandler, setupLog)
 			} else {
 				setupLog.V(logsettings.LogInfo).Info("CAPI present.")
-				err = eventBasedAddOnReconciler.WatchForCAPI(mgr, eventBasedAddOnController)
+				err = eventTriggerReconciler.WatchForCAPI(mgr, eventTriggerController)
 				if err != nil {
 					continue
 				}
