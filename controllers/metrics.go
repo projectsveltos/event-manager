@@ -30,11 +30,11 @@ import (
 )
 
 var (
-	programEventBasedAddOnDurationHistogram = prometheus.NewHistogram(
+	programEventTriggerDurationHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "projectsveltos",
-			Name:      "program_eventbasedaddon_time_seconds",
-			Help:      "Program EventBasedAddOn on a workload cluster duration distribution",
+			Name:      "program_eventtrigger_time_seconds",
+			Help:      "Program EventTrigger on a workload cluster duration distribution",
 			Buckets:   []float64{0.1, 0.5, 1, 5, 10, 20, 30},
 		},
 	)
@@ -43,18 +43,18 @@ var (
 //nolint:gochecknoinits // forced pattern, can't workaround
 func init() {
 	// Register custom metrics with the global prometheus registry
-	metrics.Registry.MustRegister(programEventBasedAddOnDurationHistogram)
+	metrics.Registry.MustRegister(programEventTriggerDurationHistogram)
 }
 
-func newEventBasedAddOnHistogram(clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
+func newEventTriggerHistogram(clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
 	logger logr.Logger) prometheus.Histogram {
 
 	clusterInfo := strings.ReplaceAll(fmt.Sprintf("%s_%s_%s", clusterType, clusterNamespace, clusterName), "-", "_")
 	histogram := prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: clusterInfo,
-			Name:      "program_eventbasedaddon_time_seconds",
-			Help:      "Program EventBasedAddOn on a workload cluster duration distribution",
+			Name:      "program_eventtrigger_time_seconds",
+			Help:      "Program EventTrigger on a workload cluster duration distribution",
 			Buckets:   []float64{0.1, 0.5, 1, 5, 10, 20, 30},
 		},
 	)
@@ -85,9 +85,9 @@ func logCollectorError(err error, logger logr.Logger) {
 func programDuration(elapsed time.Duration, clusterNamespace, clusterName, featureID string,
 	clusterType libsveltosv1alpha1.ClusterType, logger logr.Logger) {
 
-	if featureID == string(v1alpha1.FeatureEventBasedAddOn) {
-		programEventBasedAddOnDurationHistogram.Observe(elapsed.Seconds())
-		clusterHistogram := newEventBasedAddOnHistogram(clusterNamespace, clusterName, clusterType, logger)
+	if featureID == string(v1alpha1.FeatureEventTrigger) {
+		programEventTriggerDurationHistogram.Observe(elapsed.Seconds())
+		clusterHistogram := newEventTriggerHistogram(clusterNamespace, clusterName, clusterType, logger)
 		if clusterHistogram != nil {
 			logger.V(logs.LogVerbose).Info(fmt.Sprintf("register data for %s/%s %s",
 				clusterNamespace, clusterName, featureID))

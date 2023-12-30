@@ -22,7 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,19 +32,13 @@ import (
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
 
-func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventReport(
+func (r *EventTriggerReconciler) requeueEventTriggerForEventReport(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
 	eventReport := o.(*libsveltosv1alpha1.EventReport)
-	logger := klogr.New().WithValues(
-		"objectMapper",
-		"requeueEventBasedAddOnForEventReport",
-		"namespace",
-		eventReport.GetNamespace(),
-		"eventReport",
-		eventReport.GetName(),
-	)
+	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
+		"eventReport", fmt.Sprintf("%s/%s", eventReport.GetNamespace(), eventReport.GetName()))
 
 	logger.V(logs.LogDebug).Info("reacting to eventReport change")
 
@@ -55,13 +49,13 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventReport(
 	eventSourceInfo := corev1.ObjectReference{APIVersion: libsveltosv1alpha1.GroupVersion.String(),
 		Kind: libsveltosv1alpha1.EventSourceKind, Name: eventReport.Spec.EventSourceName}
 
-	// Get all EventBasedAddOns referencing this EventSource
+	// Get all EventTriggers referencing this EventSource
 	requests := make([]ctrl.Request, r.getEventSourceMapForEntry(&eventSourceInfo).Len())
 	consumers := r.getEventSourceMapForEntry(&eventSourceInfo).Items()
 
 	for i := range consumers {
-		l := logger.WithValues("eventBasedAddOn", consumers[i].Name)
-		l.V(logs.LogDebug).Info("queuing EventBasedAddOn")
+		l := logger.WithValues("eventTrigger", consumers[i].Name)
+		l.V(logs.LogDebug).Info("queuing EventTrigger")
 		requests[i] = ctrl.Request{
 			NamespacedName: client.ObjectKey{
 				Name: consumers[i].Name,
@@ -72,17 +66,13 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventReport(
 	return requests
 }
 
-func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventSource(
+func (r *EventTriggerReconciler) requeueEventTriggerForEventSource(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
 	eventSource := o.(*libsveltosv1alpha1.EventSource)
-	logger := klogr.New().WithValues(
-		"objectMapper",
-		"requeueEventBasedAddOnForEventSource",
-		"eventSource",
-		eventSource.GetName(),
-	)
+	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
+		"eventSource", eventSource.GetName())
 
 	logger.V(logs.LogDebug).Info("reacting to eventSource change")
 
@@ -92,13 +82,13 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventSource(
 	eventSourceInfo := corev1.ObjectReference{APIVersion: libsveltosv1alpha1.GroupVersion.String(),
 		Kind: libsveltosv1alpha1.EventSourceKind, Name: eventSource.Name}
 
-	// Get all EventBasedAddOns referencing this EventSource
+	// Get all EventTriggers referencing this EventSource
 	requests := make([]ctrl.Request, r.getEventSourceMapForEntry(&eventSourceInfo).Len())
 	consumers := r.getEventSourceMapForEntry(&eventSourceInfo).Items()
 
 	for i := range consumers {
-		l := logger.WithValues("eventBasedAddOn", consumers[i].Name)
-		l.V(logs.LogDebug).Info("queuing EventBasedAddOn")
+		l := logger.WithValues("eventTrigger", consumers[i].Name)
+		l.V(logs.LogDebug).Info("queuing EventTrigger")
 		requests[i] = ctrl.Request{
 			NamespacedName: client.ObjectKey{
 				Name: consumers[i].Name,
@@ -109,19 +99,13 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForEventSource(
 	return requests
 }
 
-func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForCluster(
+func (r *EventTriggerReconciler) requeueEventTriggerForCluster(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
 	cluster := o
-	logger := klogr.New().WithValues(
-		"objectMapper",
-		"requeueEventBasedAddOnForCluster",
-		"namespace",
-		cluster.GetNamespace(),
-		"cluster",
-		cluster.GetName(),
-	)
+	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
+		"cluster", fmt.Sprintf("%s/%s", cluster.GetNamespace(), cluster.GetName()))
 
 	logger.V(logs.LogDebug).Info("reacting to Cluster change")
 
@@ -137,13 +121,13 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForCluster(
 
 	r.ClusterLabels[clusterInfo] = o.GetLabels()
 
-	// Get all EventBasedAddOns previously matching this cluster and reconcile those
+	// Get all EventTriggers previously matching this cluster and reconcile those
 	requests := make([]ctrl.Request, r.getClusterMapForEntry(&clusterInfo).Len())
 	consumers := r.getClusterMapForEntry(&clusterInfo).Items()
 
 	for i := range consumers {
-		l := logger.WithValues("eventBasedAddOn", consumers[i].Name)
-		l.V(logs.LogDebug).Info("queuing EventBasedAddOn")
+		l := logger.WithValues("eventTrigger", consumers[i].Name)
+		l.V(logs.LogDebug).Info("queuing EventTrigger")
 		requests[i] = ctrl.Request{
 			NamespacedName: client.ObjectKey{
 				Name: consumers[i].Name,
@@ -151,14 +135,14 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForCluster(
 		}
 	}
 
-	// Iterate over all current EventBasedAddOn and reconcile the EventBasedAddOn now
+	// Iterate over all current EventTrigger and reconcile the EventTrigger now
 	// matching the Cluster
-	for k := range r.EventBasedAddOns {
-		eventBasedAddOnSelector := r.EventBasedAddOns[k]
-		parsedSelector, _ := labels.Parse(string(eventBasedAddOnSelector))
+	for k := range r.EventTriggers {
+		eventTriggerSelector := r.EventTriggers[k]
+		parsedSelector, _ := labels.Parse(string(eventTriggerSelector))
 		if parsedSelector.Matches(labels.Set(cluster.GetLabels())) {
-			l := logger.WithValues("eventBasedAddOn", k.Name)
-			l.V(logs.LogDebug).Info("queuing EventBasedAddOn")
+			l := logger.WithValues("eventTrigger", k.Name)
+			l.V(logs.LogDebug).Info("queuing EventTrigger")
 			requests = append(requests, ctrl.Request{
 				NamespacedName: client.ObjectKey{
 					Name: k.Name,
@@ -170,19 +154,13 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForCluster(
 	return requests
 }
 
-func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForMachine(
+func (r *EventTriggerReconciler) requeueEventTriggerForMachine(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
 	machine := o.(*clusterv1.Machine)
-	logger := klogr.New().WithValues(
-		"objectMapper",
-		"requeueEventBasedAddOnForMachine",
-		"namespace",
-		machine.Namespace,
-		"cluster",
-		machine.Name,
-	)
+	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
+		"machine", fmt.Sprintf("%s/%s", machine.GetNamespace(), machine.GetName()))
 
 	addTypeInformationToObject(r.Scheme, machine)
 
@@ -199,7 +177,7 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForMachine(
 
 	clusterInfo := corev1.ObjectReference{APIVersion: machine.APIVersion, Kind: "Cluster", Namespace: machine.Namespace, Name: clusterLabelName}
 
-	// Get all EventBasedAddOn previously matching this cluster and reconcile those
+	// Get all EventTrigger previously matching this cluster and reconcile those
 	requests := make([]ctrl.Request, r.getClusterMapForEntry(&clusterInfo).Len())
 	consumers := r.getClusterMapForEntry(&clusterInfo).Items()
 
@@ -213,14 +191,14 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForMachine(
 
 	// Get Cluster labels
 	if clusterLabels, ok := r.ClusterLabels[clusterInfo]; ok {
-		// Iterate over all current EventBasedAddOn and reconcile the EventBasedAddOn now
+		// Iterate over all current EventTrigger and reconcile the EventTrigger now
 		// matching the Cluster
-		for k := range r.EventBasedAddOns {
-			eventBasedAddOnSelector := r.EventBasedAddOns[k]
-			parsedSelector, _ := labels.Parse(string(eventBasedAddOnSelector))
+		for k := range r.EventTriggers {
+			eventTriggerSelector := r.EventTriggers[k]
+			parsedSelector, _ := labels.Parse(string(eventTriggerSelector))
 			if parsedSelector.Matches(labels.Set(clusterLabels)) {
-				l := logger.WithValues("eventBasedAddOn", k.Name)
-				l.V(logs.LogDebug).Info("queuing EventBasedAddOn")
+				l := logger.WithValues("eventTrigger", k.Name)
+				l.V(logs.LogDebug).Info("queuing EventTrigger")
 				requests = append(requests, ctrl.Request{
 					NamespacedName: client.ObjectKey{
 						Name: k.Name,
@@ -233,16 +211,13 @@ func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForMachine(
 	return requests
 }
 
-func (r *EventBasedAddOnReconciler) requeueEventBasedAddOnForReference(
+func (r *EventTriggerReconciler) requeueEventTriggerForReference(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
-	logger := klogr.New().WithValues(
-		"objectMapper",
-		"requeueEventBasedAddOnForReference",
-		"reference",
-		o.GetName(),
-	)
+	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
+		"reference", fmt.Sprintf("%s:%s/%s", o.GetObjectKind().GroupVersionKind().Kind,
+			o.GetNamespace(), o.GetName()))
 
 	logger.V(logs.LogDebug).Info("reacting to configMap/secret change")
 

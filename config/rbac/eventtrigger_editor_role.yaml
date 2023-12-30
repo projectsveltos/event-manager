@@ -1,20 +1,24 @@
-# permissions for end users to view eventbasedaddons.
+# permissions for end users to edit eventtriggers.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: eventbasedaddon-viewer-role
+  name: eventtrigger-editor-role
 rules:
 - apiGroups:
   - lib.projectsveltos.io
   resources:
-  - eventbasedaddons
+  - eventtriggers
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - lib.projectsveltos.io
   resources:
-  - eventbasedaddons/status
+  - eventtriggers/status
   verbs:
   - get

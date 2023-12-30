@@ -37,7 +37,7 @@ import (
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
-var _ = Describe("EventBasedAddOnReconciler map functions", func() {
+var _ = Describe("EventTriggerReconciler map functions", func() {
 	var namespace string
 
 	const upstreamClusterNamePrefix = "transformation-"
@@ -46,7 +46,7 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		namespace = "map-function" + randomString()
 	})
 
-	It("requeueEventBasedAddOnForCluster returns matching EventBasedAddOns", func() {
+	It("requeueEventTriggerForCluster returns matching EventTriggers", func() {
 		cluster := &clusterv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
@@ -57,63 +57,63 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 			},
 		}
 
-		matchingEventBasedAddOn := &v1alpha1.EventBasedAddOn{
+		matchingEventTrigger := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				SourceClusterSelector: libsveltosv1alpha1.Selector("env=production"),
 			},
 		}
 
-		nonMatchingEventBasedAddOn := &v1alpha1.EventBasedAddOn{
+		nonMatchingEventTrigger := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				SourceClusterSelector: libsveltosv1alpha1.Selector("env=qa"),
 			},
 		}
 
 		initObjects := []client.Object{
-			matchingEventBasedAddOn,
-			nonMatchingEventBasedAddOn,
+			matchingEventTrigger,
+			nonMatchingEventTrigger,
 			cluster,
 		}
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		reconciler := &controllers.EventBasedAddOnReconciler{
-			Client:             c,
-			Scheme:             scheme,
-			ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-			EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-			EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-			ClusterLabels:      make(map[corev1.ObjectReference]map[string]string),
-			EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-			Mux:                sync.Mutex{},
+		reconciler := &controllers.EventTriggerReconciler{
+			Client:           c,
+			Scheme:           scheme,
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			ClusterLabels:    make(map[corev1.ObjectReference]map[string]string),
+			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
+			Mux:              sync.Mutex{},
 		}
 
-		By("Setting EventBasedAddOnReconciler internal structures")
+		By("Setting EventTriggerReconciler internal structures")
 		matchingInfo := corev1.ObjectReference{APIVersion: cluster.APIVersion,
-			Kind: v1alpha1.EventBasedAddOnKind, Name: matchingEventBasedAddOn.Name}
-		reconciler.EventBasedAddOns[matchingInfo] = matchingEventBasedAddOn.Spec.SourceClusterSelector
+			Kind: v1alpha1.EventTriggerKind, Name: matchingEventTrigger.Name}
+		reconciler.EventTriggers[matchingInfo] = matchingEventTrigger.Spec.SourceClusterSelector
 		nonMatchingInfo := corev1.ObjectReference{APIVersion: cluster.APIVersion,
-			Kind: v1alpha1.EventBasedAddOnKind, Name: nonMatchingEventBasedAddOn.Name}
-		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.SourceClusterSelector
+			Kind: v1alpha1.EventTriggerKind, Name: nonMatchingEventTrigger.Name}
+		reconciler.EventTriggers[nonMatchingInfo] = nonMatchingEventTrigger.Spec.SourceClusterSelector
 
-		// ClusterMap contains, per ClusterName, list of EventBasedAddOns matching it.
-		eventBasedAddOnSet := &libsveltosset.Set{}
-		eventBasedAddOnSet.Insert(&matchingInfo)
+		// ClusterMap contains, per ClusterName, list of EventTriggers matching it.
+		eventTriggerSet := &libsveltosset.Set{}
+		eventTriggerSet.Insert(&matchingInfo)
 		clusterInfo := corev1.ObjectReference{APIVersion: cluster.APIVersion, Kind: cluster.Kind,
 			Namespace: cluster.Namespace, Name: cluster.Name}
-		reconciler.ClusterMap[clusterInfo] = eventBasedAddOnSet
+		reconciler.ClusterMap[clusterInfo] = eventTriggerSet
 
-		// CHCToClusterMap contains, per EventBasedAddOn, list of matched Clusters.
+		// CHCToClusterMap contains, per EventTrigger, list of matched Clusters.
 		clusterSet1 := &libsveltosset.Set{}
 		reconciler.ToClusterMap[types.NamespacedName{Name: nonMatchingInfo.Name}] = clusterSet1
 
@@ -121,48 +121,48 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 		clusterSet2.Insert(&clusterInfo)
 		reconciler.ToClusterMap[types.NamespacedName{Name: matchingInfo.Name}] = clusterSet2
 
-		By("Expect only matchingEventBasedAddOn to be requeued")
-		requests := controllers.RequeueEventBasedAddOnForCluster(reconciler, context.TODO(), cluster)
-		expected := reconcile.Request{NamespacedName: types.NamespacedName{Name: matchingEventBasedAddOn.Name}}
+		By("Expect only matchingEventTrigger to be requeued")
+		requests := controllers.RequeueEventTriggerForCluster(reconciler, context.TODO(), cluster)
+		expected := reconcile.Request{NamespacedName: types.NamespacedName{Name: matchingEventTrigger.Name}}
 		Expect(requests).To(ContainElement(expected))
 
-		By("Changing eventBasedAddOn ClusterSelector again to have two EventBasedAddOns match")
-		nonMatchingEventBasedAddOn.Spec.SourceClusterSelector = matchingEventBasedAddOn.Spec.SourceClusterSelector
-		Expect(c.Update(context.TODO(), nonMatchingEventBasedAddOn)).To(Succeed())
+		By("Changing eventTrigger ClusterSelector again to have two EventTriggers match")
+		nonMatchingEventTrigger.Spec.SourceClusterSelector = matchingEventTrigger.Spec.SourceClusterSelector
+		Expect(c.Update(context.TODO(), nonMatchingEventTrigger)).To(Succeed())
 
-		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.SourceClusterSelector
+		reconciler.EventTriggers[nonMatchingInfo] = nonMatchingEventTrigger.Spec.SourceClusterSelector
 
 		clusterSet1.Insert(&clusterInfo)
 		reconciler.ToClusterMap[types.NamespacedName{Name: nonMatchingInfo.Name}] = clusterSet1
 
-		eventBasedAddOnSet.Insert(&nonMatchingInfo)
-		reconciler.ClusterMap[clusterInfo] = eventBasedAddOnSet
+		eventTriggerSet.Insert(&nonMatchingInfo)
+		reconciler.ClusterMap[clusterInfo] = eventTriggerSet
 
-		requests = controllers.RequeueEventBasedAddOnForCluster(reconciler, context.TODO(), cluster)
-		expected = reconcile.Request{NamespacedName: types.NamespacedName{Name: matchingEventBasedAddOn.Name}}
+		requests = controllers.RequeueEventTriggerForCluster(reconciler, context.TODO(), cluster)
+		expected = reconcile.Request{NamespacedName: types.NamespacedName{Name: matchingEventTrigger.Name}}
 		Expect(requests).To(ContainElement(expected))
-		expected = reconcile.Request{NamespacedName: types.NamespacedName{Name: nonMatchingEventBasedAddOn.Name}}
+		expected = reconcile.Request{NamespacedName: types.NamespacedName{Name: nonMatchingEventTrigger.Name}}
 		Expect(requests).To(ContainElement(expected))
 
-		By("Changing eventBasedAddOn ClusterSelector again to have no EventBasedAddOn match")
-		matchingEventBasedAddOn.Spec.SourceClusterSelector = libsveltosv1alpha1.Selector("env=qa")
-		Expect(c.Update(context.TODO(), matchingEventBasedAddOn)).To(Succeed())
-		nonMatchingEventBasedAddOn.Spec.SourceClusterSelector = matchingEventBasedAddOn.Spec.SourceClusterSelector
-		Expect(c.Update(context.TODO(), nonMatchingEventBasedAddOn)).To(Succeed())
+		By("Changing eventTrigger ClusterSelector again to have no EventTrigger match")
+		matchingEventTrigger.Spec.SourceClusterSelector = libsveltosv1alpha1.Selector("env=qa")
+		Expect(c.Update(context.TODO(), matchingEventTrigger)).To(Succeed())
+		nonMatchingEventTrigger.Spec.SourceClusterSelector = matchingEventTrigger.Spec.SourceClusterSelector
+		Expect(c.Update(context.TODO(), nonMatchingEventTrigger)).To(Succeed())
 
 		emptySet := &libsveltosset.Set{}
 		reconciler.ToClusterMap[types.NamespacedName{Name: matchingInfo.Name}] = emptySet
 		reconciler.ToClusterMap[types.NamespacedName{Name: nonMatchingInfo.Name}] = emptySet
 		reconciler.ClusterMap[clusterInfo] = emptySet
 
-		reconciler.EventBasedAddOns[matchingInfo] = matchingEventBasedAddOn.Spec.SourceClusterSelector
-		reconciler.EventBasedAddOns[nonMatchingInfo] = nonMatchingEventBasedAddOn.Spec.SourceClusterSelector
+		reconciler.EventTriggers[matchingInfo] = matchingEventTrigger.Spec.SourceClusterSelector
+		reconciler.EventTriggers[nonMatchingInfo] = nonMatchingEventTrigger.Spec.SourceClusterSelector
 
-		requests = controllers.RequeueEventBasedAddOnForCluster(reconciler, context.TODO(), cluster)
+		requests = controllers.RequeueEventTriggerForCluster(reconciler, context.TODO(), cluster)
 		Expect(requests).To(HaveLen(0))
 	})
 
-	It("RequeueEventBasedAddOnForMachine returns correct EventBasedAddOns for a CAPI machine", func() {
+	It("RequeueEventTriggerForMachine returns correct EventTriggers for a CAPI machine", func() {
 		cluster := &clusterv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
@@ -184,42 +184,42 @@ var _ = Describe("EventBasedAddOnReconciler map functions", func() {
 			},
 		}
 
-		eventBasedAddOn := &v1alpha1.EventBasedAddOn{
+		eventTrigger := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				SourceClusterSelector: libsveltosv1alpha1.Selector("env=production"),
 			},
 		}
 
 		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
 		Expect(addTypeInformationToObject(scheme, cpMachine)).To(Succeed())
-		Expect(addTypeInformationToObject(scheme, eventBasedAddOn)).To(Succeed())
+		Expect(addTypeInformationToObject(scheme, eventTrigger)).To(Succeed())
 
 		// In this scenario:
-		// - EventBasedAddOn added first
-		// - Cluster matching EventBasedAddOn added later
+		// - EventTrigger added first
+		// - Cluster matching EventTrigger added later
 		// - First controlplane Machine in Cluster is ready
 		// The only information Sveltos has are:
 		// - Cluster's labels (stored in ClusterLabels map)
-		// - EventBasedAddOn's selector (stored in EventBasedAddOns maps)
-		// RequeueEventBasedAddOnForMachine gets cluster from machine and using ClusterLabels
-		// and EventBasedAddOns maps finds the EventBasedAddOns that need to be reconciled
+		// - EventTrigger's selector (stored in EventTriggers maps)
+		// RequeueEventTriggerForMachine gets cluster from machine and using ClusterLabels
+		// and EventTriggers maps finds the EventTriggers that need to be reconciled
 
 		apiVersion, kind := cluster.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
-		eventBasedAddOnReconciler := getEventBasedAddOnReconciler(testEnv.Client)
+		eventTriggerReconciler := getEventTriggerReconciler(testEnv.Client)
 
 		clusterInfo := corev1.ObjectReference{APIVersion: apiVersion, Kind: kind,
 			Namespace: cluster.GetNamespace(), Name: cluster.GetName()}
-		eventBasedAddOnReconciler.ClusterLabels[clusterInfo] = cluster.Labels
+		eventTriggerReconciler.ClusterLabels[clusterInfo] = cluster.Labels
 
-		apiVersion, kind = eventBasedAddOn.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
-		eventBasedAddOnInfo := corev1.ObjectReference{APIVersion: apiVersion, Kind: kind, Name: eventBasedAddOn.GetName()}
-		eventBasedAddOnReconciler.EventBasedAddOns[eventBasedAddOnInfo] = eventBasedAddOn.Spec.SourceClusterSelector
+		apiVersion, kind = eventTrigger.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+		eventTriggerInfo := corev1.ObjectReference{APIVersion: apiVersion, Kind: kind, Name: eventTrigger.GetName()}
+		eventTriggerReconciler.EventTriggers[eventTriggerInfo] = eventTrigger.Spec.SourceClusterSelector
 
-		eventBasedAddOnList := controllers.RequeueEventBasedAddOnForMachine(eventBasedAddOnReconciler,
+		eventTriggerList := controllers.RequeueEventTriggerForMachine(eventTriggerReconciler,
 			context.TODO(), cpMachine)
-		Expect(len(eventBasedAddOnList)).To(Equal(1))
+		Expect(len(eventTriggerList)).To(Equal(1))
 	})
 })
