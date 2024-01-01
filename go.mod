@@ -1,6 +1,6 @@
 module github.com/projectsveltos/event-manager
 
-go 1.20
+go 1.21
 
 require (
 	github.com/Masterminds/sprig v2.22.0+incompatible
@@ -11,16 +11,16 @@ require (
 	github.com/onsi/ginkgo/v2 v2.13.2
 	github.com/onsi/gomega v1.30.0
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/addon-controller v0.20.1-0.20231230105705-338bbc789359
-	github.com/projectsveltos/libsveltos v0.20.1-0.20231229144857-dccc45740911
+	github.com/projectsveltos/addon-controller v0.20.1-0.20240101144923-e863910fd24b
+	github.com/projectsveltos/libsveltos v0.20.1-0.20231231155220-e39cb8a6ef82
 	github.com/prometheus/client_golang v1.18.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/text v0.14.0
-	k8s.io/api v0.28.4
-	k8s.io/apiextensions-apiserver v0.28.4
-	k8s.io/apimachinery v0.28.4
-	k8s.io/client-go v0.28.4
-	k8s.io/component-base v0.28.4
+	k8s.io/api v0.28.5
+	k8s.io/apiextensions-apiserver v0.28.5
+	k8s.io/apimachinery v0.28.5
+	k8s.io/client-go v0.28.5
+	k8s.io/component-base v0.28.5
 	k8s.io/klog/v2 v2.110.1
 	k8s.io/utils v0.0.0-20231127182322-b307cd553661
 	sigs.k8s.io/cluster-api v1.6.0
@@ -163,10 +163,10 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	helm.sh/helm/v3 v3.13.3 // indirect
-	k8s.io/apiserver v0.28.4 // indirect
-	k8s.io/cli-runtime v0.28.4 // indirect
+	k8s.io/apiserver v0.28.5 // indirect
+	k8s.io/cli-runtime v0.28.5 // indirect
 	k8s.io/kube-openapi v0.0.0-20231010175941-2dd684a91f00 // indirect
-	k8s.io/kubectl v0.28.4 // indirect
+	k8s.io/kubectl v0.28.5 // indirect
 	oras.land/oras-go v1.2.4 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.16.0 // indirect

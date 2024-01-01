@@ -48,6 +48,8 @@ import (
 )
 
 const (
+	sveltosKubeconfigPostfix = "-kubeconfig"
+
 	viewClusterRole = `apiVersion: rbac.authorization.k8s.io/v1
 	kind: ClusterRole
 	metadata:
@@ -237,7 +239,7 @@ func prepareCluster() *clusterv1.Cluster {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cluster.Namespace,
-			Name:      cluster.Name + "-kubeconfig",
+			Name:      cluster.Name + sveltosKubeconfigPostfix,
 		},
 		Data: map[string][]byte{
 			"data": testEnv.Kubeconfig,
@@ -335,7 +337,7 @@ func createSecretWithKubeconfig(clusterNamespace, clusterName string) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: clusterNamespace,
-			Name:      clusterName + "-kubeconfig",
+			Name:      clusterName + sveltosKubeconfigPostfix,
 		},
 		Data: map[string][]byte{
 			"data": testEnv.Kubeconfig,

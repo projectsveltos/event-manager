@@ -34,6 +34,10 @@ import (
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
 )
 
+const (
+	predicates = "predicates"
+)
+
 var _ = Describe("EventTrigger Predicates: SvelotsClusterPredicates", func() {
 	var logger logr.Logger
 	var cluster *libsveltosv1alpha1.SveltosCluster
@@ -45,7 +49,7 @@ var _ = Describe("EventTrigger Predicates: SvelotsClusterPredicates", func() {
 		cluster = &libsveltosv1alpha1.SveltosCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
-				Namespace: "predicates" + randomString(),
+				Namespace: predicates + randomString(),
 			},
 		}
 	})
@@ -206,7 +210,7 @@ var _ = Describe("EventTrigger Predicates: ClusterPredicates", func() {
 		cluster = &clusterv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
-				Namespace: "predicates" + randomString(),
+				Namespace: predicates + randomString(),
 			},
 		}
 	})
@@ -343,7 +347,7 @@ var _ = Describe("EventTrigger Predicates: MachinePredicates", func() {
 		machine = &clusterv1.Machine{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamMachineNamePrefix + randomString(),
-				Namespace: "predicates" + randomString(),
+				Namespace: predicates + randomString(),
 			},
 		}
 	})
@@ -453,7 +457,7 @@ var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 		eventReport = &libsveltosv1alpha1.EventReport{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
-				Namespace: "predicates" + randomString(),
+				Namespace: predicates + randomString(),
 			},
 		}
 	})
