@@ -36,7 +36,7 @@ ARCH ?= amd64
 OS ?= $(shell uname -s | tr A-Z a-z)
 K8S_LATEST_VER ?= $(shell curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
 export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
-TAG ?= dev
+TAG ?= v0.21.0
 
 ## Tool Binaries
 CONTROLLER_GEN := $(TOOLS_BIN_DIR)/controller-gen
@@ -326,6 +326,9 @@ deploy-projectsveltos: $(KUSTOMIZE)
 	# Install addon-compliance-controller
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/addon-compliance-controller/$(TAG)/manifest/manifest.yaml
 
+	@echo "Waiting for projectsveltos addon-compliance-controller to be available..."
+	$(KUBECTL) wait --for=condition=Available deployment/addon-compliance-manager -n projectsveltos --timeout=$(TIMEOUT)
+
 	# Install projectsveltos addon-controller
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/manifest.yaml
 	curl https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/deployment-shard.yaml -o ac-deployment-shard.yaml
@@ -333,6 +336,9 @@ deploy-projectsveltos: $(KUSTOMIZE)
 	$(KUBECTL) apply -f tmp-ac-deployment-shard.yaml
 	rm ac-deployment-shard.yaml
 	rm tmp-ac-deployment-shard.yaml
+
+	@echo "Waiting for projectsveltos addon-controller to be available..."
+	$(KUBECTL) wait --for=condition=Available deployment/addon-controller -n projectsveltos --timeout=$(TIMEOUT)
 
 	# Install projectsveltos event-manager components
 	@echo 'Install projectsveltos event-manager components'
