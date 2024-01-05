@@ -53,8 +53,8 @@ func randomString() string {
 	return "a" + util.RandomString(length)
 }
 
-func getEventBasedAddOn(namePrefix, eventSourceName string, clusterLabels map[string]string,
-	policyRefs []configv1alpha1.PolicyRef) *v1alpha1.EventBasedAddOn {
+func getEventTrigger(namePrefix, eventSourceName string, clusterLabels map[string]string,
+	policyRefs []configv1alpha1.PolicyRef) *v1alpha1.EventTrigger {
 
 	selector := ""
 	for k := range clusterLabels {
@@ -63,11 +63,11 @@ func getEventBasedAddOn(namePrefix, eventSourceName string, clusterLabels map[st
 		}
 		selector += fmt.Sprintf("%s=%s", k, clusterLabels[k])
 	}
-	resource := &v1alpha1.EventBasedAddOn{
+	resource := &v1alpha1.EventTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namePrefix + randomString(),
 		},
-		Spec: v1alpha1.EventBasedAddOnSpec{
+		Spec: v1alpha1.EventTriggerSpec{
 			SourceClusterSelector: libsveltosv1alpha1.Selector(selector),
 			EventSourceName:       eventSourceName,
 			PolicyRefs:            policyRefs,

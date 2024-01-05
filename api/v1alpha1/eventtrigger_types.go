@@ -26,17 +26,17 @@ import (
 )
 
 const (
-	// EventBasedAddOnFinalizer allows Reconcilers to clean up resources associated with
-	// EventBasedAddOn before removing it from the apiserver.
-	EventBasedAddOnFinalizer = "eventbasedaddon.finalizer.projectsveltos.io"
+	// EventTriggerFinalizer allows Reconcilers to clean up resources associated with
+	// EventTrigger before removing it from the apiserver.
+	EventTriggerFinalizer = "eventtrigger.finalizer.projectsveltos.io"
 
-	EventBasedAddOnKind = "EventBasedAddOn"
+	EventTriggerKind = "EventTrigger"
 
-	FeatureEventBasedAddOn = "EventBasedAddOn"
+	FeatureEventTrigger = "EventTrigger"
 )
 
-// EventBasedAddOnSpec defines the desired state of EventBasedAddOn
-type EventBasedAddOnSpec struct {
+// EventTriggerSpec defines the desired state of EventTrigger
+type EventTriggerSpec struct {
 	// SourceClusterSelector identifies clusters to associate to.
 	// This represents the set of clusters where Sveltos will watch for
 	// events defined by referenced EventSource
@@ -97,6 +97,23 @@ type EventBasedAddOnSpec struct {
 	// +optional
 	StopMatchingBehavior configv1alpha1.StopMatchingBehavior `json:"stopMatchingBehavior,omitempty"`
 
+	// Reloader indicates whether Deployment/StatefulSet/DaemonSet instances deployed
+	// by Sveltos and part of this ClusterProfile need to be restarted via rolling upgrade
+	// when a ConfigMap/Secret instance mounted as volume is modified.
+	// When set to true, when any mounted ConfigMap/Secret is modified, Sveltos automatically
+	// starts a rolling upgrade for Deployment/StatefulSet/DaemonSet instances mounting it.
+	// +kubebuilder:default:=false
+	// +optional
+	Reloader bool `json:"reloader,omitempty"`
+
+	// TemplateResourceRefs is a list of resource to collect from the management cluster.
+	// Those resources' values will be used to instantiate templates contained in referenced
+	// PolicyRefs and Helm charts
+	// +patchMergeKey=identifier
+	// +patchStrategy=merge,retainKeys
+	// +optional
+	TemplateResourceRefs []configv1alpha1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
+
 	// PolicyRefs references all the ConfigMaps/Secrets containing kubernetes resources
 	// that need to be deployed in the matching clusters based on EventSource.
 	// +optional
@@ -115,8 +132,8 @@ type EventBasedAddOnSpec struct {
 	ValidateHealths []configv1alpha1.ValidateHealth `json:"validateHealths,omitempty"`
 }
 
-// EventBasedAddOnStatus defines the observed state of EventBasedAddOn
-type EventBasedAddOnStatus struct {
+// EventTriggerStatus defines the observed state of EventTrigger
+type EventTriggerStatus struct {
 	// MatchingClusterRefs reference all the cluster-api Cluster currently matching
 	// ClusterProfile SourceClusterSelector
 	// +optional
@@ -134,27 +151,27 @@ type EventBasedAddOnStatus struct {
 }
 
 //+kubebuilder:object:root=true
-//+kubebuilder:resource:path=eventbasedaddons,scope=Cluster
+//+kubebuilder:resource:path=eventtriggers,scope=Cluster
 //+kubebuilder:subresource:status
 
-// EventBasedAddOn is the Schema for the eventbasedaddons API
-type EventBasedAddOn struct {
+// EventTrigger is the Schema for the eventtriggers API
+type EventTrigger struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   EventBasedAddOnSpec   `json:"spec,omitempty"`
-	Status EventBasedAddOnStatus `json:"status,omitempty"`
+	Spec   EventTriggerSpec   `json:"spec,omitempty"`
+	Status EventTriggerStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// EventBasedAddOnList contains a list of EventBasedAddOn
-type EventBasedAddOnList struct {
+// EventTriggerList contains a list of EventTrigger
+type EventTriggerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []EventBasedAddOn `json:"items"`
+	Items           []EventTrigger `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&EventBasedAddOn{}, &EventBasedAddOnList{})
+	SchemeBuilder.Register(&EventTrigger{}, &EventTriggerList{})
 }

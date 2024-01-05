@@ -31,9 +31,9 @@ var (
 )
 
 func RegisterFeatures(d deployer.DeployerInterface, setupLog logr.Logger) {
-	err := d.RegisterFeatureID(v1alpha1.FeatureEventBasedAddOn)
+	err := d.RegisterFeatureID(v1alpha1.FeatureEventTrigger)
 	if err != nil {
-		setupLog.Error(err, "failed to register feature FeatureEventBasedAddOn")
+		setupLog.Error(err, "failed to register feature FeatureEventTrigger")
 		os.Exit(1)
 	}
 
@@ -43,8 +43,8 @@ func RegisterFeatures(d deployer.DeployerInterface, setupLog logr.Logger) {
 func creatFeatureHandlerMaps() {
 	featuresHandlers = make(map[string]feature)
 
-	featuresHandlers[v1alpha1.FeatureEventBasedAddOn] = feature{id: v1alpha1.FeatureEventBasedAddOn,
-		currentHash: eventBasedAddOnHash, deploy: processEventBasedAddOnForCluster, undeploy: undeployEventBasedAddOnResourcesFromCluster}
+	featuresHandlers[v1alpha1.FeatureEventTrigger] = feature{id: v1alpha1.FeatureEventTrigger,
+		currentHash: eventTriggerHash, deploy: processEventTriggerForCluster, undeploy: undeployEventTriggerResourcesFromCluster}
 }
 
 func getHandlersForFeature(featureID string) feature {

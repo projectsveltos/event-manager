@@ -26,7 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
@@ -34,18 +34,22 @@ import (
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
 )
 
-var _ = Describe("EventBasedAddOn Predicates: SvelotsClusterPredicates", func() {
+const (
+	predicates = "predicates"
+)
+
+var _ = Describe("EventTrigger Predicates: SvelotsClusterPredicates", func() {
 	var logger logr.Logger
 	var cluster *libsveltosv1alpha1.SveltosCluster
 
 	const upstreamClusterNamePrefix = "sveltoscluster-predicates-"
 
 	BeforeEach(func() {
-		logger = klogr.New()
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 		cluster = &libsveltosv1alpha1.SveltosCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
-				Namespace: "predicates" + randomString(),
+				Namespace: predicates + randomString(),
 			},
 		}
 	})
@@ -195,18 +199,18 @@ var _ = Describe("EventBasedAddOn Predicates: SvelotsClusterPredicates", func() 
 	})
 })
 
-var _ = Describe("EventBasedAddOn Predicates: ClusterPredicates", func() {
+var _ = Describe("EventTrigger Predicates: ClusterPredicates", func() {
 	var logger logr.Logger
 	var cluster *clusterv1.Cluster
 
 	const upstreamClusterNamePrefix = "cluster-predicates-"
 
 	BeforeEach(func() {
-		logger = klogr.New()
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 		cluster = &clusterv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
-				Namespace: "predicates" + randomString(),
+				Namespace: predicates + randomString(),
 			},
 		}
 	})
@@ -332,18 +336,18 @@ var _ = Describe("EventBasedAddOn Predicates: ClusterPredicates", func() {
 	})
 })
 
-var _ = Describe("EventBasedAddOn Predicates: MachinePredicates", func() {
+var _ = Describe("EventTrigger Predicates: MachinePredicates", func() {
 	var logger logr.Logger
 	var machine *clusterv1.Machine
 
 	const upstreamMachineNamePrefix = "machine-predicates-"
 
 	BeforeEach(func() {
-		logger = klogr.New()
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 		machine = &clusterv1.Machine{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamMachineNamePrefix + randomString(),
-				Namespace: "predicates" + randomString(),
+				Namespace: predicates + randomString(),
 			},
 		}
 	})
@@ -442,18 +446,18 @@ var _ = Describe("EventBasedAddOn Predicates: MachinePredicates", func() {
 	})
 })
 
-var _ = Describe("EventBasedAddOn Predicates: EventReportPredicates", func() {
+var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 	var logger logr.Logger
 	var eventReport *libsveltosv1alpha1.EventReport
 
 	const upstreamClusterNamePrefix = "eventreport-predicates-"
 
 	BeforeEach(func() {
-		logger = klogr.New()
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 		eventReport = &libsveltosv1alpha1.EventReport{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
-				Namespace: "predicates" + randomString(),
+				Namespace: predicates + randomString(),
 			},
 		}
 	})
@@ -539,14 +543,14 @@ var _ = Describe("EventBasedAddOn Predicates: EventReportPredicates", func() {
 	})
 })
 
-var _ = Describe("EventBasedAddOn Predicates: EventSourcePredicates", func() {
+var _ = Describe("EventTrigger Predicates: EventSourcePredicates", func() {
 	var logger logr.Logger
 	var eventSource *libsveltosv1alpha1.EventSource
 
 	const upstreamClusterNamePrefix = "eventsource-predicates-"
 
 	BeforeEach(func() {
-		logger = klogr.New()
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 		eventSource = &libsveltosv1alpha1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: upstreamClusterNamePrefix + randomString(),
@@ -578,10 +582,14 @@ var _ = Describe("EventBasedAddOn Predicates: EventSourcePredicates", func() {
 		hcrPredicate := controllers.EventSourcePredicates(logger)
 
 		eventSource.Spec = libsveltosv1alpha1.EventSourceSpec{
-			Group:   randomString(),
-			Version: randomString(),
-			Kind:    randomString(),
-			Script:  randomString(),
+			ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+				{
+					Group:    randomString(),
+					Version:  randomString(),
+					Kind:     randomString(),
+					Evaluate: randomString(),
+				},
+			},
 		}
 
 		oldEventSource := &libsveltosv1alpha1.EventSource{
@@ -603,10 +611,14 @@ var _ = Describe("EventBasedAddOn Predicates: EventSourcePredicates", func() {
 		hcrPredicate := controllers.EventSourcePredicates(logger)
 
 		eventSource.Spec = libsveltosv1alpha1.EventSourceSpec{
-			Group:   randomString(),
-			Version: randomString(),
-			Kind:    randomString(),
-			Script:  randomString(),
+			ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+				{
+					Group:    randomString(),
+					Version:  randomString(),
+					Kind:     randomString(),
+					Evaluate: randomString(),
+				},
+			},
 		}
 
 		oldEventSource := &libsveltosv1alpha1.EventSource{
@@ -626,12 +638,12 @@ var _ = Describe("EventBasedAddOn Predicates: EventSourcePredicates", func() {
 	})
 })
 
-var _ = Describe("EventBasedAddOn Predicates: ConfigMapPredicates", func() {
+var _ = Describe("EventTrigger Predicates: ConfigMapPredicates", func() {
 	var logger logr.Logger
 	var configMap *corev1.ConfigMap
 
 	BeforeEach(func() {
-		logger = klogr.New()
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 		configMap = &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
@@ -702,12 +714,12 @@ var _ = Describe("EventBasedAddOn Predicates: ConfigMapPredicates", func() {
 	})
 })
 
-var _ = Describe("EventBasedAddOn Predicates: SecretPredicates", func() {
+var _ = Describe("EventTrigger Predicates: SecretPredicates", func() {
 	var logger logr.Logger
 	var secret *corev1.Secret
 
 	BeforeEach(func() {
-		logger = klogr.New()
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 		secret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),

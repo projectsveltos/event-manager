@@ -1,10 +1,10 @@
-# This EventBasedAddOn reference EventSource 
+# This EventTrigger reference EventSource 
 # sveltos-service and a ConfigMap containing a NetworkPolicy 
 # template which will be instatiated using information
 # from managed cluster resources matching the referenced
 # EventSource
 apiVersion: lib.projectsveltos.io/v1alpha1
-kind: EventBasedAddOn
+kind: EventTrigger
 metadata:
  name: service-network-policy
 spec:

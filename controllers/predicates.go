@@ -30,7 +30,7 @@ import (
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
 
-// ClusterPredicates predicates for v1Cluster. EventBasedAddOnReconciler watches v1Cluster events
+// ClusterPredicates predicates for v1Cluster. EventTriggerReconciler watches v1Cluster events
 // and react to those by reconciling itself based on following predicates
 func ClusterPredicates(logger logr.Logger) predicate.Funcs {
 	return predicate.Funcs{
@@ -43,27 +43,27 @@ func ClusterPredicates(logger logr.Logger) predicate.Funcs {
 			)
 
 			if oldCluster == nil {
-				log.V(logs.LogVerbose).Info("Old Cluster is nil. Reconcile EventBasedAddOn")
+				log.V(logs.LogVerbose).Info("Old Cluster is nil. Reconcile EventTrigger")
 				return true
 			}
 
 			// return true if Cluster.Spec.Paused has changed from true to false
 			if oldCluster.Spec.Paused && !newCluster.Spec.Paused {
 				log.V(logs.LogVerbose).Info(
-					"Cluster was unpaused. Will attempt to reconcile associated EventBasedAddOns.")
+					"Cluster was unpaused. Will attempt to reconcile associated EventTriggers.")
 				return true
 			}
 
 			if !reflect.DeepEqual(oldCluster.Labels, newCluster.Labels) {
 				log.V(logs.LogVerbose).Info(
-					"Cluster labels changed. Will attempt to reconcile associated EventBasedAddOns.",
+					"Cluster labels changed. Will attempt to reconcile associated EventTriggers.",
 				)
 				return true
 			}
 
 			// otherwise, return false
 			log.V(logs.LogVerbose).Info(
-				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
@@ -76,12 +76,12 @@ func ClusterPredicates(logger logr.Logger) predicate.Funcs {
 			// Only need to trigger a reconcile if the Cluster.Spec.Paused is false
 			if !cluster.Spec.Paused {
 				log.V(logs.LogVerbose).Info(
-					"Cluster is not paused.  Will attempt to reconcile associated EventBasedAddOns.",
+					"Cluster is not paused.  Will attempt to reconcile associated EventTriggers.",
 				)
 				return true
 			}
 			log.V(logs.LogVerbose).Info(
-				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -90,7 +90,7 @@ func ClusterPredicates(logger logr.Logger) predicate.Funcs {
 				"cluster", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"Cluster deleted.  Will attempt to reconcile associated EventBasedAddOns.")
+				"Cluster deleted.  Will attempt to reconcile associated EventTriggers.")
 			return true
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
@@ -99,13 +99,13 @@ func ClusterPredicates(logger logr.Logger) predicate.Funcs {
 				"cluster", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 	}
 }
 
-// MachinePredicates predicates for v1Machine. EventBasedAddOnReconciler watches v1Machine events
+// MachinePredicates predicates for v1Machine. EventTriggerReconciler watches v1Machine events
 // and react to those by reconciling itself based on following predicates
 func MachinePredicates(logger logr.Logger) predicate.Funcs {
 	return predicate.Funcs{
@@ -122,20 +122,20 @@ func MachinePredicates(logger logr.Logger) predicate.Funcs {
 			}
 
 			if oldMachine == nil {
-				log.V(logs.LogVerbose).Info("Old Machine is nil. Reconcile EventBasedAddOn")
+				log.V(logs.LogVerbose).Info("Old Machine is nil. Reconcile EventTrigger")
 				return true
 			}
 
 			// return true if Machine.Status.Phase has changed from not running to running
 			if oldMachine.Status.GetTypedPhase() != newMachine.Status.GetTypedPhase() {
 				log.V(logs.LogVerbose).Info(
-					"Machine was not in Running Phase. Will attempt to reconcile associated EventBasedAddOns.")
+					"Machine was not in Running Phase. Will attempt to reconcile associated EventTriggers.")
 				return true
 			}
 
 			// otherwise, return false
 			log.V(logs.LogVerbose).Info(
-				"Machine did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Machine did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
@@ -151,7 +151,7 @@ func MachinePredicates(logger logr.Logger) predicate.Funcs {
 			}
 
 			log.V(logs.LogVerbose).Info(
-				"Machine did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Machine did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -160,7 +160,7 @@ func MachinePredicates(logger logr.Logger) predicate.Funcs {
 				"machine", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"Machine did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Machine did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
@@ -169,13 +169,13 @@ func MachinePredicates(logger logr.Logger) predicate.Funcs {
 				"machine", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"Machine did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Machine did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 	}
 }
 
-// SveltosClusterPredicates predicates for sveltos Cluster. EventBasedAddOnReconciler watches sveltos Cluster events
+// SveltosClusterPredicates predicates for sveltos Cluster. EventTriggerReconciler watches sveltos Cluster events
 // and react to those by reconciling itself based on following predicates
 func SveltosClusterPredicates(logger logr.Logger) predicate.Funcs {
 	return predicate.Funcs{
@@ -188,33 +188,33 @@ func SveltosClusterPredicates(logger logr.Logger) predicate.Funcs {
 			)
 
 			if oldCluster == nil {
-				log.V(logs.LogVerbose).Info("Old Cluster is nil. Reconcile EventBasedAddOn")
+				log.V(logs.LogVerbose).Info("Old Cluster is nil. Reconcile EventTrigger")
 				return true
 			}
 
 			// return true if Cluster.Spec.Paused has changed from true to false
 			if oldCluster.Spec.Paused && !newCluster.Spec.Paused {
 				log.V(logs.LogVerbose).Info(
-					"Cluster was unpaused. Will attempt to reconcile associated EventBasedAddOns.")
+					"Cluster was unpaused. Will attempt to reconcile associated EventTriggers.")
 				return true
 			}
 
 			if !oldCluster.Status.Ready && newCluster.Status.Ready {
 				log.V(logs.LogVerbose).Info(
-					"Cluster was not ready. Will attempt to reconcile associated EventBasedAddOns.")
+					"Cluster was not ready. Will attempt to reconcile associated EventTriggers.")
 				return true
 			}
 
 			if !reflect.DeepEqual(oldCluster.Labels, newCluster.Labels) {
 				log.V(logs.LogVerbose).Info(
-					"Cluster labels changed. Will attempt to reconcile associated EventBasedAddOns.",
+					"Cluster labels changed. Will attempt to reconcile associated EventTriggers.",
 				)
 				return true
 			}
 
 			// otherwise, return false
 			log.V(logs.LogVerbose).Info(
-				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
@@ -227,12 +227,12 @@ func SveltosClusterPredicates(logger logr.Logger) predicate.Funcs {
 			// Only need to trigger a reconcile if the Cluster.Spec.Paused is false
 			if !cluster.Spec.Paused {
 				log.V(logs.LogVerbose).Info(
-					"Cluster is not paused.  Will attempt to reconcile associated EventBasedAddOns.",
+					"Cluster is not paused.  Will attempt to reconcile associated EventTriggers.",
 				)
 				return true
 			}
 			log.V(logs.LogVerbose).Info(
-				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -241,7 +241,7 @@ func SveltosClusterPredicates(logger logr.Logger) predicate.Funcs {
 				"cluster", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"Cluster deleted.  Will attempt to reconcile associated EventBasedAddOns.")
+				"Cluster deleted.  Will attempt to reconcile associated EventTriggers.")
 			return true
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
@@ -250,13 +250,13 @@ func SveltosClusterPredicates(logger logr.Logger) predicate.Funcs {
 				"cluster", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Cluster did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 	}
 }
 
-// EventReportPredicates predicates for EventReport. EventBasedAddOnReconciler watches sveltos
+// EventReportPredicates predicates for EventReport. EventTriggerReconciler watches sveltos
 // EventReport events and react to those by reconciling itself based on following predicates
 func EventReportPredicates(logger logr.Logger) predicate.Funcs {
 	return predicate.Funcs{
@@ -269,20 +269,20 @@ func EventReportPredicates(logger logr.Logger) predicate.Funcs {
 			)
 
 			if oldER == nil {
-				log.V(logs.LogVerbose).Info("Old EventReport is nil. Reconcile EventBasedAddOn")
+				log.V(logs.LogVerbose).Info("Old EventReport is nil. Reconcile EventTrigger")
 				return true
 			}
 
 			// return true if EventReport Spec has changed
 			if !reflect.DeepEqual(oldER.Spec, newER.Spec) {
 				log.V(logs.LogVerbose).Info(
-					"EventReport changed. Will attempt to reconcile associated EventBasedAddOns.")
+					"EventReport changed. Will attempt to reconcile associated EventTriggers.")
 				return true
 			}
 
 			// otherwise, return false
 			log.V(logs.LogVerbose).Info(
-				"EventReport did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"EventReport did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
@@ -292,7 +292,7 @@ func EventReportPredicates(logger logr.Logger) predicate.Funcs {
 			)
 
 			log.V(logs.LogVerbose).Info(
-				"EventReport did match expected conditions.  Will attempt to reconcile associated EventBasedAddOns.")
+				"EventReport did match expected conditions.  Will attempt to reconcile associated EventTriggers.")
 			return true
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -301,7 +301,7 @@ func EventReportPredicates(logger logr.Logger) predicate.Funcs {
 				"eventReport", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"EventReport deleted.  Will attempt to reconcile associated EventBasedAddOns.")
+				"EventReport deleted.  Will attempt to reconcile associated EventTriggers.")
 			return true
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
@@ -310,13 +310,13 @@ func EventReportPredicates(logger logr.Logger) predicate.Funcs {
 				"eventReport", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"EventReport did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"EventReport did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 	}
 }
 
-// EventSourcePredicates predicates for EventSource. EventBasedAddOnReconciler watches sveltos
+// EventSourcePredicates predicates for EventSource. EventTriggerReconciler watches sveltos
 // EventSource events and react to those by reconciling itself based on following predicates
 func EventSourcePredicates(logger logr.Logger) predicate.Funcs {
 	return predicate.Funcs{
@@ -328,20 +328,20 @@ func EventSourcePredicates(logger logr.Logger) predicate.Funcs {
 			)
 
 			if oldES == nil {
-				log.V(logs.LogVerbose).Info("Old EventSource is nil. Reconcile EventBasedAddOn")
+				log.V(logs.LogVerbose).Info("Old EventSource is nil. Reconcile EventTrigger")
 				return true
 			}
 
 			// return true if EventSource Spec has changed
 			if !reflect.DeepEqual(oldES.Spec, newES.Spec) {
 				log.V(logs.LogVerbose).Info(
-					"EventSource changed. Will attempt to reconcile associated EventBasedAddOns.")
+					"EventSource changed. Will attempt to reconcile associated EventTriggers.")
 				return true
 			}
 
 			// otherwise, return false
 			log.V(logs.LogVerbose).Info(
-				"EventSource did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"EventSource did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
@@ -350,7 +350,7 @@ func EventSourcePredicates(logger logr.Logger) predicate.Funcs {
 			)
 
 			log.V(logs.LogVerbose).Info(
-				"EventSource did match expected conditions.  Will attempt to reconcile associated EventBasedAddOns.")
+				"EventSource did match expected conditions.  Will attempt to reconcile associated EventTriggers.")
 			return true
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -358,7 +358,7 @@ func EventSourcePredicates(logger logr.Logger) predicate.Funcs {
 				"eventSource", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"EventSource deleted.  Will attempt to reconcile associated EventBasedAddOns.")
+				"EventSource deleted.  Will attempt to reconcile associated EventTriggers.")
 			return true
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
@@ -366,13 +366,13 @@ func EventSourcePredicates(logger logr.Logger) predicate.Funcs {
 				"eventSource", e.Object.GetName(),
 			)
 			log.V(logs.LogVerbose).Info(
-				"EventSource did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"EventSource did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 	}
 }
 
-// ConfigMapPredicates predicates for ConfigMaps. EventBasedAddOnReconciler watches ConfigMap events
+// ConfigMapPredicates predicates for ConfigMaps. EventTriggerReconciler watches ConfigMap events
 // and react to those by reconciling itself based on following predicates
 func ConfigMapPredicates(logger logr.Logger) predicate.Funcs {
 	return predicate.Funcs{
@@ -384,20 +384,20 @@ func ConfigMapPredicates(logger logr.Logger) predicate.Funcs {
 			)
 
 			if oldConfigMap == nil {
-				log.V(logs.LogVerbose).Info("Old ConfigMap is nil. Reconcile EventBasedAddOns.")
+				log.V(logs.LogVerbose).Info("Old ConfigMap is nil. Reconcile EventTriggers.")
 				return true
 			}
 
 			if !reflect.DeepEqual(oldConfigMap.Data, newConfigMap.Data) {
 				log.V(logs.LogVerbose).Info(
-					"ConfigMap Data changed. Will attempt to reconcile associated EventBasedAddOns.",
+					"ConfigMap Data changed. Will attempt to reconcile associated EventTriggers.",
 				)
 				return true
 			}
 
 			// otherwise, return false
 			log.V(logs.LogVerbose).Info(
-				"ConfigMap did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"ConfigMap did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
@@ -412,7 +412,7 @@ func ConfigMapPredicates(logger logr.Logger) predicate.Funcs {
 	}
 }
 
-// SecretPredicates predicates for Secrets. EventBasedAddOnReconciler watches Secret events
+// SecretPredicates predicates for Secrets. EventTriggerReconciler watches Secret events
 // and react to those by reconciling itself based on following predicates
 func SecretPredicates(logger logr.Logger) predicate.Funcs {
 	return predicate.Funcs{
@@ -424,20 +424,20 @@ func SecretPredicates(logger logr.Logger) predicate.Funcs {
 			)
 
 			if oldSecret == nil {
-				log.V(logs.LogVerbose).Info("Old Secret is nil. Reconcile EventBasedAddOns.")
+				log.V(logs.LogVerbose).Info("Old Secret is nil. Reconcile EventTriggers.")
 				return true
 			}
 
 			if !reflect.DeepEqual(oldSecret.Data, newSecret.Data) {
 				log.V(logs.LogVerbose).Info(
-					"Secret Data changed. Will attempt to reconcile associated EventBasedAddOns.",
+					"Secret Data changed. Will attempt to reconcile associated EventTriggers.",
 				)
 				return true
 			}
 
 			// otherwise, return false
 			log.V(logs.LogVerbose).Info(
-				"Secret did not match expected conditions.  Will not attempt to reconcile associated EventBasedAddOns.")
+				"Secret did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {

@@ -48,6 +48,8 @@ import (
 )
 
 const (
+	sveltosKubeconfigPostfix = "-kubeconfig"
+
 	viewClusterRole = `apiVersion: rbac.authorization.k8s.io/v1
 	kind: ClusterRole
 	metadata:
@@ -142,10 +144,14 @@ func getEventSourceInstance(name string) *libsveltosv1alpha1.EventSource {
 			Name: name,
 		},
 		Spec: libsveltosv1alpha1.EventSourceSpec{
-			Group:   randomString(),
-			Version: randomString(),
-			Kind:    randomString(),
-			Script:  randomString(),
+			ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+				{
+					Kind:     randomString(),
+					Group:    randomString(),
+					Version:  randomString(),
+					Evaluate: randomString(),
+				},
+			},
 		},
 	}
 }
@@ -168,19 +174,19 @@ func getEventReport(eventSourceName, clusterNamespace, clusterName string) *libs
 	}
 }
 
-func getEventBasedAddOnReconciler(c client.Client) *controllers.EventBasedAddOnReconciler {
-	return &controllers.EventBasedAddOnReconciler{
-		Client:             c,
-		Scheme:             scheme,
-		ClusterMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ToClusterMap:       make(map[types.NamespacedName]*libsveltosset.Set),
-		EventBasedAddOns:   make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
-		EventSourceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ToEventSourceMap:   make(map[types.NamespacedName]*libsveltosset.Set),
-		ClusterLabels:      make(map[corev1.ObjectReference]map[string]string),
-		EventBasedAddOnMap: make(map[types.NamespacedName]*libsveltosset.Set),
-		ReferenceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-		Mux:                sync.Mutex{},
+func getEventTriggerReconciler(c client.Client) *controllers.EventTriggerReconciler {
+	return &controllers.EventTriggerReconciler{
+		Client:           c,
+		Scheme:           scheme,
+		ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+		EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+		EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+		ClusterLabels:    make(map[corev1.ObjectReference]map[string]string),
+		EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
+		ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
+		Mux:              sync.Mutex{},
 	}
 }
 
@@ -233,7 +239,7 @@ func prepareCluster() *clusterv1.Cluster {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cluster.Namespace,
-			Name:      cluster.Name + "-kubeconfig",
+			Name:      cluster.Name + sveltosKubeconfigPostfix,
 		},
 		Data: map[string][]byte{
 			"data": testEnv.Kubeconfig,
@@ -257,7 +263,7 @@ func getClusterRef(cluster client.Object) *corev1.ObjectReference {
 	}
 }
 
-// prepareClient creates a client with a ClusterSummary, CAPI Cluster and a EventBasedAddOn matching such cluster.
+// prepareClient creates a client with a ClusterSummary, CAPI Cluster and a EventTrigger matching such cluster.
 // ClusterSummary has provisioned all add-ons
 // Cluster API cluster
 func prepareClient(clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType) client.Client {
@@ -297,14 +303,14 @@ func prepareClient(clusterNamespace, clusterName string, clusterType libsveltosv
 		},
 	}
 
-	resource := &v1alpha1.EventBasedAddOn{
+	resource := &v1alpha1.EventTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: randomString(),
 		},
-		Spec: v1alpha1.EventBasedAddOnSpec{
+		Spec: v1alpha1.EventTriggerSpec{
 			EventSourceName: randomString(),
 		},
-		Status: v1alpha1.EventBasedAddOnStatus{
+		Status: v1alpha1.EventTriggerStatus{
 			MatchingClusterRefs: []corev1.ObjectReference{
 				{
 					Kind: "Cluster", APIVersion: clusterv1.GroupVersion.String(), Namespace: clusterNamespace, Name: clusterName,
@@ -331,7 +337,7 @@ func createSecretWithKubeconfig(clusterNamespace, clusterName string) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: clusterNamespace,
-			Name:      clusterName + "-kubeconfig",
+			Name:      clusterName + sveltosKubeconfigPostfix,
 		},
 		Data: map[string][]byte{
 			"data": testEnv.Kubeconfig,

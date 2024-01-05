@@ -25,7 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -103,11 +103,11 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		e := &v1alpha1.EventBasedAddOn{
+		e := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				PolicyRefs: []configv1alpha1.PolicyRef{
 					{
 						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
@@ -139,7 +139,8 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		result, err := controllers.FetchPolicyRefs(context.TODO(), c, e, getClusterRef(cluster), klogr.New())
+		result, err := controllers.FetchPolicyRefs(context.TODO(), c, e, getClusterRef(cluster),
+			textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))))
 		Expect(err).To(BeNil())
 		Expect(len(result)).To(Equal(2))
 	})
@@ -187,11 +188,11 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		e := &v1alpha1.EventBasedAddOn{
+		e := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				EventSourceName: eventSource.Name,
 			},
 		}
@@ -248,11 +249,11 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		e := &v1alpha1.EventBasedAddOn{
+		e := &v1alpha1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventBasedAddOnSpec{
+			Spec: v1alpha1.EventTriggerSpec{
 				PolicyRefs: []configv1alpha1.PolicyRef{
 					{
 						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
@@ -281,7 +282,8 @@ var _ = Describe("Fetcher", func() {
 			WithObjects(initObjects...).Build()
 		Expect(addTypeInformationToObject(c.Scheme(), cluster)).To(Succeed())
 
-		result, err := controllers.FetchReferencedResources(context.TODO(), c, e, getClusterRef(cluster), klogr.New())
+		result, err := controllers.FetchReferencedResources(context.TODO(), c, e, getClusterRef(cluster),
+			textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))))
 		Expect(err).To(BeNil())
 		Expect(len(result)).To(Equal(4)) // EventSource + EventReport + ConfigMap + Secret
 	})

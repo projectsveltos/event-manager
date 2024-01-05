@@ -21,21 +21,21 @@ var (
 	RemoveEventReportsFromCluster            = removeEventReportsFromCluster
 	CollectAndProcessEventReportsFromCluster = collectAndProcessEventReportsFromCluster
 	DeleteEventReport                        = deleteEventReport
-	ProcessEventBasedAddOnForCluster         = processEventBasedAddOnForCluster
+	ProcessEventTriggerForCluster            = processEventTriggerForCluster
 )
 
 var (
-	RequeueEventBasedAddOnForCluster = (*EventBasedAddOnReconciler).requeueEventBasedAddOnForCluster
-	RequeueEventBasedAddOnForMachine = (*EventBasedAddOnReconciler).requeueEventBasedAddOnForMachine
-	UpdateClusterInfo                = (*EventBasedAddOnReconciler).updateClusterInfo
-	CleanMaps                        = (*EventBasedAddOnReconciler).cleanMaps
-	UpdateMaps                       = (*EventBasedAddOnReconciler).updateMaps
-	GetEventSourceMapForEntry        = (*EventBasedAddOnReconciler).getEventSourceMapForEntry
-	GetReferenceMapForEntry          = (*EventBasedAddOnReconciler).getReferenceMapForEntry
-	GetClusterMapForEntry            = (*EventBasedAddOnReconciler).getClusterMapForEntry
-	IsClusterEntryRemoved            = (*EventBasedAddOnReconciler).isClusterEntryRemoved
-	ProcessEventBasedAddOn           = (*EventBasedAddOnReconciler).processEventBasedAddOn
-	UpdateReferencedResourceMap      = (*EventBasedAddOnReconciler).updateReferencedResourceMap
+	RequeueEventTriggerForCluster = (*EventTriggerReconciler).requeueEventTriggerForCluster
+	RequeueEventTriggerForMachine = (*EventTriggerReconciler).requeueEventTriggerForMachine
+	UpdateClusterInfo             = (*EventTriggerReconciler).updateClusterInfo
+	CleanMaps                     = (*EventTriggerReconciler).cleanMaps
+	UpdateMaps                    = (*EventTriggerReconciler).updateMaps
+	GetEventSourceMapForEntry     = (*EventTriggerReconciler).getEventSourceMapForEntry
+	GetReferenceMapForEntry       = (*EventTriggerReconciler).getReferenceMapForEntry
+	GetClusterMapForEntry         = (*EventTriggerReconciler).getClusterMapForEntry
+	IsClusterEntryRemoved         = (*EventTriggerReconciler).isClusterEntryRemoved
+	ProcessEventTrigger           = (*EventTriggerReconciler).processEventTrigger
+	UpdateReferencedResourceMap   = (*EventTriggerReconciler).updateReferencedResourceMap
 
 	GetKeyFromObject      = getKeyFromObject
 	GetHandlersForFeature = getHandlersForFeature
@@ -48,7 +48,7 @@ type (
 
 var (
 	RemoveClusterInfoEntry  = removeClusterInfoEntry
-	EventBasedAddOnHash     = eventBasedAddOnHash
+	EventTriggerHash        = eventTriggerHash
 	RemoveStaleEventSources = removeStaleEventSources
 	DeployEventSource       = deployEventSource
 

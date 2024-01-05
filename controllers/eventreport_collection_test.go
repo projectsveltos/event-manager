@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -27,7 +28,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -38,9 +39,11 @@ import (
 
 var _ = Describe("EventSource Deployer", func() {
 	var eventSource *libsveltosv1alpha1.EventSource
+	var logger logr.Logger
 
 	BeforeEach(func() {
 		eventSource = getEventSourceInstance(randomString())
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 	})
 
 	It("deleteEventReport ", func() {
@@ -78,7 +81,7 @@ var _ = Describe("EventSource Deployer", func() {
 		eventReport.Name = eventSourceName // in the managed cluster the name is the same of the EventSource
 
 		// DeleteEventReport will find the corresponding EventReport in the managed cluster and delete it
-		Expect(controllers.DeleteEventReport(context.TODO(), c, getClusterRef(cluster), eventReport, klogr.New())).To(Succeed())
+		Expect(controllers.DeleteEventReport(context.TODO(), c, getClusterRef(cluster), eventReport, logger)).To(Succeed())
 
 		err := c.Get(context.TODO(), types.NamespacedName{Namespace: clusterNamespace, Name: eventReportName}, currentEventReport)
 		Expect(err).ToNot(BeNil())
@@ -96,7 +99,7 @@ var _ = Describe("EventSource Deployer", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		Expect(controllers.RemoveEventReports(context.TODO(), c, eventSource.Name, klogr.New())).To(Succeed())
+		Expect(controllers.RemoveEventReports(context.TODO(), c, eventSource.Name, logger)).To(Succeed())
 
 		eventReportList := &libsveltosv1alpha1.EventReportList{}
 		Expect(c.List(context.TODO(), eventReportList)).To(Succeed())
@@ -129,7 +132,7 @@ var _ = Describe("EventSource Deployer", func() {
 			WithObjects(initObjects...).Build()
 
 		Expect(controllers.RemoveEventReportsFromCluster(context.TODO(), c, clusterNamespace, clusterName,
-			clusterType, map[string]bool{}, klogr.New())).To(Succeed())
+			clusterType, map[string]bool{}, logger)).To(Succeed())
 
 		eventReportList := &libsveltosv1alpha1.EventReportList{}
 		Expect(c.List(context.TODO(), eventReportList)).To(Succeed())
@@ -165,7 +168,7 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport)).To(Succeed())
 
 		Expect(controllers.CollectAndProcessEventReportsFromCluster(context.TODO(), testEnv.Client, getClusterRef(cluster),
-			klogr.New())).To(Succeed())
+			logger)).To(Succeed())
 
 		clusterType := libsveltosv1alpha1.ClusterTypeCapi
 
@@ -173,7 +176,7 @@ var _ = Describe("EventSource Deployer", func() {
 
 		// Update EventReports and validate again
 		Expect(controllers.CollectAndProcessEventReportsFromCluster(context.TODO(), testEnv.Client, getClusterRef(cluster),
-			klogr.New())).To(Succeed())
+			logger)).To(Succeed())
 
 		validateEventReports(eventSourceName, cluster, &clusterType)
 	})
