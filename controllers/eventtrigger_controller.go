@@ -248,7 +248,11 @@ func (r *EventTriggerReconciler) reconcileNormal(
 		}
 	}
 
-	parsedSelector, _ := labels.Parse(eventTriggerScope.GetSelector())
+	parsedSelector, err := labels.Parse(eventTriggerScope.GetSelector())
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse clusterSelector: %v", err))
+		return reconcile.Result{}, err
+	}
 	matchingCluster, err := clusterproxy.GetMatchingClusters(ctx, r.Client, parsedSelector, "",
 		eventTriggerScope.Logger)
 	if err != nil {
