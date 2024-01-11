@@ -139,7 +139,12 @@ func (r *EventTriggerReconciler) requeueEventTriggerForCluster(
 	// matching the Cluster
 	for k := range r.EventTriggers {
 		eventTriggerSelector := r.EventTriggers[k]
-		parsedSelector, _ := labels.Parse(string(eventTriggerSelector))
+		parsedSelector, err := labels.Parse(string(eventTriggerSelector))
+		if err != nil {
+			// When clusterSelector is fixed, this EventTrigger instance will
+			// be reconciled
+			continue
+		}
 		if parsedSelector.Matches(labels.Set(cluster.GetLabels())) {
 			l := logger.WithValues("eventTrigger", k.Name)
 			l.V(logs.LogDebug).Info("queuing EventTrigger")
@@ -195,7 +200,12 @@ func (r *EventTriggerReconciler) requeueEventTriggerForMachine(
 		// matching the Cluster
 		for k := range r.EventTriggers {
 			eventTriggerSelector := r.EventTriggers[k]
-			parsedSelector, _ := labels.Parse(string(eventTriggerSelector))
+			parsedSelector, err := labels.Parse(string(eventTriggerSelector))
+			if err != nil {
+				// When clusterSelector is fixed, this EventTrigger instance will
+				// be reconciled
+				continue
+			}
 			if parsedSelector.Matches(labels.Set(clusterLabels)) {
 				l := logger.WithValues("eventTrigger", k.Name)
 				l.V(logs.LogDebug).Info("queuing EventTrigger")
