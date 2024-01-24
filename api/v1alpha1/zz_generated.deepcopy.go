@@ -114,7 +114,9 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 	if in.HelmCharts != nil {
 		in, out := &in.HelmCharts, &out.HelmCharts
 		*out = make([]addon_controllerapiv1alpha1.HelmChart, len(*in))
-		copy(*out, *in)
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	if in.KustomizationRefs != nil {
 		in, out := &in.KustomizationRefs, &out.KustomizationRefs
