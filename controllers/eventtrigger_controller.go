@@ -248,7 +248,11 @@ func (r *EventTriggerReconciler) reconcileNormal(
 		}
 	}
 
-	parsedSelector, _ := labels.Parse(eventTriggerScope.GetSelector())
+	parsedSelector, err := labels.Parse(eventTriggerScope.GetSelector())
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse clusterSelector: %v", err))
+		return reconcile.Result{}, err
+	}
 	matchingCluster, err := clusterproxy.GetMatchingClusters(ctx, r.Client, parsedSelector, "",
 		eventTriggerScope.Logger)
 	if err != nil {
@@ -499,6 +503,9 @@ func (r *EventTriggerReconciler) updateEventSourceMaps(eventTriggerScope *scope.
 		Kind:       libsveltosv1alpha1.EventSourceKind,
 		Name:       eventTriggerScope.EventTrigger.Spec.EventSourceName,
 	})
+
+	r.Mux.Lock()
+	defer r.Mux.Unlock()
 
 	// Get list of References not referenced anymore by EventTrigger
 	var toBeRemoved []corev1.ObjectReference
