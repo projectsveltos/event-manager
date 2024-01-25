@@ -504,6 +504,9 @@ func (r *EventTriggerReconciler) updateEventSourceMaps(eventTriggerScope *scope.
 		Name:       eventTriggerScope.EventTrigger.Spec.EventSourceName,
 	})
 
+	r.Mux.Lock()
+	defer r.Mux.Unlock()
+
 	// Get list of References not referenced anymore by EventTrigger
 	var toBeRemoved []corev1.ObjectReference
 	name := types.NamespacedName{Name: eventTriggerScope.Name()}
