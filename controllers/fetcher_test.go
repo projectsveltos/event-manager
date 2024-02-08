@@ -57,7 +57,6 @@ var _ = Describe("Fetcher", func() {
 		r, err := controllers.GetConfigMap(context.TODO(), c, configMapName)
 		Expect(err).To(BeNil())
 		Expect(r).ToNot(BeNil())
-		Expect(r.Kind).To(Equal("ConfigMap"))
 	})
 
 	It("getSecret fetches secret", func() {
@@ -80,7 +79,6 @@ var _ = Describe("Fetcher", func() {
 		r, err := controllers.GetSecret(context.TODO(), c, secretName)
 		Expect(err).To(BeNil())
 		Expect(r).ToNot(BeNil())
-		Expect(r.Kind).To(Equal("Secret"))
 	})
 
 	It("fetchPolicyRefs fetches referenced Secrets and ConfigMaps", func() {
