@@ -912,6 +912,8 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 			MaxUpdate:            eventTrigger.Spec.MaxUpdate,
 			TemplateResourceRefs: eventTrigger.Spec.TemplateResourceRefs,
 			ValidateHealths:      eventTrigger.Spec.ValidateHealths,
+			ExtraLabels:          eventTrigger.Spec.ExtraLabels,
+			ExtraAnnotations:     eventTrigger.Spec.ExtraAnnotations,
 		},
 	}
 
@@ -1005,6 +1007,8 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 			MaxUpdate:            eventTrigger.Spec.MaxUpdate,
 			TemplateResourceRefs: eventTrigger.Spec.TemplateResourceRefs,
 			ValidateHealths:      eventTrigger.Spec.ValidateHealths,
+			ExtraLabels:          eventTrigger.Spec.ExtraLabels,
+			ExtraAnnotations:     eventTrigger.Spec.ExtraAnnotations,
 		},
 	}
 

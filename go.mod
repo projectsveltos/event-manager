@@ -11,8 +11,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.15.0
 	github.com/onsi/gomega v1.31.1
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/addon-controller v0.23.1-0.20240209105927-d84ba6a5da08
-	github.com/projectsveltos/libsveltos v0.23.1-0.20240209084455-7b121751c3e7
+	github.com/projectsveltos/addon-controller v0.24.0
+	github.com/projectsveltos/libsveltos v0.24.0
 	github.com/prometheus/client_golang v1.18.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/text v0.14.0
@@ -166,7 +166,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	helm.sh/helm/v3 v3.14.0 // indirect
+	helm.sh/helm/v3 v3.14.1 // indirect
 	k8s.io/apiserver v0.29.1 // indirect
 	k8s.io/cli-runtime v0.29.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20240103195357-a9f8850cb432 // indirect
