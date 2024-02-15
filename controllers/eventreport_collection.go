@@ -100,10 +100,10 @@ func removeEventReportsFromCluster(ctx context.Context, c client.Client, cluster
 
 // Periodically collects EventReports from each CAPI cluster.
 func collectEventReports(c client.Client, shardKey string, logger logr.Logger) {
-	interval := 20 * time.Second
+	interval := 10 * time.Second
 	if shardKey != "" {
 		// Make sharded controllers more aggressive in fetching
-		interval = 10 * time.Second
+		interval = 5 * time.Second
 	}
 
 	ctx := context.TODO()
