@@ -37,21 +37,32 @@ spec:
         args:
         image: controller:latest
         name: manager
+        ports:
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
+        - containerPort: 9440
+          name: healthz
+          protocol: TCP
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
             drop:
               - "ALL"
         livenessProbe:
+          failureThreshold: 3
           httpGet:
             path: /healthz
-            port: 8081
+            port: healthz
+            scheme: HTTP
           initialDelaySeconds: 15
           periodSeconds: 20
         readinessProbe:
+          failureThreshold: 3
           httpGet:
             path: /readyz
-            port: 8081
+            port: healthz
+            scheme: HTTP
           initialDelaySeconds: 5
           periodSeconds: 10
         # TODO(user): Configure the resources accordingly based on the project requirements.
