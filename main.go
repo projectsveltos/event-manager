@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -59,21 +60,26 @@ import (
 
 var (
 	setupLog             = ctrl.Log.WithName("setup")
-	metricsAddr          string
 	shardKey             string
-	probeAddr            string
+	diagnosticsAddress   string
+	insecureDiagnostics  bool
 	workers              int
 	concurrentReconciles int
 	restConfigQPS        float32
 	restConfigBurst      int
 	webhookPort          int
 	syncPeriod           time.Duration
+	healthAddr           string
 )
 
 const (
 	defaultReconcilers = 10
 	defaultWorkers     = 20
 )
+
+// Add RBAC for the authorized diagnostics endpoint.
+//+kubebuilder:rbac:groups=authentication.k8s.io,resources=tokenreviews,verbs=create
+//+kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=create
 
 func main() {
 	scheme, err := controllers.InitScheme()
@@ -92,10 +98,8 @@ func main() {
 
 	ctrlOptions := ctrl.Options{
 		Scheme:                 scheme,
-		HealthProbeBindAddress: probeAddr,
-		Metrics: metricsserver.Options{
-			BindAddress: metricsAddr,
-		},
+		Metrics:                getDiagnosticsOptions(),
+		HealthProbeBindAddress: healthAddr,
 		WebhookServer: webhook.NewServer(
 			webhook.Options{
 				Port: webhookPort,
@@ -179,11 +183,13 @@ func main() {
 }
 
 func initFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&metricsAddr, "metrics-bind-address", ":8080",
-		"The address the metric endpoint binds to.")
+	fs.StringVar(&diagnosticsAddress, "diagnostics-address", ":8443",
+		"The address the diagnostics endpoint binds to. Per default metrics are served via https and with"+
+			"authentication/authorization. To serve via http and without authentication/authorization set --insecure-diagnostics."+
+			"If --insecure-diagnostics is not set the diagnostics endpoint also serves pprof endpoints and an endpoint to change the log level.")
 
-	fs.StringVar(&probeAddr, "health-probe-bind-address", ":8081",
-		"The address the probe endpoint binds to.")
+	fs.BoolVar(&insecureDiagnostics, "insecure-diagnostics", false,
+		"Enable insecure diagnostics serving. For more details see the description of --diagnostics-address.")
 
 	fs.StringVar(&shardKey,
 		"shard-key",
@@ -214,6 +220,9 @@ func initFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&syncPeriod, "sync-period", defaultSyncPeriod*time.Minute,
 		fmt.Sprintf("The minimum interval at which watched resources are reconciled (e.g. 15m). Default: %d minutes",
 			defaultSyncPeriod))
+
+	fs.StringVar(&healthAddr, "health-addr", ":9440",
+		"The address the health endpoint binds to.")
 }
 
 func setupChecks(mgr ctrl.Manager) {
@@ -284,5 +293,26 @@ func capiWatchers(ctx context.Context, mgr ctrl.Manager, eventTriggerReconciler 
 			}
 			return
 		}
+	}
+}
+
+// getDiagnosticsOptions returns metrics options which can be used to configure a Manager.
+func getDiagnosticsOptions() metricsserver.Options {
+	// If "--insecure-diagnostics" is set, serve metrics via http
+	// and without authentication/authorization.
+	if insecureDiagnostics {
+		return metricsserver.Options{
+			BindAddress:   diagnosticsAddress,
+			SecureServing: false,
+		}
+	}
+
+	// If "--insecure-diagnostics" is not set, serve metrics via https
+	// and with authentication/authorization. As the endpoint is protected,
+	// we also serve pprof endpoints and an endpoint to change the log level.
+	return metricsserver.Options{
+		BindAddress:    diagnosticsAddress,
+		SecureServing:  true,
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 }
