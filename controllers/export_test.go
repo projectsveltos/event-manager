@@ -30,15 +30,14 @@ var (
 	UpdateClusterInfo             = (*EventTriggerReconciler).updateClusterInfo
 	CleanMaps                     = (*EventTriggerReconciler).cleanMaps
 	UpdateMaps                    = (*EventTriggerReconciler).updateMaps
-	GetEventSourceMapForEntry     = (*EventTriggerReconciler).getEventSourceMapForEntry
-	GetReferenceMapForEntry       = (*EventTriggerReconciler).getReferenceMapForEntry
-	GetClusterMapForEntry         = (*EventTriggerReconciler).getClusterMapForEntry
 	IsClusterEntryRemoved         = (*EventTriggerReconciler).isClusterEntryRemoved
 	ProcessEventTrigger           = (*EventTriggerReconciler).processEventTrigger
 	UpdateReferencedResourceMap   = (*EventTriggerReconciler).updateReferencedResourceMap
+	GetClustersFromClusterSets    = (*EventTriggerReconciler).getClustersFromClusterSets
 
 	GetKeyFromObject      = getKeyFromObject
 	GetHandlersForFeature = getHandlersForFeature
+	GetConsumersForEntry  = getConsumersForEntry
 )
 
 type (

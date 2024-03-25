@@ -42,6 +42,10 @@ type EventTriggerSpec struct {
 	// events defined by referenced EventSource
 	SourceClusterSelector libsveltosv1alpha1.Selector `json:"sourceClusterSelector"`
 
+	// SetRefs identifies referenced ClusterSets. Name of the referenced ClusterSets.
+	// +optional
+	ClusterSetRefs []string `json:"clusterSetRefs,omitempty"`
+
 	// Multiple resources in a managed cluster can be a match for referenced
 	// EventSource. OneForEvent indicates whether a ClusterProfile for all
 	// resource (OneForEvent = false) or one per resource (OneForEvent = true)

@@ -36,7 +36,7 @@ ARCH ?= amd64
 OS ?= $(shell uname -s | tr A-Z a-z)
 K8S_LATEST_VER ?= $(shell curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
 export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
-TAG ?= main
+TAG ?= dev
 
 ## Tool Binaries
 CONTROLLER_GEN := $(TOOLS_BIN_DIR)/controller-gen
@@ -170,6 +170,12 @@ fv: $(GINKGO) ## Run Sveltos Controller tests using existing cluster
 
 .PHONY: fv-sharding
 fv-sharding: $(KUBECTL) $(GINKGO) ## Run Sveltos Controller tests using existing cluster
+	curl https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/deployment-shard.yaml -o ac-deployment-shard.yaml
+	sed -e "s/{{.SHARD}}/shard1/g"  ac-deployment-shard.yaml > tmp-ac-deployment-shard.yaml
+	$(KUBECTL) apply -f tmp-ac-deployment-shard.yaml
+	rm ac-deployment-shard.yaml
+	rm tmp-ac-deployment-shard.yaml
+
 	$(KUBECTL) patch cluster  clusterapi-workload  -n default --type json -p '[{ "op": "add", "path": "/metadata/annotations/sharding.projectsveltos.io~1key", "value": "shard1" }]'
 	sed -e "s/{{.SHARD}}/shard1/g"  manifest/deployment-shard.yaml > test/em-deployment-shard.yaml
 	$(KUBECTL) apply -f test/em-deployment-shard.yaml
@@ -335,11 +341,6 @@ deploy-projectsveltos: $(KUSTOMIZE)
 
 	# Install projectsveltos addon-controller
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/manifest.yaml
-	curl https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/deployment-shard.yaml -o ac-deployment-shard.yaml
-	sed -e "s/{{.SHARD}}/shard1/g"  ac-deployment-shard.yaml > tmp-ac-deployment-shard.yaml
-	$(KUBECTL) apply -f tmp-ac-deployment-shard.yaml
-	rm ac-deployment-shard.yaml
-	rm tmp-ac-deployment-shard.yaml
 
 	@echo "Waiting for projectsveltos addon-controller to be available..."
 	$(KUBECTL) wait --for=condition=Available deployment/addon-controller -n projectsveltos --timeout=$(TIMEOUT)

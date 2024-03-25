@@ -43,6 +43,12 @@ spec:
           spec:
             description: EventTriggerSpec defines the desired state of EventTrigger
             properties:
+              clusterSetRefs:
+                description: SetRefs identifies referenced ClusterSets. Name of the
+                  referenced ClusterSets.
+                items:
+                  type: string
+                type: array
               destinationClusterSelector:
                 description: |-
                   DestinationClusterSelector identifies the cluster where add-ons will be deployed.
@@ -825,6 +831,22 @@ rules:
 - apiGroups:
   - lib.projectsveltos.io
   resources:
+  - clustersets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
+  - clustersets/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
   - debuggingconfigurations
   verbs:
   - get
@@ -932,7 +954,7 @@ spec:
         - --v=5
         command:
         - /manager
-        image: projectsveltos/event-manager-amd64:main
+        image: projectsveltos/event-manager-amd64:dev
         livenessProbe:
           failureThreshold: 3
           httpGet:

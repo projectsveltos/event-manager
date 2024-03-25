@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -191,4 +192,66 @@ func getClusterSummary(ctx context.Context,
 	}
 
 	return &clusterSummaryList.Items[0], nil
+}
+
+func getClusterSet(namePrefix string, clusterLabels map[string]string) *libsveltosv1alpha1.ClusterSet {
+	selector := ""
+	for k := range clusterLabels {
+		if selector != "" {
+			selector += ","
+		}
+		selector += fmt.Sprintf("%s=%s", k, clusterLabels[k])
+	}
+	clusterSet := &libsveltosv1alpha1.ClusterSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namePrefix + randomString(),
+		},
+		Spec: libsveltosv1alpha1.Spec{
+			ClusterSelector: libsveltosv1alpha1.Selector(selector),
+		},
+	}
+
+	return clusterSet
+}
+
+func verifyClusterSetMatches(clusterSet *libsveltosv1alpha1.ClusterSet) {
+	Byf("Verifying Cluster %s/%s is a match for ClusterSet %s",
+		kindWorkloadCluster.Namespace, kindWorkloadCluster.Name, clusterSet.Name)
+	Eventually(func() bool {
+		currentClusterSet := &libsveltosv1alpha1.ClusterSet{}
+		err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: clusterSet.Name}, currentClusterSet)
+		if err != nil {
+			return false
+		}
+		for i := range currentClusterSet.Status.MatchingClusterRefs {
+			if currentClusterSet.Status.MatchingClusterRefs[i].Namespace == kindWorkloadCluster.Namespace &&
+				currentClusterSet.Status.MatchingClusterRefs[i].Name == kindWorkloadCluster.Name &&
+				currentClusterSet.Status.MatchingClusterRefs[i].APIVersion == clusterv1.GroupVersion.String() {
+
+				return true
+			}
+		}
+		return false
+	}, timeout, pollingInterval).Should(BeTrue())
+}
+
+func verifyEventTriggerMatches(eventTrigger *v1alpha1.EventTrigger) {
+	Byf("Verifying Cluster %s/%s is a match for EventTrigger %s",
+		kindWorkloadCluster.Namespace, kindWorkloadCluster.Name, eventTrigger.Name)
+	Eventually(func() bool {
+		currentEventTrigger := &v1alpha1.EventTrigger{}
+		err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name}, currentEventTrigger)
+		if err != nil {
+			return false
+		}
+		for i := range currentEventTrigger.Status.MatchingClusterRefs {
+			if currentEventTrigger.Status.MatchingClusterRefs[i].Namespace == kindWorkloadCluster.Namespace &&
+				currentEventTrigger.Status.MatchingClusterRefs[i].Name == kindWorkloadCluster.Name &&
+				currentEventTrigger.Status.MatchingClusterRefs[i].APIVersion == clusterv1.GroupVersion.String() {
+
+				return true
+			}
+		}
+		return false
+	}, timeout, pollingInterval).Should(BeTrue())
 }
