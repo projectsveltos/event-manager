@@ -137,6 +137,7 @@ func main() {
 		ShardKey:             shardKey,
 		Mux:                  sync.Mutex{},
 		Deployer:             d,
+		Logger:               ctrl.Log.WithName("eventTriggerReconciler"),
 		ClusterMap:           make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ToClusterMap:         make(map[types.NamespacedName]*libsveltosset.Set),
 		EventTriggers:        make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
@@ -145,6 +146,7 @@ func main() {
 		ToEventSourceMap:     make(map[types.NamespacedName]*libsveltosset.Set),
 		EventTriggerMap:      make(map[types.NamespacedName]*libsveltosset.Set),
 		ReferenceMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ClusterSetMap:        make(map[corev1.ObjectReference]*libsveltosset.Set),
 	}
 
 	eventTriggerController, err = eventTriggerReconciler.SetupWithManager(mgr)

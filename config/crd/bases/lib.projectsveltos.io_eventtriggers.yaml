@@ -39,6 +39,12 @@ spec:
           spec:
             description: EventTriggerSpec defines the desired state of EventTrigger
             properties:
+              clusterSetRefs:
+                description: SetRefs identifies referenced ClusterSets. Name of the
+                  referenced ClusterSets.
+                items:
+                  type: string
+                type: array
               destinationClusterSelector:
                 description: |-
                   DestinationClusterSelector identifies the cluster where add-ons will be deployed.

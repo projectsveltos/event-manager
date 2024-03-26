@@ -92,6 +92,22 @@ rules:
 - apiGroups:
   - lib.projectsveltos.io
   resources:
+  - clustersets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
+  - clustersets/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
   - debuggingconfigurations
   verbs:
   - get
