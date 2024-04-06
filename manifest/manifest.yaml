@@ -43,6 +43,12 @@ spec:
           spec:
             description: EventTriggerSpec defines the desired state of EventTrigger
             properties:
+              clusterSetRefs:
+                description: SetRefs identifies referenced ClusterSets. Name of the
+                  referenced ClusterSets.
+                items:
+                  type: string
+                type: array
               destinationClusterSelector:
                 description: |-
                   DestinationClusterSelector identifies the cluster where add-ons will be deployed.
@@ -131,6 +137,12 @@ spec:
                           description: |-
                             if set, the installation process will not validate rendered templates against the Kubernetes OpenAPI Schema
                             Default to false
+                          type: boolean
+                        enableClientCache:
+                          default: false
+                          description: EnableClientCache is a flag to enable Helm
+                            client cache. If it is not specified, it will be set to
+                            false.
                           type: boolean
                         labels:
                           additionalProperties:
@@ -825,6 +837,22 @@ rules:
 - apiGroups:
   - lib.projectsveltos.io
   resources:
+  - clustersets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
+  - clustersets/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
   - debuggingconfigurations
   verbs:
   - get
@@ -932,7 +960,7 @@ spec:
         - --v=5
         command:
         - /manager
-        image: projectsveltos/event-manager-amd64:main
+        image: projectsveltos/event-manager:main
         livenessProbe:
           failureThreshold: 3
           httpGet:

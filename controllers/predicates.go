@@ -484,3 +484,57 @@ var (
 		return false
 	}
 )
+
+// ClusterSetPredicates predicates for ClusterSet. EventTriggerReconciler watches ClusterSet events
+// and react to those by reconciling itself based on following predicates
+func ClusterSetPredicates(logger logr.Logger) predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			newObject := e.ObjectNew.(*libsveltosv1alpha1.ClusterSet)
+			oldObject := e.ObjectOld.(*libsveltosv1alpha1.ClusterSet)
+
+			log := logger.WithValues("predicate", "updateEvent",
+				"namespace", e.ObjectNew.GetNamespace(),
+				"set", e.ObjectNew.GetName(),
+			)
+
+			if oldObject == nil {
+				log.V(logs.LogVerbose).Info("Old ClusterSet is nil. Reconcile EventTrigger")
+				return true
+			}
+
+			// if ClusterSet selected clusters have changed, reconcile
+			if !reflect.DeepEqual(oldObject.Status.SelectedClusterRefs, newObject.Status.SelectedClusterRefs) {
+				log.V(logs.LogVerbose).Info(
+					"ClusterSet selected clusters has changed. Will attempt to reconcile associated EventTrigger.")
+				return true
+			}
+
+			// otherwise, return false
+			log.V(logs.LogVerbose).Info(
+				"ClusterSet did not match expected conditions.  Will not attempt to reconcile associated EventTrigger.")
+			return false
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			log := logger.WithValues("predicate", "deleteEvent",
+				"namespace", e.Object.GetNamespace(),
+				"set", e.Object.GetName(),
+			)
+			log.V(logs.LogVerbose).Info(
+				"ClusterSet did match expected conditions.  Will attempt to reconcile associated EventTrigger.")
+			return true
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			log := logger.WithValues("predicate", "genericEvent",
+				"namespace", e.Object.GetNamespace(),
+				"set", e.Object.GetName(),
+			)
+			log.V(logs.LogVerbose).Info(
+				"ClusterSet did not match expected conditions.  Will not attempt to reconcile associated EventTrigger.")
+			return false
+		},
+	}
+}

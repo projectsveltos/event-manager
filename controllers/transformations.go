@@ -22,7 +22,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,8 +36,7 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventReport(
 ) []reconcile.Request {
 
 	eventReport := o.(*libsveltosv1alpha1.EventReport)
-	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
-		"eventReport", fmt.Sprintf("%s/%s", eventReport.GetNamespace(), eventReport.GetName()))
+	logger := r.Logger.WithValues("eventReport", fmt.Sprintf("%s/%s", eventReport.GetNamespace(), eventReport.GetName()))
 
 	logger.V(logs.LogDebug).Info("reacting to eventReport change")
 
@@ -50,8 +48,8 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventReport(
 		Kind: libsveltosv1alpha1.EventSourceKind, Name: eventReport.Spec.EventSourceName}
 
 	// Get all EventTriggers referencing this EventSource
-	requests := make([]ctrl.Request, r.getEventSourceMapForEntry(&eventSourceInfo).Len())
-	consumers := r.getEventSourceMapForEntry(&eventSourceInfo).Items()
+	requests := make([]ctrl.Request, getConsumersForEntry(r.EventSourceMap, &eventSourceInfo).Len())
+	consumers := getConsumersForEntry(r.EventSourceMap, &eventSourceInfo).Items()
 
 	for i := range consumers {
 		l := logger.WithValues("eventTrigger", consumers[i].Name)
@@ -71,8 +69,7 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventSource(
 ) []reconcile.Request {
 
 	eventSource := o.(*libsveltosv1alpha1.EventSource)
-	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
-		"eventSource", eventSource.GetName())
+	logger := r.Logger.WithValues("eventSource", eventSource.GetName())
 
 	logger.V(logs.LogDebug).Info("reacting to eventSource change")
 
@@ -83,8 +80,8 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventSource(
 		Kind: libsveltosv1alpha1.EventSourceKind, Name: eventSource.Name}
 
 	// Get all EventTriggers referencing this EventSource
-	requests := make([]ctrl.Request, r.getEventSourceMapForEntry(&eventSourceInfo).Len())
-	consumers := r.getEventSourceMapForEntry(&eventSourceInfo).Items()
+	requests := make([]ctrl.Request, getConsumersForEntry(r.EventSourceMap, &eventSourceInfo).Len())
+	consumers := getConsumersForEntry(r.EventSourceMap, &eventSourceInfo).Items()
 
 	for i := range consumers {
 		l := logger.WithValues("eventTrigger", consumers[i].Name)
@@ -104,8 +101,7 @@ func (r *EventTriggerReconciler) requeueEventTriggerForCluster(
 ) []reconcile.Request {
 
 	cluster := o
-	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
-		"cluster", fmt.Sprintf("%s/%s", cluster.GetNamespace(), cluster.GetName()))
+	logger := r.Logger.WithValues("cluster", fmt.Sprintf("%s/%s", cluster.GetNamespace(), cluster.GetName()))
 
 	logger.V(logs.LogDebug).Info("reacting to Cluster change")
 
@@ -122,8 +118,8 @@ func (r *EventTriggerReconciler) requeueEventTriggerForCluster(
 	r.ClusterLabels[clusterInfo] = o.GetLabels()
 
 	// Get all EventTriggers previously matching this cluster and reconcile those
-	requests := make([]ctrl.Request, r.getClusterMapForEntry(&clusterInfo).Len())
-	consumers := r.getClusterMapForEntry(&clusterInfo).Items()
+	requests := make([]ctrl.Request, getConsumersForEntry(r.ClusterMap, &clusterInfo).Len())
+	consumers := getConsumersForEntry(r.ClusterMap, &clusterInfo).Items()
 
 	for i := range consumers {
 		l := logger.WithValues("eventTrigger", consumers[i].Name)
@@ -164,8 +160,7 @@ func (r *EventTriggerReconciler) requeueEventTriggerForMachine(
 ) []reconcile.Request {
 
 	machine := o.(*clusterv1.Machine)
-	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
-		"machine", fmt.Sprintf("%s/%s", machine.GetNamespace(), machine.GetName()))
+	logger := r.Logger.WithValues("machine", fmt.Sprintf("%s/%s", machine.GetNamespace(), machine.GetName()))
 
 	addTypeInformationToObject(r.Scheme, machine)
 
@@ -183,8 +178,8 @@ func (r *EventTriggerReconciler) requeueEventTriggerForMachine(
 	clusterInfo := corev1.ObjectReference{APIVersion: machine.APIVersion, Kind: "Cluster", Namespace: machine.Namespace, Name: clusterLabelName}
 
 	// Get all EventTrigger previously matching this cluster and reconcile those
-	requests := make([]ctrl.Request, r.getClusterMapForEntry(&clusterInfo).Len())
-	consumers := r.getClusterMapForEntry(&clusterInfo).Items()
+	requests := make([]ctrl.Request, getConsumersForEntry(r.ClusterMap, &clusterInfo).Len())
+	consumers := getConsumersForEntry(r.ClusterMap, &clusterInfo).Items()
 
 	for i := range consumers {
 		requests[i] = ctrl.Request{
@@ -225,9 +220,8 @@ func (r *EventTriggerReconciler) requeueEventTriggerForReference(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
-	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))).WithValues(
-		"reference", fmt.Sprintf("%s:%s/%s", o.GetObjectKind().GroupVersionKind().Kind,
-			o.GetNamespace(), o.GetName()))
+	logger := r.Logger.WithValues("reference", fmt.Sprintf("%s:%s/%s",
+		o.GetObjectKind().GroupVersionKind().Kind, o.GetNamespace(), o.GetName()))
 
 	logger.V(logs.LogDebug).Info("reacting to configMap/secret change")
 
@@ -262,15 +256,54 @@ func (r *EventTriggerReconciler) requeueEventTriggerForReference(
 
 	logger.V(logs.LogDebug).Info(fmt.Sprintf("referenced key: %s", key))
 
-	requests := make([]ctrl.Request, r.getReferenceMapForEntry(&key).Len())
+	requests := make([]ctrl.Request, getConsumersForEntry(r.ReferenceMap, &key).Len())
 
-	consumers := r.getReferenceMapForEntry(&key).Items()
+	consumers := getConsumersForEntry(r.ReferenceMap, &key).Items()
 	for i := range consumers {
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("requeue consumer: %s", consumers[i]))
 		requests[i] = ctrl.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      consumers[i].Name,
 				Namespace: consumers[i].Namespace,
+			},
+		}
+	}
+
+	return requests
+}
+
+func (r *EventTriggerReconciler) requeueEventTriggerForClusterSet(
+	ctx context.Context, o client.Object,
+) []reconcile.Request {
+
+	clusterSet := o
+
+	logger := r.Logger.WithValues("clusterset", clusterSet.GetName())
+	logger.V(logs.LogDebug).Info("reacting to ClusterSet change")
+
+	r.Mux.Lock()
+	defer r.Mux.Unlock()
+
+	setInfo := corev1.ObjectReference{
+		APIVersion: libsveltosv1alpha1.GroupVersion.String(),
+		Kind:       libsveltosv1alpha1.ClusterSetKind,
+		Name:       clusterSet.GetName(),
+	}
+
+	// Get list of (Cluster)Profiles currently referencing the (Cluster)Set
+	currentConsumers := getConsumersForEntry(r.ClusterSetMap, &setInfo)
+
+	// Get all (Cluster)Profiles previously matching this cluster and reconcile those
+	requests := make([]ctrl.Request, currentConsumers.Len())
+	consumers := currentConsumers.Items()
+
+	for i := range consumers {
+		l := logger.WithValues(clusterSet.GetObjectKind(), consumers[i].Name)
+		l.V(logs.LogDebug).Info(fmt.Sprintf("requeue consumer: %s", consumers[i]))
+		requests[i] = ctrl.Request{
+			NamespacedName: client.ObjectKey{
+				Namespace: consumers[i].Namespace,
+				Name:      consumers[i].Name,
 			},
 		}
 	}
