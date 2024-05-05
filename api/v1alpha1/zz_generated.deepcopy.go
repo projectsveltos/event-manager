@@ -125,7 +125,9 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 	if in.KustomizationRefs != nil {
 		in, out := &in.KustomizationRefs, &out.KustomizationRefs
 		*out = make([]addon_controllerapiv1alpha1.KustomizationRef, len(*in))
-		copy(*out, *in)
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	if in.ValidateHealths != nil {
 		in, out := &in.ValidateHealths, &out.ValidateHealths

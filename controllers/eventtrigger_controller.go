@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -301,26 +302,43 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.ConcurrentReconciles,
 		}).
+		Watches(&libsveltosv1alpha1.SveltosCluster{},
+			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForSveltosCluster),
+			builder.WithPredicates(
+				SveltosClusterPredicates(mgr.GetLogger().WithValues("predicate", "sveltosclusterpredicates")),
+			),
+		).
+		Watches(&libsveltosv1alpha1.ClusterSet{},
+			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForClusterSet),
+			builder.WithPredicates(
+				ClusterSetPredicates(mgr.GetLogger().WithValues("predicate", "clustersetpredicate")),
+			),
+		).
+		Watches(&libsveltosv1alpha1.EventReport{},
+			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForEventReport),
+			builder.WithPredicates(
+				EventReportPredicates(mgr.GetLogger().WithValues("predicate", "eventreportpredicate")),
+			),
+		).
+		Watches(&libsveltosv1alpha1.EventSource{},
+			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForEventSource),
+			builder.WithPredicates(
+				EventSourcePredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
+			),
+		).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForReference),
+			builder.WithPredicates(
+				ConfigMapPredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
+			),
+		).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForReference),
+			builder.WithPredicates(
+				SecretPredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
+			),
+		).
 		Build(r)
-	if err != nil {
-		return nil, errors.Wrap(err, "error creating controller")
-	}
-	// When projectsveltos cluster changes, according to SveltosClusterPredicates,
-	// one or more EventTriggers need to be reconciled.
-	err = c.Watch(source.Kind(mgr.GetCache(), &libsveltosv1alpha1.SveltosCluster{}),
-		handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForCluster),
-		SveltosClusterPredicates(mgr.GetLogger().WithValues("predicate", "sveltosclusterpredicate")),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "error creating controller")
-	}
-
-	// When ClusterSet changes, according to ClusterSetPredicates,
-	// one or more EventTriggers need to be reconciled.
-	err = c.Watch(source.Kind(mgr.GetCache(), &libsveltosv1alpha1.ClusterSet{}),
-		handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForClusterSet),
-		ClusterSetPredicates(mgr.GetLogger().WithValues("predicate", "clustersetpredicate")),
-	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating controller")
 	}
@@ -337,46 +355,6 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 	}
 	*/
 
-	// When projectsveltos EventReports changes, according to EventPredicates,
-	// one or more EventTriggers need to be reconciled.
-	err = c.Watch(source.Kind(mgr.GetCache(), &libsveltosv1alpha1.EventReport{}),
-		handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForEventReport),
-		EventReportPredicates(mgr.GetLogger().WithValues("predicate", "eventreportpredicate")),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "error creating controller")
-	}
-
-	// When projectsveltos EventSources changes, according to EventSourcePredicates,
-	// one or more EventTriggers need to be reconciled.
-	err = c.Watch(source.Kind(mgr.GetCache(), &libsveltosv1alpha1.EventSource{}),
-		handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForEventSource),
-		EventSourcePredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "error creating controller")
-	}
-
-	// When ConfigMap changes, according to ConfigMapPredicates,
-	// one or more EventTriggers need to be reconciled.
-	err = c.Watch(source.Kind(mgr.GetCache(), &corev1.ConfigMap{}),
-		handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForReference),
-		ConfigMapPredicates(mgr.GetLogger().WithValues("predicate", "configmappredicate")),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// When Secret changes, according to SecretPredicates,
-	// one or more EventTriggers need to be reconciled.
-	err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Secret{}),
-		handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForReference),
-		SecretPredicates(mgr.GetLogger().WithValues("predicate", "secretpredicate")),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	if r.EventReportMode == CollectFromManagementCluster {
 		go collectEventReports(mgr.GetClient(), r.ShardKey, mgr.GetLogger())
 	}
@@ -385,21 +363,29 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 }
 
 func (r *EventTriggerReconciler) WatchForCAPI(mgr ctrl.Manager, c controller.Controller) error {
+	sourceCluster := source.Kind[*clusterv1.Cluster](
+		mgr.GetCache(),
+		&clusterv1.Cluster{},
+		handler.TypedEnqueueRequestsFromMapFunc(r.requeueEventTriggerForCluster),
+		ClusterPredicate{Logger: mgr.GetLogger().WithValues("predicate", "clusterpredicate")},
+	)
+
 	// When cluster-api cluster changes, according to ClusterPredicates,
-	// one or more EventTriggers need to be reconciled.
-	if err := c.Watch(source.Kind(mgr.GetCache(), &clusterv1.Cluster{}),
-		handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForCluster),
-		ClusterPredicates(mgr.GetLogger().WithValues("predicate", "clusterpredicate")),
-	); err != nil {
+	// one or more ClusterProfiles need to be reconciled.
+	if err := c.Watch(sourceCluster); err != nil {
 		return err
 	}
 
-	// When cluster-api machine changes, according to MachinePredicates,
-	// one or more EventTrigger need to be reconciled.
-	if err := c.Watch(source.Kind(mgr.GetCache(), &clusterv1.Machine{}),
-		handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForMachine),
-		MachinePredicates(mgr.GetLogger().WithValues("predicate", "machinepredicate")),
-	); err != nil {
+	machineCluster := source.Kind[*clusterv1.Machine](
+		mgr.GetCache(),
+		&clusterv1.Machine{},
+		handler.TypedEnqueueRequestsFromMapFunc(r.requeueEventTriggerForMachine),
+		MachinePredicate{Logger: mgr.GetLogger().WithValues("predicate", "machinepredicate")},
+	)
+
+	// When cluster-api cluster changes, according to ClusterPredicates,
+	// one or more EventTriggers need to be reconciled.
+	if err := c.Watch(machineCluster); err != nil {
 		return err
 	}
 
