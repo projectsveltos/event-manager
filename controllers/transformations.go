@@ -96,11 +96,24 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventSource(
 	return requests
 }
 
-func (r *EventTriggerReconciler) requeueEventTriggerForCluster(
+func (r *EventTriggerReconciler) requeueEventTriggerForSveltosCluster(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
-	cluster := o
+	return r.requeueEventTriggerForACluster(o)
+}
+
+func (r *EventTriggerReconciler) requeueEventTriggerForCluster(
+	ctx context.Context, cluster *clusterv1.Cluster,
+) []reconcile.Request {
+
+	return r.requeueEventTriggerForACluster(cluster)
+}
+
+func (r *EventTriggerReconciler) requeueEventTriggerForACluster(
+	cluster client.Object,
+) []reconcile.Request {
+
 	logger := r.Logger.WithValues("cluster", fmt.Sprintf("%s/%s", cluster.GetNamespace(), cluster.GetName()))
 
 	logger.V(logs.LogDebug).Info("reacting to Cluster change")
@@ -115,7 +128,7 @@ func (r *EventTriggerReconciler) requeueEventTriggerForCluster(
 	clusterInfo := corev1.ObjectReference{APIVersion: apiVersion, Kind: kind,
 		Namespace: cluster.GetNamespace(), Name: cluster.GetName()}
 
-	r.ClusterLabels[clusterInfo] = o.GetLabels()
+	r.ClusterLabels[clusterInfo] = cluster.GetLabels()
 
 	// Get all EventTriggers previously matching this cluster and reconcile those
 	requests := make([]ctrl.Request, getConsumersForEntry(r.ClusterMap, &clusterInfo).Len())
@@ -156,10 +169,9 @@ func (r *EventTriggerReconciler) requeueEventTriggerForCluster(
 }
 
 func (r *EventTriggerReconciler) requeueEventTriggerForMachine(
-	ctx context.Context, o client.Object,
+	ctx context.Context, machine *clusterv1.Machine,
 ) []reconcile.Request {
 
-	machine := o.(*clusterv1.Machine)
 	logger := r.Logger.WithValues("machine", fmt.Sprintf("%s/%s", machine.GetNamespace(), machine.GetName()))
 
 	addTypeInformationToObject(r.Scheme, machine)
