@@ -908,6 +908,8 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		Spec: configv1alpha1.Spec{
 			StopMatchingBehavior: eventTrigger.Spec.StopMatchingBehavior,
 			SyncMode:             eventTrigger.Spec.SyncMode,
+			Tier:                 eventTrigger.Spec.Tier,
+			ContinueOnConflict:   eventTrigger.Spec.ContinueOnConflict,
 			Reloader:             eventTrigger.Spec.Reloader,
 			MaxUpdate:            eventTrigger.Spec.MaxUpdate,
 			TemplateResourceRefs: eventTrigger.Spec.TemplateResourceRefs,
@@ -1003,6 +1005,8 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 		Spec: configv1alpha1.Spec{
 			StopMatchingBehavior: eventTrigger.Spec.StopMatchingBehavior,
 			SyncMode:             eventTrigger.Spec.SyncMode,
+			Tier:                 eventTrigger.Spec.Tier,
+			ContinueOnConflict:   eventTrigger.Spec.ContinueOnConflict,
 			Reloader:             eventTrigger.Spec.Reloader,
 			MaxUpdate:            eventTrigger.Spec.MaxUpdate,
 			TemplateResourceRefs: eventTrigger.Spec.TemplateResourceRefs,
