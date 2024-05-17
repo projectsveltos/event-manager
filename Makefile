@@ -49,8 +49,8 @@ KIND := $(TOOLS_BIN_DIR)/kind
 KUBECTL := $(TOOLS_BIN_DIR)/kubectl
 CLUSTERCTL := $(TOOLS_BIN_DIR)/clusterctl
 
-GOLANGCI_LINT_VERSION := "v1.55.2"
-CLUSTERCTL_VERSION := "v1.7.1"
+GOLANGCI_LINT_VERSION := "v1.57.2"
+CLUSTERCTL_VERSION := "v1.7.2"
 
 KUSTOMIZE_VER := v4.5.2
 KUSTOMIZE_BIN := kustomize
@@ -159,7 +159,7 @@ endif
 # K8S_VERSION for the Kind cluster can be set as environment variable. If not defined,
 # this default value is used
 ifndef K8S_VERSION
-K8S_VERSION := v1.29.1
+K8S_VERSION := v1.30.0
 endif
 
 KIND_CONFIG ?= kind-cluster.yaml
