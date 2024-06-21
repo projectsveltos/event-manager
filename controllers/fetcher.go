@@ -26,8 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	v1beta1 "github.com/projectsveltos/event-manager/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
@@ -37,7 +37,7 @@ import (
 // - EventSource and corresponding EventReports (from the passed in cluster only);
 // - ConfigMaps/Secrets
 func fetchReferencedResources(ctx context.Context, c client.Client,
-	e *v1alpha1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]client.Object, error) {
+	e *v1beta1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]client.Object, error) {
 
 	result := make([]client.Object, 0)
 
@@ -58,7 +58,7 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 	result = append(result, resource)
 
 	logger.V(logs.LogDebug).Info("fetch EventReports")
-	var eventReports *libsveltosv1alpha1.EventReportList
+	var eventReports *libsveltosv1beta1.EventReportList
 	eventReports, err = fetchEventReports(ctx, c, cluster.Namespace, cluster.Name, resource.Name,
 		clusterproxy.GetClusterType(cluster))
 	if err != nil {
@@ -81,9 +81,9 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 
 // fetchEventSource fetches referenced EventSource
 func fetchEventSource(ctx context.Context, c client.Client, eventSourceName string,
-) (*libsveltosv1alpha1.EventSource, error) {
+) (*libsveltosv1beta1.EventSource, error) {
 
-	eventSource := &libsveltosv1alpha1.EventSource{}
+	eventSource := &libsveltosv1beta1.EventSource{}
 	err := c.Get(ctx, types.NamespacedName{Name: eventSourceName}, eventSource)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -97,9 +97,9 @@ func fetchEventSource(ctx context.Context, c client.Client, eventSourceName stri
 
 // fetchEventReports returns eventReports for given EventSource in a given cluster
 func fetchEventReports(ctx context.Context, c client.Client, clusterNamespace, clusterName, eventSourceName string,
-	clusterType libsveltosv1alpha1.ClusterType) (*libsveltosv1alpha1.EventReportList, error) {
+	clusterType libsveltosv1beta1.ClusterType) (*libsveltosv1beta1.EventReportList, error) {
 
-	labels := libsveltosv1alpha1.GetEventReportLabels(eventSourceName, clusterName, &clusterType)
+	labels := libsveltosv1beta1.GetEventReportLabels(eventSourceName, clusterName, &clusterType)
 
 	// Fecth all ClusterSummary for this Cluster
 	listOptions := []client.ListOption{
@@ -107,13 +107,13 @@ func fetchEventReports(ctx context.Context, c client.Client, clusterNamespace, c
 		client.MatchingLabels(labels),
 	}
 
-	eventReportList := &libsveltosv1alpha1.EventReportList{}
+	eventReportList := &libsveltosv1beta1.EventReportList{}
 	err := c.List(ctx, eventReportList, listOptions...)
 	return eventReportList, err
 }
 
 // fetchPolicyRefs fetches referenced ConfigMaps/Secrets
-func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1alpha1.EventTrigger,
+func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
 	cluster *corev1.ObjectReference, logger logr.Logger) ([]client.Object, error) {
 
 	result := make([]client.Object, 0)
@@ -125,7 +125,7 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1alpha1.EventTrig
 
 		namespace := getReferenceResourceNamespace(cluster.Namespace, policyRef.Namespace)
 
-		if policyRef.Kind == string(libsveltosv1alpha1.ConfigMapReferencedResourceKind) {
+		if policyRef.Kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
 			object, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: policyRef.Name})
 		} else {
 			object, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: policyRef.Name})
@@ -184,8 +184,8 @@ func getSecret(ctx context.Context, c client.Client, secretName types.Namespaced
 		return nil, err
 	}
 
-	if secret.Type != libsveltosv1alpha1.ClusterProfileSecretType {
-		return nil, libsveltosv1alpha1.ErrSecretTypeNotSupported
+	if secret.Type != libsveltosv1beta1.ClusterProfileSecretType {
+		return nil, libsveltosv1beta1.ErrSecretTypeNotSupported
 	}
 
 	return secret, nil

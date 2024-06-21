@@ -34,11 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/projectsveltos/event-manager/controllers"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 var _ = Describe("EventSource Deployer", func() {
-	var eventSource *libsveltosv1alpha1.EventSource
+	var eventSource *libsveltosv1beta1.EventSource
 	var logger logr.Logger
 
 	BeforeEach(func() {
@@ -50,7 +50,7 @@ var _ = Describe("EventSource Deployer", func() {
 		eventSourceName := randomString()
 		clusterName := randomString()
 		clusterNamespace := randomString()
-		clusterType := libsveltosv1alpha1.ClusterTypeCapi
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
 
 		cluster := &clusterv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -59,7 +59,7 @@ var _ = Describe("EventSource Deployer", func() {
 			},
 		}
 
-		eventReportName := libsveltosv1alpha1.GetEventReportName(eventSourceName, clusterName, &clusterType)
+		eventReportName := libsveltosv1beta1.GetEventReportName(eventSourceName, clusterName, &clusterType)
 		eventReport := getEventReport(eventReportName, clusterNamespace, clusterName)
 
 		initObjects := []client.Object{
@@ -69,7 +69,7 @@ var _ = Describe("EventSource Deployer", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		currentEventReport := &libsveltosv1alpha1.EventReport{}
+		currentEventReport := &libsveltosv1beta1.EventReport{}
 		Expect(c.Get(context.TODO(), types.NamespacedName{Namespace: clusterNamespace, Name: eventReportName},
 			currentEventReport)).To(Succeed())
 
@@ -77,7 +77,7 @@ var _ = Describe("EventSource Deployer", func() {
 
 		now := metav1.NewTime(time.Now())
 		eventReport.DeletionTimestamp = &now
-		eventReport.Labels = libsveltosv1alpha1.GetEventReportLabels(eventSourceName, clusterName, &clusterType)
+		eventReport.Labels = libsveltosv1beta1.GetEventReportLabels(eventSourceName, clusterName, &clusterType)
 		eventReport.Name = eventSourceName // in the managed cluster the name is the same of the EventSource
 
 		// DeleteEventReport will find the corresponding EventReport in the managed cluster and delete it
@@ -101,26 +101,26 @@ var _ = Describe("EventSource Deployer", func() {
 
 		Expect(controllers.RemoveEventReports(context.TODO(), c, eventSource.Name, logger)).To(Succeed())
 
-		eventReportList := &libsveltosv1alpha1.EventReportList{}
+		eventReportList := &libsveltosv1beta1.EventReportList{}
 		Expect(c.List(context.TODO(), eventReportList)).To(Succeed())
 		Expect(len(eventReportList.Items)).To(BeZero())
 	})
 
 	It("removeEventReportsFromCluster deletes all EventReport for a given cluster instance", func() {
-		clusterType := libsveltosv1alpha1.ClusterTypeCapi
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
 		clusterNamespace := randomString()
 		clusterName := randomString()
 
 		// Create a eventReport from clusterNamespace/clusterName for a random EventSource (eventSourceName)
 		eventSourceName := randomString()
 		eventReport1 := getEventReport(eventSourceName, clusterNamespace, clusterName)
-		eventReport1.Labels = libsveltosv1alpha1.GetEventReportLabels(
+		eventReport1.Labels = libsveltosv1beta1.GetEventReportLabels(
 			eventSource.Name, clusterName, &clusterType)
 
 		// Create a eventReport from clusterNamespace/clusterName for a random EventSource (eventSourceName)
 		eventSourceName = randomString()
 		eventReport2 := getEventReport(eventSourceName, clusterNamespace, clusterName)
-		eventReport2.Labels = libsveltosv1alpha1.GetEventReportLabels(
+		eventReport2.Labels = libsveltosv1beta1.GetEventReportLabels(
 			eventSource.Name, clusterName, &clusterType)
 
 		initObjects := []client.Object{
@@ -134,7 +134,7 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(controllers.RemoveEventReportsFromCluster(context.TODO(), c, clusterNamespace, clusterName,
 			clusterType, map[string]bool{}, logger)).To(Succeed())
 
-		eventReportList := &libsveltosv1alpha1.EventReportList{}
+		eventReportList := &libsveltosv1beta1.EventReportList{}
 		Expect(c.List(context.TODO(), eventReportList)).To(Succeed())
 		Expect(len(eventReportList.Items)).To(BeZero())
 	})
@@ -170,7 +170,7 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(controllers.CollectAndProcessEventReportsFromCluster(context.TODO(), testEnv.Client, getClusterRef(cluster),
 			logger)).To(Succeed())
 
-		clusterType := libsveltosv1alpha1.ClusterTypeCapi
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
 
 		validateEventReports(eventSourceName, cluster, &clusterType)
 
@@ -182,12 +182,12 @@ var _ = Describe("EventSource Deployer", func() {
 	})
 })
 
-func validateEventReports(eventSourceName string, cluster *clusterv1.Cluster, clusterType *libsveltosv1alpha1.ClusterType) {
+func validateEventReports(eventSourceName string, cluster *clusterv1.Cluster, clusterType *libsveltosv1beta1.ClusterType) {
 	// Verify EventReport is created
 	// Eventual loop so testEnv Cache is synced
 	Eventually(func() bool {
-		eventReportName := libsveltosv1alpha1.GetEventReportName(eventSourceName, cluster.Name, clusterType)
-		currentEventReport := &libsveltosv1alpha1.EventReport{}
+		eventReportName := libsveltosv1beta1.GetEventReportName(eventSourceName, cluster.Name, clusterType)
+		currentEventReport := &libsveltosv1beta1.EventReport{}
 		err := testEnv.Get(context.TODO(),
 			types.NamespacedName{Namespace: cluster.Namespace, Name: eventReportName}, currentEventReport)
 		if err != nil {
@@ -204,7 +204,7 @@ func validateEventReports(eventSourceName string, cluster *clusterv1.Cluster, cl
 			By("Spec ClusterNamespace and ClusterName not set")
 			return false
 		}
-		v, ok := currentEventReport.Labels[libsveltosv1alpha1.EventSourceNameLabel]
+		v, ok := currentEventReport.Labels[libsveltosv1beta1.EventSourceNameLabel]
 		return ok && v == eventSourceName
 	}, timeout, pollingInterval).Should(BeTrue())
 }

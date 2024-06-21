@@ -21,13 +21,14 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
 
@@ -35,7 +36,7 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventReport(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
-	eventReport := o.(*libsveltosv1alpha1.EventReport)
+	eventReport := o.(*libsveltosv1beta1.EventReport)
 	logger := r.Logger.WithValues("eventReport", fmt.Sprintf("%s/%s", eventReport.GetNamespace(), eventReport.GetName()))
 
 	logger.V(logs.LogDebug).Info("reacting to eventReport change")
@@ -44,8 +45,8 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventReport(
 	defer r.Mux.Unlock()
 
 	// Use the EventSource this EventReport is about
-	eventSourceInfo := corev1.ObjectReference{APIVersion: libsveltosv1alpha1.GroupVersion.String(),
-		Kind: libsveltosv1alpha1.EventSourceKind, Name: eventReport.Spec.EventSourceName}
+	eventSourceInfo := corev1.ObjectReference{APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		Kind: libsveltosv1beta1.EventSourceKind, Name: eventReport.Spec.EventSourceName}
 
 	// Get all EventTriggers referencing this EventSource
 	requests := make([]ctrl.Request, getConsumersForEntry(r.EventSourceMap, &eventSourceInfo).Len())
@@ -68,7 +69,7 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventSource(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
 
-	eventSource := o.(*libsveltosv1alpha1.EventSource)
+	eventSource := o.(*libsveltosv1beta1.EventSource)
 	logger := r.Logger.WithValues("eventSource", eventSource.GetName())
 
 	logger.V(logs.LogDebug).Info("reacting to eventSource change")
@@ -76,8 +77,8 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventSource(
 	r.Mux.Lock()
 	defer r.Mux.Unlock()
 
-	eventSourceInfo := corev1.ObjectReference{APIVersion: libsveltosv1alpha1.GroupVersion.String(),
-		Kind: libsveltosv1alpha1.EventSourceKind, Name: eventSource.Name}
+	eventSourceInfo := corev1.ObjectReference{APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		Kind: libsveltosv1beta1.EventSourceKind, Name: eventSource.Name}
 
 	// Get all EventTriggers referencing this EventSource
 	requests := make([]ctrl.Request, getConsumersForEntry(r.EventSourceMap, &eventSourceInfo).Len())
@@ -148,13 +149,14 @@ func (r *EventTriggerReconciler) requeueEventTriggerForACluster(
 	// matching the Cluster
 	for k := range r.EventTriggers {
 		eventTriggerSelector := r.EventTriggers[k]
-		parsedSelector, err := labels.Parse(string(eventTriggerSelector))
+
+		clusterSelector, err := metav1.LabelSelectorAsSelector(&eventTriggerSelector.LabelSelector)
 		if err != nil {
-			// When clusterSelector is fixed, this EventTrigger instance will
-			// be reconciled
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to convert selector %v", err))
 			continue
 		}
-		if parsedSelector.Matches(labels.Set(cluster.GetLabels())) {
+
+		if clusterSelector.Matches(labels.Set(cluster.GetLabels())) {
 			l := logger.WithValues("eventTrigger", k.Name)
 			l.V(logs.LogDebug).Info("queuing EventTrigger")
 			requests = append(requests, ctrl.Request{
@@ -207,13 +209,12 @@ func (r *EventTriggerReconciler) requeueEventTriggerForMachine(
 		// matching the Cluster
 		for k := range r.EventTriggers {
 			eventTriggerSelector := r.EventTriggers[k]
-			parsedSelector, err := labels.Parse(string(eventTriggerSelector))
+			clusterSelector, err := metav1.LabelSelectorAsSelector(&eventTriggerSelector.LabelSelector)
 			if err != nil {
-				// When clusterSelector is fixed, this EventTrigger instance will
-				// be reconciled
+				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to convert selector %v", err))
 				continue
 			}
-			if parsedSelector.Matches(labels.Set(clusterLabels)) {
+			if clusterSelector.Matches(labels.Set(clusterLabels)) {
 				l := logger.WithValues("eventTrigger", k.Name)
 				l.V(logs.LogDebug).Info("queuing EventTrigger")
 				requests = append(requests, ctrl.Request{
@@ -246,14 +247,14 @@ func (r *EventTriggerReconciler) requeueEventTriggerForReference(
 	case *corev1.ConfigMap:
 		key = corev1.ObjectReference{
 			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
+			Kind:       string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
 			Namespace:  o.GetNamespace(),
 			Name:       o.GetName(),
 		}
 	case *corev1.Secret:
 		key = corev1.ObjectReference{
 			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       string(libsveltosv1alpha1.SecretReferencedResourceKind),
+			Kind:       string(libsveltosv1beta1.SecretReferencedResourceKind),
 			Namespace:  o.GetNamespace(),
 			Name:       o.GetName(),
 		}
@@ -297,8 +298,8 @@ func (r *EventTriggerReconciler) requeueEventTriggerForClusterSet(
 	defer r.Mux.Unlock()
 
 	setInfo := corev1.ObjectReference{
-		APIVersion: libsveltosv1alpha1.GroupVersion.String(),
-		Kind:       libsveltosv1alpha1.ClusterSetKind,
+		APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		Kind:       libsveltosv1beta1.ClusterSetKind,
 		Name:       clusterSet.GetName(),
 	}
 

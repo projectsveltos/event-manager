@@ -1,5 +1,5 @@
 /*
-Copyright 2023. projectsveltos.io. All rights reserved.
+Copyright 2022. projectsveltos.io. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,31 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scope_test
+package v1alpha1_test
 
 import (
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/cluster-api/util"
-
-	"github.com/projectsveltos/event-manager/api/v1beta1"
 )
 
-func setupScheme() *runtime.Scheme {
-	scheme := runtime.NewScheme()
-	Expect(v1beta1.AddToScheme(scheme)).To(Succeed())
-	return scheme
-}
-
-func TestScope(t *testing.T) {
+func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Scope Suite")
-}
-
-func randomString() string {
-	const length = 10
-	return util.RandomString(length)
+	RunSpecs(t, "Controllers Suite")
 }

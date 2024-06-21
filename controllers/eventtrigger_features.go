@@ -22,7 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 )
 
@@ -31,7 +31,7 @@ var (
 )
 
 func RegisterFeatures(d deployer.DeployerInterface, setupLog logr.Logger) {
-	err := d.RegisterFeatureID(v1alpha1.FeatureEventTrigger)
+	err := d.RegisterFeatureID(v1beta1.FeatureEventTrigger)
 	if err != nil {
 		setupLog.Error(err, "failed to register feature FeatureEventTrigger")
 		os.Exit(1)
@@ -43,7 +43,7 @@ func RegisterFeatures(d deployer.DeployerInterface, setupLog logr.Logger) {
 func creatFeatureHandlerMaps() {
 	featuresHandlers = make(map[string]feature)
 
-	featuresHandlers[v1alpha1.FeatureEventTrigger] = feature{id: v1alpha1.FeatureEventTrigger,
+	featuresHandlers[v1beta1.FeatureEventTrigger] = feature{id: v1beta1.FeatureEventTrigger,
 		currentHash: eventTriggerHash, deploy: processEventTriggerForCluster, undeploy: undeployEventTriggerResourcesFromCluster}
 }
 

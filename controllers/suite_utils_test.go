@@ -40,10 +40,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/controllers"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
@@ -76,7 +76,7 @@ func randomString() string {
 
 func setupScheme() (*runtime.Scheme, error) {
 	s := runtime.NewScheme()
-	if err := configv1alpha1.AddToScheme(s); err != nil {
+	if err := configv1beta1.AddToScheme(s); err != nil {
 		return nil, err
 	}
 	if err := clusterv1.AddToScheme(s); err != nil {
@@ -88,10 +88,10 @@ func setupScheme() (*runtime.Scheme, error) {
 	if err := apiextensionsv1.AddToScheme(s); err != nil {
 		return nil, err
 	}
-	if err := libsveltosv1alpha1.AddToScheme(s); err != nil {
+	if err := libsveltosv1beta1.AddToScheme(s); err != nil {
 		return nil, err
 	}
-	if err := v1alpha1.AddToScheme(s); err != nil {
+	if err := v1beta1.AddToScheme(s); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -138,13 +138,13 @@ func addTypeInformationToObject(scheme *runtime.Scheme, obj client.Object) error
 	return nil
 }
 
-func getEventSourceInstance(name string) *libsveltosv1alpha1.EventSource {
-	return &libsveltosv1alpha1.EventSource{
+func getEventSourceInstance(name string) *libsveltosv1beta1.EventSource {
+	return &libsveltosv1beta1.EventSource{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-		Spec: libsveltosv1alpha1.EventSourceSpec{
-			ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+		Spec: libsveltosv1beta1.EventSourceSpec{
+			ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 				{
 					Kind:     randomString(),
 					Group:    randomString(),
@@ -156,20 +156,20 @@ func getEventSourceInstance(name string) *libsveltosv1alpha1.EventSource {
 	}
 }
 
-func getEventReport(eventSourceName, clusterNamespace, clusterName string) *libsveltosv1alpha1.EventReport {
-	return &libsveltosv1alpha1.EventReport{
+func getEventReport(eventSourceName, clusterNamespace, clusterName string) *libsveltosv1beta1.EventReport {
+	return &libsveltosv1beta1.EventReport{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      eventSourceName,
 			Namespace: clusterNamespace,
 			Labels: map[string]string{
-				libsveltosv1alpha1.EventSourceNameLabel: eventSourceName,
+				libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
 			},
 		},
-		Spec: libsveltosv1alpha1.EventReportSpec{
+		Spec: libsveltosv1beta1.EventReportSpec{
 			ClusterNamespace: clusterNamespace,
 			ClusterName:      clusterName,
 			EventSourceName:  eventSourceName,
-			ClusterType:      libsveltosv1alpha1.ClusterTypeCapi,
+			ClusterType:      libsveltosv1beta1.ClusterTypeCapi,
 		},
 	}
 }
@@ -180,7 +180,7 @@ func getEventTriggerReconciler(c client.Client) *controllers.EventTriggerReconci
 		Scheme:           scheme,
 		ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-		EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+		EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 		EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 		ClusterLabels:    make(map[corev1.ObjectReference]map[string]string),
@@ -266,7 +266,7 @@ func getClusterRef(cluster client.Object) *corev1.ObjectReference {
 // prepareClient creates a client with a ClusterSummary, CAPI Cluster and a EventTrigger matching such cluster.
 // ClusterSummary has provisioned all add-ons
 // Cluster API cluster
-func prepareClient(clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType) client.Client {
+func prepareClient(clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType) client.Client {
 	cluster := &clusterv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: clusterNamespace,
@@ -280,43 +280,43 @@ func prepareClient(clusterNamespace, clusterName string, clusterType libsveltosv
 		},
 	}
 
-	clusterSummary := &configv1alpha1.ClusterSummary{
+	clusterSummary := &configv1beta1.ClusterSummary{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: clusterNamespace,
 			Name:      randomString(),
 			Labels: map[string]string{
-				configv1alpha1.ClusterTypeLabel: string(clusterType),
-				configv1alpha1.ClusterNameLabel: clusterName,
+				configv1beta1.ClusterTypeLabel: string(clusterType),
+				configv1beta1.ClusterNameLabel: clusterName,
 			},
 		},
-		Status: configv1alpha1.ClusterSummaryStatus{
-			FeatureSummaries: []configv1alpha1.FeatureSummary{
+		Status: configv1beta1.ClusterSummaryStatus{
+			FeatureSummaries: []configv1beta1.FeatureSummary{
 				{
-					FeatureID: configv1alpha1.FeatureHelm,
-					Status:    configv1alpha1.FeatureStatusProvisioned,
+					FeatureID: configv1beta1.FeatureHelm,
+					Status:    configv1beta1.FeatureStatusProvisioned,
 				},
 				{
-					FeatureID: configv1alpha1.FeatureResources,
-					Status:    configv1alpha1.FeatureStatusProvisioned,
+					FeatureID: configv1beta1.FeatureResources,
+					Status:    configv1beta1.FeatureStatusProvisioned,
 				},
 			},
 		},
 	}
 
-	resource := &v1alpha1.EventTrigger{
+	resource := &v1beta1.EventTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: randomString(),
 		},
-		Spec: v1alpha1.EventTriggerSpec{
+		Spec: v1beta1.EventTriggerSpec{
 			EventSourceName: randomString(),
 		},
-		Status: v1alpha1.EventTriggerStatus{
+		Status: v1beta1.EventTriggerStatus{
 			MatchingClusterRefs: []corev1.ObjectReference{
 				{
 					Kind: "Cluster", APIVersion: clusterv1.GroupVersion.String(), Namespace: clusterNamespace, Name: clusterName,
 				},
 			},
-			ClusterInfo: []libsveltosv1alpha1.ClusterInfo{},
+			ClusterInfo: []libsveltosv1beta1.ClusterInfo{},
 		},
 	}
 

@@ -18,7 +18,6 @@ package fv_test
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -28,9 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
-	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 var _ = Describe("Reference ClusterSet", func() {
@@ -47,7 +46,7 @@ var _ = Describe("Reference ClusterSet", func() {
 		verifyClusterSetMatches(clusterSet)
 
 		By("Verify ClusterSet has selected the matching cluster")
-		currentClusterSet := &libsveltosv1alpha1.ClusterSet{}
+		currentClusterSet := &libsveltosv1beta1.ClusterSet{}
 		Expect(k8sClient.Get(context.TODO(),
 			types.NamespacedName{Name: clusterSet.Name}, currentClusterSet)).To(Succeed())
 		Expect(currentClusterSet.Status.SelectedClusterRefs).ToNot(BeNil())
@@ -63,12 +62,12 @@ var _ = Describe("Reference ClusterSet", func() {
 		serviceNamespace := randomString()
 
 		Byf("Create a EventSource matching Services in namespace: %s", serviceNamespace)
-		eventSource := libsveltosv1alpha1.EventSource{
+		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: libsveltosv1alpha1.EventSourceSpec{
-				ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+			Spec: libsveltosv1beta1.EventSourceSpec{
+				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 					{
 						Group:     "",
 						Version:   "v1",
@@ -83,9 +82,9 @@ var _ = Describe("Reference ClusterSet", func() {
 
 		Byf("Create a EventTrigger referencing EventSource %s and referencing the ClusterSet %s", eventSource.Name, clusterSet.Name)
 		eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
-			map[string]string{key: value}, []configv1alpha1.PolicyRef{})
+			map[string]string{key: value}, []configv1beta1.PolicyRef{})
 		eventTrigger.Spec.OneForEvent = false
-		eventTrigger.Spec.HelmCharts = []configv1alpha1.HelmChart{
+		eventTrigger.Spec.HelmCharts = []configv1beta1.HelmChart{
 			{
 				RepositoryURL:    "https://helm.nginx.com/stable/",
 				RepositoryName:   "nginx-stable",
@@ -93,10 +92,17 @@ var _ = Describe("Reference ClusterSet", func() {
 				ChartVersion:     "0.17.1",
 				ReleaseName:      "nginx-latest",
 				ReleaseNamespace: "nginx",
-				HelmChartAction:  configv1alpha1.HelmChartActionInstall,
+				HelmChartAction:  configv1beta1.HelmChartActionInstall,
 			},
 		}
-		eventTrigger.Spec.SourceClusterSelector = libsveltosv1alpha1.Selector(fmt.Sprintf("%s=%s", randomString(), randomString()))
+		eventTrigger.Spec.SourceClusterSelector = libsveltosv1beta1.Selector{
+			LabelSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					randomString(): randomString(),
+				},
+			},
+		}
+
 		eventTrigger.Spec.ClusterSetRefs = []string{clusterSet.Name}
 		Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
 
@@ -120,7 +126,7 @@ var _ = Describe("Reference ClusterSet", func() {
 
 		Byf("Verify EventTrigger does not match any cluster anymore")
 		Eventually(func() bool {
-			currentEventTrigger := &v1alpha1.EventTrigger{}
+			currentEventTrigger := &v1beta1.EventTrigger{}
 			err := k8sClient.Get(context.TODO(),
 				types.NamespacedName{Name: eventTrigger.Name}, currentEventTrigger)
 			if err != nil {
@@ -149,13 +155,13 @@ var _ = Describe("Reference ClusterSet", func() {
 		verifyEventTriggerMatches(eventTrigger)
 
 		Byf("Deleting EventSource %s in the managed cluster", eventSource.Name)
-		currentEventSource := &libsveltosv1alpha1.EventSource{}
+		currentEventSource := &libsveltosv1beta1.EventSource{}
 		Expect(k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
 			currentEventSource)).To(Succeed())
 		Expect(k8sClient.Delete(context.TODO(), currentEventSource)).To(Succeed())
 
 		Byf("Deleting EventTrigger %s", eventTrigger.Name)
-		currentEventTrigger := &v1alpha1.EventTrigger{}
+		currentEventTrigger := &v1beta1.EventTrigger{}
 		Expect(k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name},
 			currentEventTrigger)).To(Succeed())
 		Expect(k8sClient.Delete(context.TODO(), currentEventTrigger)).To(Succeed())

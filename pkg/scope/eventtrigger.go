@@ -22,18 +22,19 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 // EventTriggerScopeParams defines the input parameters used to create a new EventTrigger Scope.
 type EventTriggerScopeParams struct {
 	Client         client.Client
 	Logger         logr.Logger
-	EventTrigger   *v1alpha1.EventTrigger
+	EventTrigger   *v1beta1.EventTrigger
 	ControllerName string
 }
 
@@ -65,7 +66,7 @@ type EventTriggerScope struct {
 	logr.Logger
 	client         client.Client
 	patchHelper    *patch.Helper
-	EventTrigger   *v1alpha1.EventTrigger
+	EventTrigger   *v1beta1.EventTrigger
 	controllerName string
 }
 
@@ -94,8 +95,8 @@ func (s *EventTriggerScope) ControllerName() string {
 }
 
 // GetSelector returns the ClusterSelector
-func (s *EventTriggerScope) GetSelector() string {
-	return string(s.EventTrigger.Spec.SourceClusterSelector)
+func (s *EventTriggerScope) GetSelector() *metav1.LabelSelector {
+	return &s.EventTrigger.Spec.SourceClusterSelector.LabelSelector
 }
 
 // SetMatchingClusterRefs sets the MatchingClusterRefs status.
@@ -104,6 +105,6 @@ func (s *EventTriggerScope) SetMatchingClusterRefs(matchingClusters []corev1.Obj
 }
 
 // SetClusterInfo sets the ClusterInfo status.
-func (s *EventTriggerScope) SetClusterInfo(clusterInfo []libsveltosv1alpha1.ClusterInfo) {
+func (s *EventTriggerScope) SetClusterInfo(clusterInfo []libsveltosv1beta1.ClusterInfo) {
 	s.EventTrigger.Status.ClusterInfo = clusterInfo
 }
