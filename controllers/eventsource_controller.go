@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
 
@@ -44,7 +44,7 @@ func (r *EventSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	logger.V(logs.LogInfo).Info("Reconciling EventSource")
 
 	// Fecth the EventSource instance
-	eventSource := &libsveltosv1alpha1.EventSource{}
+	eventSource := &libsveltosv1beta1.EventSource{}
 	if err := r.Get(ctx, req.NamespacedName, eventSource); err != nil {
 		if apierrors.IsNotFound(err) {
 			err = removeEventReports(ctx, r.Client, req.NamespacedName.Name, logger)
@@ -76,6 +76,6 @@ func (r *EventSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // SetupWithManager sets up the controller with the Manager.
 func (r *EventSourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&libsveltosv1alpha1.EventSource{}).
+		For(&libsveltosv1beta1.EventSource{}).
 		Complete(r)
 }

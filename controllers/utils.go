@@ -24,9 +24,9 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=debuggingconfigurations,verbs=get;list;watch
@@ -40,13 +40,13 @@ func InitScheme() (*runtime.Scheme, error) {
 	if err := clusterv1.AddToScheme(s); err != nil {
 		return nil, err
 	}
-	if err := configv1alpha1.AddToScheme(s); err != nil {
+	if err := configv1beta1.AddToScheme(s); err != nil {
 		return nil, err
 	}
-	if err := libsveltosv1alpha1.AddToScheme(s); err != nil {
+	if err := libsveltosv1beta1.AddToScheme(s); err != nil {
 		return nil, err
 	}
-	if err := v1alpha1.AddToScheme(s); err != nil {
+	if err := v1beta1.AddToScheme(s); err != nil {
 		return nil, err
 	}
 	if err := apiextensionsv1.AddToScheme(s); err != nil {
@@ -87,17 +87,17 @@ func getKeyFromObject(scheme *runtime.Scheme, obj client.Object) *corev1.ObjectR
 	}
 }
 
-func getPolicyRef(o client.Object) *libsveltosv1alpha1.PolicyRef {
-	policyRef := &libsveltosv1alpha1.PolicyRef{
+func getPolicyRef(o client.Object) *libsveltosv1beta1.PolicyRef {
+	policyRef := &libsveltosv1beta1.PolicyRef{
 		Namespace: o.GetNamespace(),
 		Name:      o.GetName(),
 	}
 
 	switch o.(type) {
 	case *corev1.ConfigMap:
-		policyRef.Kind = string(libsveltosv1alpha1.ConfigMapReferencedResourceKind)
+		policyRef.Kind = string(libsveltosv1beta1.ConfigMapReferencedResourceKind)
 	case *corev1.Secret:
-		policyRef.Kind = string(libsveltosv1alpha1.SecretReferencedResourceKind)
+		policyRef.Kind = string(libsveltosv1beta1.SecretReferencedResourceKind)
 	default:
 		panic(1)
 	}

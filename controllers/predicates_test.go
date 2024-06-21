@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"github.com/projectsveltos/event-manager/controllers"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 const (
@@ -40,13 +40,13 @@ const (
 
 var _ = Describe("EventTrigger Predicates: SvelotsClusterPredicates", func() {
 	var logger logr.Logger
-	var cluster *libsveltosv1alpha1.SveltosCluster
+	var cluster *libsveltosv1beta1.SveltosCluster
 
 	const upstreamClusterNamePrefix = "sveltoscluster-predicates-"
 
 	BeforeEach(func() {
 		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
-		cluster = &libsveltosv1alpha1.SveltosCluster{
+		cluster = &libsveltosv1beta1.SveltosCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
 				Namespace: predicates + randomString(),
@@ -94,7 +94,7 @@ var _ = Describe("EventTrigger Predicates: SvelotsClusterPredicates", func() {
 
 		cluster.Spec.Paused = false
 
-		oldCluster := &libsveltosv1alpha1.SveltosCluster{
+		oldCluster := &libsveltosv1beta1.SveltosCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cluster.Name,
 				Namespace: cluster.Namespace,
@@ -116,7 +116,7 @@ var _ = Describe("EventTrigger Predicates: SvelotsClusterPredicates", func() {
 
 		cluster.Spec.Paused = true
 		cluster.Annotations = map[string]string{clusterv1.PausedAnnotation: "true"}
-		oldCluster := &libsveltosv1alpha1.SveltosCluster{
+		oldCluster := &libsveltosv1beta1.SveltosCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cluster.Name,
 				Namespace: cluster.Namespace,
@@ -136,7 +136,7 @@ var _ = Describe("EventTrigger Predicates: SvelotsClusterPredicates", func() {
 		clusterPredicate := controllers.SveltosClusterPredicates(logger)
 
 		cluster.Spec.Paused = false
-		oldCluster := &libsveltosv1alpha1.SveltosCluster{
+		oldCluster := &libsveltosv1beta1.SveltosCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cluster.Name,
 				Namespace: cluster.Namespace,
@@ -157,7 +157,7 @@ var _ = Describe("EventTrigger Predicates: SvelotsClusterPredicates", func() {
 
 		cluster.Labels = map[string]string{"department": "eng"}
 
-		oldCluster := &libsveltosv1alpha1.SveltosCluster{
+		oldCluster := &libsveltosv1beta1.SveltosCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cluster.Name,
 				Namespace: cluster.Namespace,
@@ -178,13 +178,13 @@ var _ = Describe("EventTrigger Predicates: SvelotsClusterPredicates", func() {
 
 		cluster.Status.Ready = true
 
-		oldCluster := &libsveltosv1alpha1.SveltosCluster{
+		oldCluster := &libsveltosv1beta1.SveltosCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cluster.Name,
 				Namespace: cluster.Namespace,
 				Labels:    map[string]string{},
 			},
-			Status: libsveltosv1alpha1.SveltosClusterStatus{
+			Status: libsveltosv1beta1.SveltosClusterStatus{
 				Ready: false,
 			},
 		}
@@ -396,13 +396,13 @@ var _ = Describe("EventTrigger Predicates: MachinePredicates", func() {
 
 var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 	var logger logr.Logger
-	var eventReport *libsveltosv1alpha1.EventReport
+	var eventReport *libsveltosv1beta1.EventReport
 
 	const upstreamClusterNamePrefix = "eventreport-predicates-"
 
 	BeforeEach(func() {
 		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
-		eventReport = &libsveltosv1alpha1.EventReport{
+		eventReport = &libsveltosv1beta1.EventReport{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      upstreamClusterNamePrefix + randomString(),
 				Namespace: predicates + randomString(),
@@ -433,7 +433,7 @@ var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 	It("Update reprocesses when EventReport spec changes", func() {
 		hcrPredicate := controllers.EventReportPredicates(logger)
 
-		eventReport.Spec = libsveltosv1alpha1.EventReportSpec{
+		eventReport.Spec = libsveltosv1beta1.EventReportSpec{
 			MatchingResources: []corev1.ObjectReference{
 				{
 					Kind:       randomString(),
@@ -444,7 +444,7 @@ var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 			},
 		}
 
-		oldEventReport := &libsveltosv1alpha1.EventReport{
+		oldEventReport := &libsveltosv1beta1.EventReport{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      eventReport.Name,
 				Namespace: eventReport.Namespace,
@@ -463,7 +463,7 @@ var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 	It("Update does not reprocesses EventReport spec has not changed", func() {
 		hcrPredicate := controllers.EventReportPredicates(logger)
 
-		eventReport.Spec = libsveltosv1alpha1.EventReportSpec{
+		eventReport.Spec = libsveltosv1beta1.EventReportSpec{
 			MatchingResources: []corev1.ObjectReference{
 				{
 					Kind:       randomString(),
@@ -473,7 +473,7 @@ var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 				},
 			},
 		}
-		oldEventReport := &libsveltosv1alpha1.EventReport{
+		oldEventReport := &libsveltosv1beta1.EventReport{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      eventReport.Name,
 				Namespace: eventReport.Namespace,
@@ -493,13 +493,13 @@ var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 
 var _ = Describe("EventTrigger Predicates: EventSourcePredicates", func() {
 	var logger logr.Logger
-	var eventSource *libsveltosv1alpha1.EventSource
+	var eventSource *libsveltosv1beta1.EventSource
 
 	const upstreamClusterNamePrefix = "eventsource-predicates-"
 
 	BeforeEach(func() {
 		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
-		eventSource = &libsveltosv1alpha1.EventSource{
+		eventSource = &libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
@@ -529,8 +529,8 @@ var _ = Describe("EventTrigger Predicates: EventSourcePredicates", func() {
 	It("Update reprocesses when EventSource spec changes", func() {
 		hcrPredicate := controllers.EventSourcePredicates(logger)
 
-		eventSource.Spec = libsveltosv1alpha1.EventSourceSpec{
-			ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+		eventSource.Spec = libsveltosv1beta1.EventSourceSpec{
+			ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 				{
 					Group:    randomString(),
 					Version:  randomString(),
@@ -540,7 +540,7 @@ var _ = Describe("EventTrigger Predicates: EventSourcePredicates", func() {
 			},
 		}
 
-		oldEventSource := &libsveltosv1alpha1.EventSource{
+		oldEventSource := &libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: eventSource.Name,
 			},
@@ -558,8 +558,8 @@ var _ = Describe("EventTrigger Predicates: EventSourcePredicates", func() {
 	It("Update does not reprocesses EventSource spec has not changed", func() {
 		hcrPredicate := controllers.EventSourcePredicates(logger)
 
-		eventSource.Spec = libsveltosv1alpha1.EventSourceSpec{
-			ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+		eventSource.Spec = libsveltosv1beta1.EventSourceSpec{
+			ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 				{
 					Group:    randomString(),
 					Version:  randomString(),
@@ -569,7 +569,7 @@ var _ = Describe("EventTrigger Predicates: EventSourcePredicates", func() {
 			},
 		}
 
-		oldEventSource := &libsveltosv1alpha1.EventSource{
+		oldEventSource := &libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: eventSource.Name,
 			},

@@ -31,10 +31,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
-	"github.com/projectsveltos/event-manager/api/v1alpha1"
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/controllers"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 var _ = Describe("Fetcher", func() {
@@ -65,7 +65,7 @@ var _ = Describe("Fetcher", func() {
 				Name:      randomString(),
 				Namespace: randomString(),
 			},
-			Type: libsveltosv1alpha1.ClusterProfileSecretType,
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
 		}
 
 		initObjects := []client.Object{
@@ -91,7 +91,7 @@ var _ = Describe("Fetcher", func() {
 				// PolicyRef does not set namespace when referencing Secret. So cluster namespace
 				// is used
 			},
-			Type: libsveltosv1alpha1.ClusterProfileSecretType,
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
 		}
 
 		configMap := &corev1.ConfigMap{
@@ -101,19 +101,19 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		e := &v1alpha1.EventTrigger{
+		e := &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventTriggerSpec{
-				PolicyRefs: []configv1alpha1.PolicyRef{
+			Spec: v1beta1.EventTriggerSpec{
+				PolicyRefs: []configv1beta1.PolicyRef{
 					{
-						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
+						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
 						Name:      configMap.Name,
 						Namespace: configMap.Namespace,
 					},
 					{
-						Kind:      string(libsveltosv1alpha1.SecretReferencedResourceKind),
+						Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
 						Name:      secret.Name,
 						Namespace: "", // leaving it empty to use cluster namespace
 					},
@@ -151,18 +151,18 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		eventSource := &libsveltosv1alpha1.EventSource{
+		eventSource := &libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
 		}
 
-		clusterType := libsveltosv1alpha1.ClusterTypeCapi
-		eventReport := &libsveltosv1alpha1.EventReport{
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+		eventReport := &libsveltosv1beta1.EventReport{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      eventSource.Name,
 				Namespace: cluster.Namespace,
-				Labels:    libsveltosv1alpha1.GetEventReportLabels(eventSource.Name, cluster.Name, &clusterType),
+				Labels:    libsveltosv1beta1.GetEventReportLabels(eventSource.Name, cluster.Name, &clusterType),
 			},
 		}
 
@@ -180,17 +180,17 @@ var _ = Describe("Fetcher", func() {
 	})
 
 	It("fetchEventSource fetches EventSource", func() {
-		eventSource := &libsveltosv1alpha1.EventSource{
+		eventSource := &libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
 		}
 
-		e := &v1alpha1.EventTrigger{
+		e := &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventTriggerSpec{
+			Spec: v1beta1.EventTriggerSpec{
 				EventSourceName: eventSource.Name,
 			},
 		}
@@ -213,7 +213,7 @@ var _ = Describe("Fetcher", func() {
 				Name:      randomString(),
 				Namespace: randomString(),
 			},
-			Type: libsveltosv1alpha1.ClusterProfileSecretType,
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
 		}
 
 		configMap := &corev1.ConfigMap{
@@ -232,34 +232,34 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		eventSource := &libsveltosv1alpha1.EventSource{
+		eventSource := &libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
 		}
 
-		clusterType := libsveltosv1alpha1.ClusterTypeCapi
-		eventReport := &libsveltosv1alpha1.EventReport{
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+		eventReport := &libsveltosv1beta1.EventReport{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      eventSource.Name,
 				Namespace: cluster.Namespace,
-				Labels:    libsveltosv1alpha1.GetEventReportLabels(eventSource.Name, cluster.Name, &clusterType),
+				Labels:    libsveltosv1beta1.GetEventReportLabels(eventSource.Name, cluster.Name, &clusterType),
 			},
 		}
 
-		e := &v1alpha1.EventTrigger{
+		e := &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: v1alpha1.EventTriggerSpec{
-				PolicyRefs: []configv1alpha1.PolicyRef{
+			Spec: v1beta1.EventTriggerSpec{
+				PolicyRefs: []configv1beta1.PolicyRef{
 					{
-						Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
+						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
 						Name:      configMap.Name,
 						Namespace: "", // leaving it empty to use cluster namespace
 					},
 					{
-						Kind:      string(libsveltosv1alpha1.SecretReferencedResourceKind),
+						Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
 						Name:      secret.Name,
 						Namespace: secret.Namespace,
 					},

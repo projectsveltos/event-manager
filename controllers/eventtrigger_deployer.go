@@ -44,10 +44,10 @@ import (
 	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/pkg/scope"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
@@ -69,7 +69,7 @@ const (
 )
 
 type getCurrentHash func(tx context.Context, c client.Client,
-	chc *v1alpha1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error)
+	chc *v1beta1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error)
 
 type feature struct {
 	id          string
@@ -79,7 +79,7 @@ type feature struct {
 }
 
 func (r *EventTriggerReconciler) isClusterAShardMatch(ctx context.Context,
-	clusterInfo *libsveltosv1alpha1.ClusterInfo) (bool, error) {
+	clusterInfo *libsveltosv1beta1.ClusterInfo) (bool, error) {
 
 	clusterType := clusterproxy.GetClusterType(&clusterInfo.Cluster)
 	cluster, err := clusterproxy.GetCluster(ctx, r.Client, clusterInfo.Cluster.Namespace,
@@ -114,7 +114,7 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 			return err
 		}
 
-		var clusterInfo *libsveltosv1alpha1.ClusterInfo
+		var clusterInfo *libsveltosv1beta1.ClusterInfo
 		if !shardMatch {
 			l := logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s",
 				c.Cluster.Kind, c.Cluster.Namespace, c.Cluster.Name))
@@ -122,7 +122,7 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 			// Since cluster is not a shard match, another deployment will deploy and update
 			// this specific clusterInfo status. Here we simply return current status.
 			clusterInfo = c
-			if clusterInfo.Status != libsveltosv1alpha1.SveltosStatusProvisioned {
+			if clusterInfo.Status != libsveltosv1beta1.SveltosStatusProvisioned {
 				allProcessed = false
 			}
 			// This is a required parameter. It is set by the deployment matching the
@@ -138,7 +138,7 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 			}
 			if clusterInfo != nil {
 				resource.Status.ClusterInfo[i] = *clusterInfo
-				if clusterInfo.Status != libsveltosv1alpha1.SveltosStatusProvisioned {
+				if clusterInfo.Status != libsveltosv1beta1.SveltosStatusProvisioned {
 					allProcessed = false
 				}
 			}
@@ -176,7 +176,7 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 			continue
 		}
 
-		if !shardMatch && resource.Status.ClusterInfo[i].Status != libsveltosv1alpha1.SveltosStatusRemoved {
+		if !shardMatch && resource.Status.ClusterInfo[i].Status != libsveltosv1beta1.SveltosStatusRemoved {
 			// If shard is not a match, wait for other controller to remove
 			err = fmt.Errorf("remove pending")
 			continue
@@ -190,7 +190,7 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 			continue
 		}
 
-		resource.Status.ClusterInfo[i].Status = libsveltosv1alpha1.SveltosStatusRemoved
+		resource.Status.ClusterInfo[i].Status = libsveltosv1beta1.SveltosStatusRemoved
 	}
 
 	return err
@@ -199,12 +199,12 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 // processEventTriggerForCluster deploys necessary resources in managed cluster.
 func processEventTriggerForCluster(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName, applicant, featureID string,
-	clusterType libsveltosv1alpha1.ClusterType, options deployer.Options, logger logr.Logger) error {
+	clusterType libsveltosv1beta1.ClusterType, options deployer.Options, logger logr.Logger) error {
 
 	logger = logger.WithValues("eventTrigger", applicant)
 	logger = logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s", clusterType, clusterNamespace, clusterName))
 
-	resource := &v1alpha1.EventTrigger{}
+	resource := &v1beta1.EventTrigger{}
 	err := c.Get(ctx, types.NamespacedName{Name: applicant}, resource)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -240,11 +240,11 @@ func processEventTriggerForCluster(ctx context.Context, c client.Client,
 // undeployEventTriggerResourcesFromCluster cleans resources associtated with EventTrigger instance from cluster
 func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName, applicant, featureID string,
-	clusterType libsveltosv1alpha1.ClusterType, options deployer.Options, logger logr.Logger) error {
+	clusterType libsveltosv1beta1.ClusterType, options deployer.Options, logger logr.Logger) error {
 
 	logger = logger.WithValues("eventTrigger", applicant)
 
-	resource := &v1alpha1.EventTrigger{}
+	resource := &v1beta1.EventTrigger{}
 	err := c.Get(ctx, types.NamespacedName{Name: applicant}, resource)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -271,7 +271,7 @@ func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Clie
 
 // eventTriggerHash returns the EventTrigger hash
 func eventTriggerHash(ctx context.Context, c client.Client,
-	e *v1alpha1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error) {
+	e *v1beta1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error) {
 
 	resources, err := fetchReferencedResources(ctx, c, e, cluster, logger)
 	if err != nil {
@@ -287,9 +287,9 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 			config += render.AsCode(r.Data)
 		case *corev1.Secret:
 			config += render.AsCode(r.Data)
-		case *libsveltosv1alpha1.EventSource:
+		case *libsveltosv1beta1.EventSource:
 			config += render.AsCode(r.Spec)
-		case *libsveltosv1alpha1.EventReport:
+		case *libsveltosv1beta1.EventReport:
 			config += render.AsCode(r.Spec)
 		default:
 			panic(1)
@@ -304,7 +304,7 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 // processEventTrigger detects whether it is needed to deploy EventBasedAddon resources in current passed cluster.
 func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
 	cluster *corev1.ObjectReference, f feature, logger logr.Logger,
-) (*libsveltosv1alpha1.ClusterInfo, error) {
+) (*libsveltosv1beta1.ClusterInfo, error) {
 
 	if !isClusterStillMatching(eScope, cluster) {
 		return r.removeEventTrigger(ctx, eScope, cluster, f, logger)
@@ -341,7 +341,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 			currentHash, hash))
 	}
 
-	var status *libsveltosv1alpha1.SveltosFeatureStatus
+	var status *libsveltosv1beta1.SveltosFeatureStatus
 	var result deployer.Result
 
 	if isConfigSame {
@@ -357,26 +357,26 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		if result.Err != nil {
 			errorMessage = result.Err.Error()
 		}
-		clusterInfo := &libsveltosv1alpha1.ClusterInfo{
+		clusterInfo := &libsveltosv1beta1.ClusterInfo{
 			Cluster:        *cluster,
 			Status:         *status,
 			Hash:           currentHash,
 			FailureMessage: &errorMessage,
 		}
 
-		if *status == libsveltosv1alpha1.SveltosStatusProvisioned {
+		if *status == libsveltosv1beta1.SveltosStatusProvisioned {
 			return clusterInfo, nil
 		}
-		if *status == libsveltosv1alpha1.SveltosStatusProvisioning {
+		if *status == libsveltosv1beta1.SveltosStatusProvisioning {
 			return clusterInfo, fmt.Errorf("EventTrigger is still being provisioned")
 		}
-	} else if isConfigSame && currentStatus != nil && *currentStatus == libsveltosv1alpha1.SveltosStatusProvisioned {
+	} else if isConfigSame && currentStatus != nil && *currentStatus == libsveltosv1beta1.SveltosStatusProvisioned {
 		logger.V(logs.LogInfo).Info("already deployed")
-		s := libsveltosv1alpha1.SveltosStatusProvisioned
+		s := libsveltosv1beta1.SveltosStatusProvisioned
 		status = &s
 	} else {
 		logger.V(logs.LogInfo).Info("no result is available. queue job and mark status as provisioning")
-		s := libsveltosv1alpha1.SveltosStatusProvisioning
+		s := libsveltosv1beta1.SveltosStatusProvisioning
 		status = &s
 
 		// Getting here means either EventTrigger failed to be deployed or EventTrigger has changed.
@@ -387,7 +387,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		}
 	}
 
-	clusterInfo := &libsveltosv1alpha1.ClusterInfo{
+	clusterInfo := &libsveltosv1beta1.ClusterInfo{
 		Cluster:        *cluster,
 		Status:         *status,
 		Hash:           currentHash,
@@ -398,7 +398,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 }
 
 func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
-	cluster *corev1.ObjectReference, f feature, logger logr.Logger) (*libsveltosv1alpha1.ClusterInfo, error) {
+	cluster *corev1.ObjectReference, f feature, logger logr.Logger) (*libsveltosv1beta1.ClusterInfo, error) {
 
 	resource := eScope.EventTrigger
 
@@ -429,18 +429,18 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 		clusterproxy.GetClusterType(cluster), true)
 	status := r.convertResultStatus(result)
 
-	clusterInfo := &libsveltosv1alpha1.ClusterInfo{
+	clusterInfo := &libsveltosv1beta1.ClusterInfo{
 		Cluster: *cluster,
-		Status:  libsveltosv1alpha1.SveltosStatusRemoving,
+		Status:  libsveltosv1beta1.SveltosStatusRemoving,
 		Hash:    nil,
 	}
 
 	if status != nil {
-		if *status == libsveltosv1alpha1.SveltosStatusRemoving {
+		if *status == libsveltosv1beta1.SveltosStatusRemoving {
 			return clusterInfo, fmt.Errorf("feature is still being removed")
 		}
 
-		if *status == libsveltosv1alpha1.SveltosStatusRemoved {
+		if *status == libsveltosv1beta1.SveltosStatusRemoved {
 			if err := removeClusterInfoEntry(ctx, r.Client, cluster.Namespace, cluster.Name,
 				clusterproxy.GetClusterType(cluster), resource, logger); err != nil {
 				return nil, err
@@ -462,7 +462,7 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 }
 
 // isClusterEntryRemoved returns true if feature is there is no entry for cluster in Status.ClusterInfo
-func (r *EventTriggerReconciler) isClusterEntryRemoved(resource *v1alpha1.EventTrigger,
+func (r *EventTriggerReconciler) isClusterEntryRemoved(resource *v1beta1.EventTrigger,
 	cluster *corev1.ObjectReference) bool {
 
 	for i := range resource.Status.ClusterInfo {
@@ -474,19 +474,19 @@ func (r *EventTriggerReconciler) isClusterEntryRemoved(resource *v1alpha1.EventT
 	return true
 }
 
-func (r *EventTriggerReconciler) convertResultStatus(result deployer.Result) *libsveltosv1alpha1.SveltosFeatureStatus {
+func (r *EventTriggerReconciler) convertResultStatus(result deployer.Result) *libsveltosv1beta1.SveltosFeatureStatus {
 	switch result.ResultStatus {
 	case deployer.Deployed:
-		s := libsveltosv1alpha1.SveltosStatusProvisioned
+		s := libsveltosv1beta1.SveltosStatusProvisioned
 		return &s
 	case deployer.Failed:
-		s := libsveltosv1alpha1.SveltosStatusFailed
+		s := libsveltosv1beta1.SveltosStatusFailed
 		return &s
 	case deployer.InProgress:
-		s := libsveltosv1alpha1.SveltosStatusProvisioning
+		s := libsveltosv1beta1.SveltosStatusProvisioning
 		return &s
 	case deployer.Removed:
-		s := libsveltosv1alpha1.SveltosStatusRemoved
+		s := libsveltosv1beta1.SveltosStatusRemoved
 		return &s
 	case deployer.Unavailable:
 		return nil
@@ -497,8 +497,8 @@ func (r *EventTriggerReconciler) convertResultStatus(result deployer.Result) *li
 
 // getClusterHashAndStatus returns the hash of the EventTrigger that was deployed/evaluated in a given
 // Cluster (if ever deployed/evaluated)
-func (r *EventTriggerReconciler) getClusterHashAndStatus(resource *v1alpha1.EventTrigger,
-	cluster *corev1.ObjectReference) ([]byte, *libsveltosv1alpha1.SveltosFeatureStatus) {
+func (r *EventTriggerReconciler) getClusterHashAndStatus(resource *v1beta1.EventTrigger,
+	cluster *corev1.ObjectReference) ([]byte, *libsveltosv1beta1.SveltosFeatureStatus) {
 
 	for i := range resource.Status.ClusterInfo {
 		clusterInfo := &resource.Status.ClusterInfo[i]
@@ -512,7 +512,7 @@ func (r *EventTriggerReconciler) getClusterHashAndStatus(resource *v1alpha1.Even
 
 // isPaused returns true if Sveltos/CAPI Cluster is paused or EventTrigger has paused annotation.
 func (r *EventTriggerReconciler) isPaused(ctx context.Context, cluster *corev1.ObjectReference,
-	resource *v1alpha1.EventTrigger) (bool, error) {
+	resource *v1beta1.EventTrigger) (bool, error) {
 
 	isClusterPaused, err := clusterproxy.IsClusterPaused(ctx, r.Client, cluster.Namespace, cluster.Name,
 		clusterproxy.GetClusterType(cluster))
@@ -574,8 +574,8 @@ func isClusterStillMatching(eScope *scope.EventTriggerScope, cluster *corev1.Obj
 
 // isClusterConditionForCluster returns true if the ClusterCondition is for the cluster clusterType, clusterNamespace,
 // clusterName
-func isClusterInfoForCluster(clusterInfo *libsveltosv1alpha1.ClusterInfo, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType) bool {
+func isClusterInfoForCluster(clusterInfo *libsveltosv1beta1.ClusterInfo, clusterNamespace, clusterName string,
+	clusterType libsveltosv1beta1.ClusterType) bool {
 
 	return clusterInfo.Cluster.Namespace == clusterNamespace &&
 		clusterInfo.Cluster.Name == clusterName &&
@@ -583,11 +583,11 @@ func isClusterInfoForCluster(clusterInfo *libsveltosv1alpha1.ClusterInfo, cluste
 }
 
 func removeClusterInfoEntry(ctx context.Context, c client.Client,
-	clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
-	resource *v1alpha1.EventTrigger, logger logr.Logger) error {
+	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
+	resource *v1beta1.EventTrigger, logger logr.Logger) error {
 
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		currentResource := &v1alpha1.EventTrigger{}
+		currentResource := &v1beta1.EventTrigger{}
 		err := c.Get(ctx, types.NamespacedName{Name: resource.Name}, currentResource)
 		if err != nil {
 			return err
@@ -607,15 +607,15 @@ func removeClusterInfoEntry(ctx context.Context, c client.Client,
 	return err
 }
 
-func remove(s []libsveltosv1alpha1.ClusterInfo, i int) []libsveltosv1alpha1.ClusterInfo {
+func remove(s []libsveltosv1beta1.ClusterInfo, i int) []libsveltosv1beta1.ClusterInfo {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
 }
 
 // deployEventSource deploys (creates or updates) referenced EventSource.
 func deployEventSource(ctx context.Context, c client.Client,
-	clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
-	resource *v1alpha1.EventTrigger, logger logr.Logger) error {
+	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
+	resource *v1beta1.EventTrigger, logger logr.Logger) error {
 
 	currentReferenced, err := fetchEventSource(ctx, c, resource.Spec.EventSourceName)
 	if err != nil {
@@ -647,12 +647,12 @@ func deployEventSource(ctx context.Context, c client.Client,
 	return nil
 }
 
-func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, resource *v1alpha1.EventTrigger,
-	eventSource *libsveltosv1alpha1.EventSource, logger logr.Logger) error {
+func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, resource *v1beta1.EventTrigger,
+	eventSource *libsveltosv1beta1.EventSource, logger logr.Logger) error {
 
 	logger = logger.WithValues("eventSource", eventSource.Name)
 
-	currentEventSource := &libsveltosv1alpha1.EventSource{}
+	currentEventSource := &libsveltosv1beta1.EventSource{}
 	err := remoteClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name}, currentEventSource)
 	if err == nil {
 		logger.V(logs.LogDebug).Info("updating eventSource")
@@ -661,7 +661,7 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 		// ServiceAccount representing the tenant admin when fetching resources
 		currentEventSource.Labels = eventSource.Labels
 		currentEventSource.Annotations = map[string]string{
-			libsveltosv1alpha1.DeployedBySveltosAnnotation: "true",
+			libsveltosv1beta1.DeployedBySveltosAnnotation: "true",
 		}
 		deployer.AddOwnerReference(currentEventSource, resource)
 		return remoteClient.Update(ctx, currentEventSource)
@@ -685,8 +685,8 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 // EventSource instance it used to referenced and it is not referencing anymore.
 // An EventSource with zero OwnerReference will be deleted from managed cluster.
 func removeStaleEventSources(ctx context.Context, c client.Client,
-	clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
-	resource *v1alpha1.EventTrigger, logger logr.Logger) error {
+	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
+	resource *v1beta1.EventTrigger, logger logr.Logger) error {
 
 	remoteClient, err := clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
 		"", "", clusterType, logger)
@@ -695,7 +695,7 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 		return err
 	}
 
-	eventSources := &libsveltosv1alpha1.EventSourceList{}
+	eventSources := &libsveltosv1beta1.EventSourceList{}
 	err = remoteClient.List(ctx, eventSources)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get list eventSources: %v", err))
@@ -764,7 +764,7 @@ type currentObject struct {
 // - HelmCharts instantiated from EventTrigger.Spec.HelmCharts using values from resources, collected
 // from the managed cluster, matching the EventSource referenced by EventTrigger
 func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
 	logger logr.Logger) error {
 
 	// Get EventReport
@@ -791,19 +791,19 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 			eventTrigger, nil, logger)
 	}
 
-	var clusterProfiles []*configv1alpha1.ClusterProfile
+	var clusterProfiles []*configv1beta1.ClusterProfile
 	if eventTrigger.Spec.OneForEvent {
 		clusterProfiles, err = instantiateOneClusterProfilePerResource(ctx, c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, &eventReports.Items[0], logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info("failed to create one clusterProfile instance per macthing resource")
+			logger.V(logs.LogInfo).Info("failed to create one clusterProfile instance per matching resource")
 			return err
 		}
 	} else {
 		clusterProfiles, err = instantiateOneClusterProfilePerAllResource(ctx, c, clusterNamespace,
 			clusterName, clusterType, eventTrigger, &eventReports.Items[0], logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info("failed to create one clusterProfile instance per macthing resource")
+			logger.V(logs.LogInfo).Info("failed to create one clusterProfile instance per matching resource")
 			return err
 		}
 	}
@@ -821,10 +821,10 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 // - "Resource" references an unstructured.Unstructured referencing the resource (available only if EventSource.Spec.CollectResources
 // is set to true)
 func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
-	eventReport *libsveltosv1alpha1.EventReport, logger logr.Logger) ([]*configv1alpha1.ClusterProfile, error) {
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
+	eventReport *libsveltosv1beta1.EventReport, logger logr.Logger) ([]*configv1beta1.ClusterProfile, error) {
 
-	clusterProfiles := make([]*configv1alpha1.ClusterProfile, 0)
+	clusterProfiles := make([]*configv1beta1.ClusterProfile, 0)
 	resources, err := getResources(eventReport, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching resources %v", err))
@@ -833,7 +833,7 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 
 	if len(resources) == 0 {
 		for i := range eventReport.Spec.MatchingResources {
-			var clusterProfile *configv1alpha1.ClusterProfile
+			var clusterProfile *configv1beta1.ClusterProfile
 			clusterProfile, err = instantiateClusterProfileForResource(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 				&eventReport.Spec.MatchingResources[i], nil, logger)
 			if err != nil {
@@ -846,7 +846,7 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 
 	for i := range resources {
 		r := &resources[i]
-		var clusterProfile *configv1alpha1.ClusterProfile
+		var clusterProfile *configv1beta1.ClusterProfile
 		matchingResource := corev1.ObjectReference{APIVersion: r.GetAPIVersion(), Kind: r.GetKind(), Namespace: r.GetNamespace(), Name: r.GetName()}
 		clusterProfile, err = instantiateClusterProfileForResource(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 			&matchingResource, r, logger)
@@ -867,9 +867,9 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 // in new ConfigMaps/Secrets and have ClusterProfile.Spec.PolicyRefs reference those;
 // - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EventAddOn
 func instantiateClusterProfileForResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
 	matchingResource *corev1.ObjectReference, resource *unstructured.Unstructured, logger logr.Logger,
-) (*configv1alpha1.ClusterProfile, error) {
+) (*configv1beta1.ClusterProfile, error) {
 
 	object := &currentObject{
 		MatchingResource: *matchingResource,
@@ -892,20 +892,20 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 
 	// If EventTrigger was created by tenant admin, copy label over to created ClusterProfile
 	if eventTrigger.Labels != nil {
-		if serviceAccountName, ok := eventTrigger.Labels[libsveltosv1alpha1.ServiceAccountNameLabel]; ok {
-			labels[libsveltosv1alpha1.ServiceAccountNameLabel] = serviceAccountName
+		if serviceAccountName, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNameLabel]; ok {
+			labels[libsveltosv1beta1.ServiceAccountNameLabel] = serviceAccountName
 		}
-		if serviceAccountNamespace, ok := eventTrigger.Labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel]; ok {
-			labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
+		if serviceAccountNamespace, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNamespaceLabel]; ok {
+			labels[libsveltosv1beta1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
 		}
 	}
 
-	clusterProfile := &configv1alpha1.ClusterProfile{
+	clusterProfile := &configv1beta1.ClusterProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   clusterProfileName,
 			Labels: labels,
 		},
-		Spec: configv1alpha1.Spec{
+		Spec: configv1beta1.Spec{
 			StopMatchingBehavior: eventTrigger.Spec.StopMatchingBehavior,
 			SyncMode:             eventTrigger.Spec.SyncMode,
 			Tier:                 eventTrigger.Spec.Tier,
@@ -919,12 +919,12 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		},
 	}
 
-	if eventTrigger.Spec.DestinationClusterSelector == nil || *eventTrigger.Spec.DestinationClusterSelector == "" {
+	if reflect.DeepEqual(eventTrigger.Spec.DestinationClusterSelector, libsveltosv1beta1.Selector{}) {
 		clusterProfile.Spec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
-		clusterProfile.Spec.ClusterSelector = ""
+		clusterProfile.Spec.ClusterSelector = libsveltosv1beta1.Selector{}
 	} else {
 		clusterProfile.Spec.ClusterRefs = nil
-		clusterProfile.Spec.ClusterSelector = *eventTrigger.Spec.DestinationClusterSelector
+		clusterProfile.Spec.ClusterSelector = eventTrigger.Spec.DestinationClusterSelector
 	}
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
@@ -960,8 +960,8 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 // in new ConfigMaps/Secrets and have ClusterProfile.Spec.PolicyRefs reference those;
 // - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EventAddOn
 func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
-	eventReport *libsveltosv1alpha1.EventReport, logger logr.Logger) ([]*configv1alpha1.ClusterProfile, error) {
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
+	eventReport *libsveltosv1beta1.EventReport, logger logr.Logger) ([]*configv1beta1.ClusterProfile, error) {
 
 	resources, err := getResources(eventReport, logger)
 	if err != nil {
@@ -989,20 +989,20 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 
 	// If EventTrigger was created by tenant admin, copy label over to created ClusterProfile
 	if eventTrigger.Labels != nil {
-		if serviceAccountName, ok := eventTrigger.Labels[libsveltosv1alpha1.ServiceAccountNameLabel]; ok {
-			labels[libsveltosv1alpha1.ServiceAccountNameLabel] = serviceAccountName
+		if serviceAccountName, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNameLabel]; ok {
+			labels[libsveltosv1beta1.ServiceAccountNameLabel] = serviceAccountName
 		}
-		if serviceAccountNamespace, ok := eventTrigger.Labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel]; ok {
-			labels[libsveltosv1alpha1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
+		if serviceAccountNamespace, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNamespaceLabel]; ok {
+			labels[libsveltosv1beta1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
 		}
 	}
 
-	clusterProfile := &configv1alpha1.ClusterProfile{
+	clusterProfile := &configv1beta1.ClusterProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   clusterProfileName,
 			Labels: labels,
 		},
-		Spec: configv1alpha1.Spec{
+		Spec: configv1beta1.Spec{
 			StopMatchingBehavior: eventTrigger.Spec.StopMatchingBehavior,
 			SyncMode:             eventTrigger.Spec.SyncMode,
 			Tier:                 eventTrigger.Spec.Tier,
@@ -1016,12 +1016,12 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 		},
 	}
 
-	if eventTrigger.Spec.DestinationClusterSelector == nil || *eventTrigger.Spec.DestinationClusterSelector == "" {
+	if reflect.DeepEqual(eventTrigger.Spec.DestinationClusterSelector, libsveltosv1beta1.Selector{}) {
 		clusterProfile.Spec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
-		clusterProfile.Spec.ClusterSelector = ""
+		clusterProfile.Spec.ClusterSelector = libsveltosv1beta1.Selector{}
 	} else {
 		clusterProfile.Spec.ClusterRefs = nil
-		clusterProfile.Spec.ClusterSelector = *eventTrigger.Spec.DestinationClusterSelector
+		clusterProfile.Spec.ClusterSelector = eventTrigger.Spec.DestinationClusterSelector
 	}
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
@@ -1043,22 +1043,22 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	clusterProfile.Spec.KustomizationRefs = eventTrigger.Spec.KustomizationRefs
 
 	if createClusterProfile {
-		return []*configv1alpha1.ClusterProfile{clusterProfile}, c.Create(ctx, clusterProfile)
+		return []*configv1beta1.ClusterProfile{clusterProfile}, c.Create(ctx, clusterProfile)
 	}
 
-	return []*configv1alpha1.ClusterProfile{clusterProfile}, updateClusterProfileSpec(ctx, c, clusterProfile, logger)
+	return []*configv1beta1.ClusterProfile{clusterProfile}, updateClusterProfileSpec(ctx, c, clusterProfile, logger)
 }
 
-func getClusterProfilePolicyRefs(policyRef *libsveltosset.Set) []configv1alpha1.PolicyRef {
-	result := make([]configv1alpha1.PolicyRef, policyRef.Len())
+func getClusterProfilePolicyRefs(policyRef *libsveltosset.Set) []configv1beta1.PolicyRef {
+	result := make([]configv1beta1.PolicyRef, policyRef.Len())
 
 	items := policyRef.Items()
 	for i := range items {
-		kind := libsveltosv1alpha1.ConfigMapReferencedResourceKind
+		kind := libsveltosv1beta1.ConfigMapReferencedResourceKind
 		if items[i].Kind == "Secret" {
-			kind = libsveltosv1alpha1.SecretReferencedResourceKind
+			kind = libsveltosv1beta1.SecretReferencedResourceKind
 		}
-		result[i] = configv1alpha1.PolicyRef{
+		result[i] = configv1beta1.PolicyRef{
 			Namespace: items[i].Namespace,
 			Name:      items[i].Name,
 			Kind:      string(kind),
@@ -1067,10 +1067,10 @@ func getClusterProfilePolicyRefs(policyRef *libsveltosset.Set) []configv1alpha1.
 	return result
 }
 
-func updateClusterProfileSpec(ctx context.Context, c client.Client, clusterProfile *configv1alpha1.ClusterProfile,
+func updateClusterProfileSpec(ctx context.Context, c client.Client, clusterProfile *configv1beta1.ClusterProfile,
 	logger logr.Logger) error {
 
-	currentClusterProfile := &configv1alpha1.ClusterProfile{}
+	currentClusterProfile := &configv1beta1.ClusterProfile{}
 
 	err := c.Get(ctx, types.NamespacedName{Name: clusterProfile.Name}, currentClusterProfile)
 	if err != nil {
@@ -1084,7 +1084,7 @@ func updateClusterProfileSpec(ctx context.Context, c client.Client, clusterProfi
 }
 
 // getResources returns a slice of unstructured.Unstructured by processing eventReport.Spec.Resources field
-func getResources(eventReport *libsveltosv1alpha1.EventReport, logger logr.Logger) ([]unstructured.Unstructured, error) {
+func getResources(eventReport *libsveltosv1beta1.EventReport, logger logr.Logger) ([]unstructured.Unstructured, error) {
 	elements := strings.Split(string(eventReport.Spec.Resources), "---")
 	result := make([]unstructured.Unstructured, 0)
 	for i := range elements {
@@ -1106,8 +1106,8 @@ func getResources(eventReport *libsveltosv1alpha1.EventReport, logger logr.Logge
 	return result, nil
 }
 
-func instantiateHelmChart(templateName string, helmCharts []configv1alpha1.HelmChart, data any,
-	logger logr.Logger) ([]configv1alpha1.HelmChart, error) {
+func instantiateHelmChart(templateName string, helmCharts []configv1beta1.HelmChart, data any,
+	logger logr.Logger) ([]configv1beta1.HelmChart, error) {
 
 	helmChartJson, err := json.Marshal(helmCharts)
 	if err != nil {
@@ -1127,7 +1127,7 @@ func instantiateHelmChart(templateName string, helmCharts []configv1alpha1.HelmC
 		return nil, err
 	}
 
-	instantiatedHelmCharts := make([]configv1alpha1.HelmChart, 0)
+	instantiatedHelmCharts := make([]configv1beta1.HelmChart, 0)
 	err = json.Unmarshal(buffer.Bytes(), &instantiatedHelmCharts)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to unmarshal helmCharts: %v", err))
@@ -1170,16 +1170,16 @@ func instantiateDataSection(templateName string, content map[string]string, data
 
 // instantiateHelmChartsWithResource instantiate eventTrigger.Spec.HelmCharts using information from passed in object
 // which represents one of the resource matching referenced EventSource in the managed cluster.
-func instantiateHelmChartsWithResource(templateName string, helmCharts []configv1alpha1.HelmChart, object *currentObject,
-	logger logr.Logger) ([]configv1alpha1.HelmChart, error) {
+func instantiateHelmChartsWithResource(templateName string, helmCharts []configv1beta1.HelmChart, object *currentObject,
+	logger logr.Logger) ([]configv1beta1.HelmChart, error) {
 
 	return instantiateHelmChart(templateName, helmCharts, object, logger)
 }
 
 // instantiateHelmChartsWithAllResources instantiate eventTrigger.Spec.HelmCharts using information from passed in objects
 // which represent all of the resources matching referenced EventSource in the managed cluster.
-func instantiateHelmChartsWithAllResources(templateName string, helmCharts []configv1alpha1.HelmChart, objects *currentObjects,
-	logger logr.Logger) ([]configv1alpha1.HelmChart, error) {
+func instantiateHelmChartsWithAllResources(templateName string, helmCharts []configv1beta1.HelmChart, objects *currentObjects,
+	logger logr.Logger) ([]configv1beta1.HelmChart, error) {
 
 	return instantiateHelmChart(templateName, helmCharts, objects, logger)
 }
@@ -1187,7 +1187,7 @@ func instantiateHelmChartsWithAllResources(templateName string, helmCharts []con
 // instantiateReferencedPolicies instantiate eventTrigger.Spec.PolicyRefs using information from passed in objects
 // which represent all of the resources matching referenced EventSource in the managed cluster.
 func instantiateReferencedPolicies(ctx context.Context, c client.Client, templateName string,
-	eventTrigger *v1alpha1.EventTrigger, cluster *corev1.ObjectReference, objects any,
+	eventTrigger *v1beta1.EventTrigger, cluster *corev1.ObjectReference, objects any,
 	labels map[string]string, logger logr.Logger) (*libsveltosset.Set, error) {
 
 	result := libsveltosset.Set{}
@@ -1204,7 +1204,7 @@ func instantiateReferencedPolicies(ctx context.Context, c client.Client, templat
 		ref := refs[i]
 		apiVersion, kind := ref.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 
-		if _, ok := ref.GetAnnotations()[libsveltosv1alpha1.PolicyTemplateAnnotation]; !ok {
+		if _, ok := ref.GetAnnotations()[libsveltosv1beta1.PolicyTemplateAnnotation]; !ok {
 			// referenced ConfigMap/Secret is not a template. So there is no
 			// need to instantiate a new one. Generated ClusterProfile can directly
 			// reference this one
@@ -1283,7 +1283,7 @@ func createConfigMap(ctx context.Context, c client.Client, ref client.Object, na
 			Name:        name,
 			Namespace:   ReportNamespace,
 			Labels:      labels,
-			Annotations: ref.GetAnnotations(), //  libsveltosv1alpha1.PolicyTemplateAnnotation might be set
+			Annotations: ref.GetAnnotations(), //  libsveltosv1beta1.PolicyTemplateAnnotation might be set
 		},
 		Data: content,
 	}
@@ -1304,10 +1304,10 @@ func createSecret(ctx context.Context, c client.Client, ref client.Object, name 
 			Name:        name,
 			Namespace:   ReportNamespace,
 			Labels:      labels,
-			Annotations: ref.GetAnnotations(), //  libsveltosv1alpha1.PolicyTemplateAnnotation might be set
+			Annotations: ref.GetAnnotations(), //  libsveltosv1beta1.PolicyTemplateAnnotation might be set
 		},
 		Data: data,
-		Type: libsveltosv1alpha1.ClusterProfileSecretType,
+		Type: libsveltosv1beta1.ClusterProfileSecretType,
 	}
 
 	return c.Create(ctx, secret)
@@ -1360,7 +1360,7 @@ func updateSecret(ctx context.Context, c client.Client, name string, labels, con
 
 	secret.Labels = labels
 	secret.Data = data
-	secret.Type = libsveltosv1alpha1.ClusterProfileSecretType
+	secret.Type = libsveltosv1beta1.ClusterProfileSecretType
 
 	return c.Update(ctx, secret)
 }
@@ -1385,16 +1385,16 @@ func getTemplateName(clusterNamespace, clusterName, requestorName string) string
 }
 
 func getClusterRef(clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType) *corev1.ObjectReference {
+	clusterType libsveltosv1beta1.ClusterType) *corev1.ObjectReference {
 
 	ref := &corev1.ObjectReference{
 		Namespace: clusterNamespace,
 		Name:      clusterName,
 	}
 
-	if clusterType == libsveltosv1alpha1.ClusterTypeSveltos {
-		ref.APIVersion = libsveltosv1alpha1.GroupVersion.String()
-		ref.Kind = libsveltosv1alpha1.SveltosClusterKind
+	if clusterType == libsveltosv1beta1.ClusterTypeSveltos {
+		ref.APIVersion = libsveltosv1beta1.GroupVersion.String()
+		ref.Kind = libsveltosv1beta1.SveltosClusterKind
 	} else {
 		ref.APIVersion = clusterv1.GroupVersion.String()
 		ref.Kind = "Cluster"
@@ -1413,7 +1413,7 @@ func getClusterProfileName(ctx context.Context, c client.Client, labels map[stri
 		client.MatchingLabels(labels),
 	}
 
-	clusterProfileList := &configv1alpha1.ClusterProfileList{}
+	clusterProfileList := &configv1beta1.ClusterProfileList{}
 	err = c.List(ctx, clusterProfileList, listOptions...)
 	if err != nil {
 		return
@@ -1516,7 +1516,7 @@ func getInstantiatedObjectName(objects []client.Object) (name string, create boo
 // getInstantiatedObjectLabels returns the labels to add to a ClusterProfile created
 // by an EventTrigger for a given cluster
 func getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName string,
-	clusterType libsveltosv1alpha1.ClusterType) map[string]string {
+	clusterType libsveltosv1beta1.ClusterType) map[string]string {
 
 	return map[string]string{
 		eventTriggerNameLabel: eventTriggerName,
@@ -1541,8 +1541,8 @@ func getInstantiatedObjectLabelsForResource(resourceNamespace, resourceName stri
 }
 
 func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
-	clusterProfiles []*configv1alpha1.ClusterProfile, logger logr.Logger) error {
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
+	clusterProfiles []*configv1beta1.ClusterProfile, logger logr.Logger) error {
 
 	if err := removeClusterProfiles(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 		clusterProfiles, logger); err != nil {
@@ -1550,11 +1550,11 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 		return err
 	}
 
-	policyRefs := make(map[libsveltosv1alpha1.PolicyRef]bool) // ignore deploymentType
+	policyRefs := make(map[libsveltosv1beta1.PolicyRef]bool) // ignore deploymentType
 	for i := range clusterProfiles {
 		cp := clusterProfiles[i]
 		for j := range cp.Spec.PolicyRefs {
-			policyRefs[libsveltosv1alpha1.PolicyRef{
+			policyRefs[libsveltosv1beta1.PolicyRef{
 				Namespace: cp.Spec.PolicyRefs[j].Namespace,
 				Name:      cp.Spec.PolicyRefs[j].Name,
 				Kind:      cp.Spec.PolicyRefs[j].Kind,
@@ -1583,8 +1583,8 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 // policyRefs arg represents all the ConfigMap the EventTrigger instance is currently managing for the
 // given cluster
 func removeConfigMaps(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
-	policyRefs map[libsveltosv1alpha1.PolicyRef]bool, logger logr.Logger) error {
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
+	policyRefs map[libsveltosv1beta1.PolicyRef]bool, logger logr.Logger) error {
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 
@@ -1619,8 +1619,8 @@ func removeConfigMaps(ctx context.Context, c client.Client, clusterNamespace, cl
 // policyRefs arg represents all the ConfigMap the EventTrigger instance is currently managing for the
 // given cluster
 func removeSecrets(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
-	policyRefs map[libsveltosv1alpha1.PolicyRef]bool, logger logr.Logger) error {
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
+	policyRefs map[libsveltosv1beta1.PolicyRef]bool, logger logr.Logger) error {
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 
@@ -1655,8 +1655,8 @@ func removeSecrets(ctx context.Context, c client.Client, clusterNamespace, clust
 // clusterProfiles arg represents all the ClusterProfiles the EventTrigger instance is currently managing for the
 // given cluster
 func removeClusterProfiles(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1alpha1.ClusterType, eventTrigger *v1alpha1.EventTrigger,
-	clusterProfiles []*configv1alpha1.ClusterProfile, logger logr.Logger) error {
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
+	clusterProfiles []*configv1beta1.ClusterProfile, logger logr.Logger) error {
 
 	// Build a map of current ClusterProfiles for faster indexing
 	// Those are the clusterProfiles current eventTrigger instance is programming
@@ -1672,7 +1672,7 @@ func removeClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 		client.MatchingLabels(labels),
 	}
 
-	clusterProfileList := &configv1alpha1.ClusterProfileList{}
+	clusterProfileList := &configv1beta1.ClusterProfileList{}
 	err := c.List(ctx, clusterProfileList, listOptions...)
 	if err != nil {
 		return err

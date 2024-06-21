@@ -31,22 +31,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/pkg/scope"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 const eventTriggerNamePrefix = "scope-"
 
 var _ = Describe("EventTriggerScope", func() {
-	var eventTrigger *v1alpha1.EventTrigger
+	var eventTrigger *v1beta1.EventTrigger
 	var c client.Client
 	var logger logr.Logger
 
 	BeforeEach(func() {
 		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 
-		eventTrigger = &v1alpha1.EventTrigger{
+		eventTrigger = &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: eventTriggerNamePrefix + randomString(),
 			},
@@ -94,7 +94,13 @@ var _ = Describe("EventTriggerScope", func() {
 	})
 
 	It("GetSelector returns EventTrigger ClusterSelector", func() {
-		eventTrigger.Spec.SourceClusterSelector = libsveltosv1alpha1.Selector("zone=east")
+		eventTrigger.Spec.SourceClusterSelector = libsveltosv1beta1.Selector{
+			LabelSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"zone": "east",
+				},
+			},
+		}
 		params := scope.EventTriggerScopeParams{
 			Client:       c,
 			EventTrigger: eventTrigger,
@@ -105,7 +111,8 @@ var _ = Describe("EventTriggerScope", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(scope).ToNot(BeNil())
 
-		Expect(scope.GetSelector()).To(Equal(string(eventTrigger.Spec.SourceClusterSelector)))
+		Expect(reflect.DeepEqual(*scope.GetSelector(),
+			eventTrigger.Spec.SourceClusterSelector.LabelSelector)).To(BeTrue())
 	})
 
 	It("Close updates EventTrigger", func() {
@@ -122,7 +129,7 @@ var _ = Describe("EventTriggerScope", func() {
 		eventTrigger.Labels = map[string]string{"clusters": "hr"}
 		Expect(scope.Close(context.TODO())).To(Succeed())
 
-		currentEventTrigger := &v1alpha1.EventTrigger{}
+		currentEventTrigger := &v1beta1.EventTrigger{}
 		Expect(c.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name}, currentEventTrigger)).To(Succeed())
 		Expect(currentEventTrigger.Labels).ToNot(BeNil())
 		Expect(len(currentEventTrigger.Labels)).To(Equal(1))
@@ -166,11 +173,11 @@ var _ = Describe("EventTriggerScope", func() {
 		clusterNamespace := randomString()
 		clusterName := randomString()
 		hash := []byte(randomString())
-		clusterInfo := libsveltosv1alpha1.ClusterInfo{
+		clusterInfo := libsveltosv1beta1.ClusterInfo{
 			Cluster: corev1.ObjectReference{Namespace: clusterNamespace, Name: clusterName},
 			Hash:    hash,
 		}
-		scope.SetClusterInfo([]libsveltosv1alpha1.ClusterInfo{clusterInfo})
+		scope.SetClusterInfo([]libsveltosv1beta1.ClusterInfo{clusterInfo})
 		Expect(eventTrigger.Status.ClusterInfo).ToNot(BeNil())
 		Expect(len(eventTrigger.Status.ClusterInfo)).To(Equal(1))
 		Expect(eventTrigger.Status.ClusterInfo[0].Cluster.Namespace).To(Equal(clusterNamespace))

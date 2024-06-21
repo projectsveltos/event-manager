@@ -33,10 +33,10 @@ import (
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	sveltosmanagercontrollers "github.com/projectsveltos/addon-controller/controllers"
-	"github.com/projectsveltos/event-manager/api/v1alpha1"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 const (
@@ -55,23 +55,20 @@ func randomString() string {
 }
 
 func getEventTrigger(namePrefix, eventSourceName string, clusterLabels map[string]string,
-	policyRefs []configv1alpha1.PolicyRef) *v1alpha1.EventTrigger {
+	policyRefs []configv1beta1.PolicyRef) *v1beta1.EventTrigger {
 
-	selector := ""
-	for k := range clusterLabels {
-		if selector != "" {
-			selector += ","
-		}
-		selector += fmt.Sprintf("%s=%s", k, clusterLabels[k])
-	}
-	resource := &v1alpha1.EventTrigger{
+	resource := &v1beta1.EventTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namePrefix + randomString(),
 		},
-		Spec: v1alpha1.EventTriggerSpec{
-			SourceClusterSelector: libsveltosv1alpha1.Selector(selector),
-			EventSourceName:       eventSourceName,
-			PolicyRefs:            policyRefs,
+		Spec: v1beta1.EventTriggerSpec{
+			SourceClusterSelector: libsveltosv1beta1.Selector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: clusterLabels,
+				},
+			},
+			EventSourceName: eventSourceName,
+			PolicyRefs:      policyRefs,
 		},
 	}
 
@@ -92,8 +89,8 @@ func getKindWorkloadClusterKubeconfig() (client.Client, error) {
 	return client.New(restConfig, client.Options{Scheme: scheme})
 }
 
-func verifyClusterSummary(clusterProfile *configv1alpha1.ClusterProfile,
-	clusterNamespace, clusterName string) *configv1alpha1.ClusterSummary {
+func verifyClusterSummary(clusterProfile *configv1beta1.ClusterProfile,
+	clusterNamespace, clusterName string) *configv1beta1.ClusterSummary {
 
 	Byf("Verifying ClusterSummary is created")
 	Eventually(func() bool {
@@ -110,7 +107,7 @@ func verifyClusterSummary(clusterProfile *configv1alpha1.ClusterProfile,
 
 	Byf("Verifying ClusterSummary configuration")
 	Eventually(func() error {
-		var currentClusterSummary *configv1alpha1.ClusterSummary
+		var currentClusterSummary *configv1beta1.ClusterSummary
 		currentClusterSummary, err = getClusterSummary(context.TODO(),
 			clusterProfile.Name, clusterNamespace, clusterName)
 		if err != nil {
@@ -144,9 +141,9 @@ func verifyClusterSummary(clusterProfile *configv1alpha1.ClusterProfile,
 	return clusterSummary
 }
 
-func verifyFeatureStatusIsProvisioned(clusterSummaryNamespace, clusterSummaryName string, featureID configv1alpha1.FeatureID) {
+func verifyFeatureStatusIsProvisioned(clusterSummaryNamespace, clusterSummaryName string, featureID configv1beta1.FeatureID) {
 	Eventually(func() bool {
-		currentClusterSummary := &configv1alpha1.ClusterSummary{}
+		currentClusterSummary := &configv1beta1.ClusterSummary{}
 		err := k8sClient.Get(context.TODO(),
 			types.NamespacedName{Namespace: clusterSummaryNamespace, Name: clusterSummaryName},
 			currentClusterSummary)
@@ -155,7 +152,7 @@ func verifyFeatureStatusIsProvisioned(clusterSummaryNamespace, clusterSummaryNam
 		}
 		for i := range currentClusterSummary.Status.FeatureSummaries {
 			if currentClusterSummary.Status.FeatureSummaries[i].FeatureID == featureID &&
-				currentClusterSummary.Status.FeatureSummaries[i].Status == configv1alpha1.FeatureStatusProvisioned {
+				currentClusterSummary.Status.FeatureSummaries[i].Status == configv1beta1.FeatureStatusProvisioned {
 
 				return true
 			}
@@ -165,25 +162,25 @@ func verifyFeatureStatusIsProvisioned(clusterSummaryNamespace, clusterSummaryNam
 }
 
 func getClusterSummary(ctx context.Context,
-	clusterProfileName, clusterNamespace, clusterName string) (*configv1alpha1.ClusterSummary, error) {
+	clusterProfileName, clusterNamespace, clusterName string) (*configv1beta1.ClusterSummary, error) {
 
 	listOptions := []client.ListOption{
 		client.InNamespace(clusterNamespace),
 		client.MatchingLabels{
 			sveltosmanagercontrollers.ClusterProfileLabelName: clusterProfileName,
-			configv1alpha1.ClusterNameLabel:                   clusterName,
-			configv1alpha1.ClusterTypeLabel:                   string(libsveltosv1alpha1.ClusterTypeCapi),
+			configv1beta1.ClusterNameLabel:                    clusterName,
+			configv1beta1.ClusterTypeLabel:                    string(libsveltosv1beta1.ClusterTypeCapi),
 		},
 	}
 
-	clusterSummaryList := &configv1alpha1.ClusterSummaryList{}
+	clusterSummaryList := &configv1beta1.ClusterSummaryList{}
 	if err := k8sClient.List(ctx, clusterSummaryList, listOptions...); err != nil {
 		return nil, err
 	}
 
 	if len(clusterSummaryList.Items) == 0 {
 		return nil, apierrors.NewNotFound(
-			schema.GroupResource{Group: configv1alpha1.GroupVersion.Group, Resource: configv1alpha1.ClusterSummaryKind}, "")
+			schema.GroupResource{Group: configv1beta1.GroupVersion.Group, Resource: configv1beta1.ClusterSummaryKind}, "")
 	}
 
 	if len(clusterSummaryList.Items) != 1 {
@@ -194,31 +191,28 @@ func getClusterSummary(ctx context.Context,
 	return &clusterSummaryList.Items[0], nil
 }
 
-func getClusterSet(namePrefix string, clusterLabels map[string]string) *libsveltosv1alpha1.ClusterSet {
-	selector := ""
-	for k := range clusterLabels {
-		if selector != "" {
-			selector += ","
-		}
-		selector += fmt.Sprintf("%s=%s", k, clusterLabels[k])
-	}
-	clusterSet := &libsveltosv1alpha1.ClusterSet{
+func getClusterSet(namePrefix string, clusterLabels map[string]string) *libsveltosv1beta1.ClusterSet {
+	clusterSet := &libsveltosv1beta1.ClusterSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namePrefix + randomString(),
 		},
-		Spec: libsveltosv1alpha1.Spec{
-			ClusterSelector: libsveltosv1alpha1.Selector(selector),
+		Spec: libsveltosv1beta1.Spec{
+			ClusterSelector: libsveltosv1beta1.Selector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: clusterLabels,
+				},
+			},
 		},
 	}
 
 	return clusterSet
 }
 
-func verifyClusterSetMatches(clusterSet *libsveltosv1alpha1.ClusterSet) {
+func verifyClusterSetMatches(clusterSet *libsveltosv1beta1.ClusterSet) {
 	Byf("Verifying Cluster %s/%s is a match for ClusterSet %s",
 		kindWorkloadCluster.Namespace, kindWorkloadCluster.Name, clusterSet.Name)
 	Eventually(func() bool {
-		currentClusterSet := &libsveltosv1alpha1.ClusterSet{}
+		currentClusterSet := &libsveltosv1beta1.ClusterSet{}
 		err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: clusterSet.Name}, currentClusterSet)
 		if err != nil {
 			return false
@@ -235,11 +229,11 @@ func verifyClusterSetMatches(clusterSet *libsveltosv1alpha1.ClusterSet) {
 	}, timeout, pollingInterval).Should(BeTrue())
 }
 
-func verifyEventTriggerMatches(eventTrigger *v1alpha1.EventTrigger) {
+func verifyEventTriggerMatches(eventTrigger *v1beta1.EventTrigger) {
 	Byf("Verifying Cluster %s/%s is a match for EventTrigger %s",
 		kindWorkloadCluster.Namespace, kindWorkloadCluster.Name, eventTrigger.Name)
 	Eventually(func() bool {
-		currentEventTrigger := &v1alpha1.EventTrigger{}
+		currentEventTrigger := &v1beta1.EventTrigger{}
 		err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name}, currentEventTrigger)
 		if err != nil {
 			return false

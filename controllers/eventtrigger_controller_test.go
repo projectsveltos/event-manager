@@ -34,30 +34,35 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/controllers"
 	"github.com/projectsveltos/event-manager/pkg/scope"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	fakedeployer "github.com/projectsveltos/libsveltos/lib/deployer/fake"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
-func getEventTriggerInstance(name, eventSourceName string) *v1alpha1.EventTrigger {
-	selector := "bar=foo"
-	return &v1alpha1.EventTrigger{
+func getEventTriggerInstance(name, eventSourceName string) *v1beta1.EventTrigger {
+	return &v1beta1.EventTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-		Spec: v1alpha1.EventTriggerSpec{
-			SourceClusterSelector: libsveltosv1alpha1.Selector(selector),
-			EventSourceName:       eventSourceName,
+		Spec: v1beta1.EventTriggerSpec{
+			SourceClusterSelector: libsveltosv1beta1.Selector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"bar": "foo",
+					},
+				},
+			},
+			EventSourceName: eventSourceName,
 		},
 	}
 }
 
 var _ = Describe("EventTrigger: Reconciler", func() {
-	var resource *v1alpha1.EventTrigger
+	var resource *v1beta1.EventTrigger
 	var eventSourceName string
 	var logger logr.Logger
 
@@ -85,7 +90,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
@@ -100,19 +105,19 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		currentChc := &v1alpha1.EventTrigger{}
+		currentChc := &v1beta1.EventTrigger{}
 		err = c.Get(context.TODO(), resourceName, currentChc)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(
 			controllerutil.ContainsFinalizer(
 				currentChc,
-				v1alpha1.EventTriggerFinalizer,
+				v1beta1.EventTriggerFinalizer,
 			),
 		).Should(BeTrue())
 	})
 
 	It("Remove finalizer", func() {
-		Expect(controllerutil.AddFinalizer(resource, v1alpha1.EventTriggerFinalizer)).To(BeTrue())
+		Expect(controllerutil.AddFinalizer(resource, v1beta1.EventTriggerFinalizer)).To(BeTrue())
 
 		cluster := &clusterv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -135,13 +140,13 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Name: resource.Name,
 		}
 
-		currentResource := &v1alpha1.EventTrigger{}
+		currentResource := &v1beta1.EventTrigger{}
 
 		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
 		Expect(c.Delete(context.TODO(), currentResource)).To(Succeed())
 
 		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
-		currentResource.Status.ClusterInfo = []libsveltosv1alpha1.ClusterInfo{
+		currentResource.Status.ClusterInfo = []libsveltosv1beta1.ClusterInfo{
 			{
 				Cluster: corev1.ObjectReference{
 					Namespace:  cluster.Namespace,
@@ -149,7 +154,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 					APIVersion: cluster.APIVersion,
 					Kind:       cluster.Kind,
 				},
-				Status: libsveltosv1alpha1.SveltosStatusProvisioned,
+				Status: libsveltosv1beta1.SveltosStatusProvisioned,
 				Hash:   []byte(randomString()),
 			},
 		}
@@ -157,7 +162,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		Expect(c.Status().Update(context.TODO(), currentResource)).To(Succeed())
 
 		dep := fakedeployer.GetClient(context.TODO(), logger, c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
+		Expect(dep.RegisterFeatureID(v1beta1.FeatureEventTrigger)).To(Succeed())
 
 		reconciler := controllers.EventTriggerReconciler{
 			Client:           c,
@@ -166,7 +171,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
@@ -183,11 +188,11 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 
 		err = c.Get(context.TODO(), resourceName, currentResource)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(controllerutil.ContainsFinalizer(currentResource, v1alpha1.EventTriggerFinalizer)).To(BeTrue())
+		Expect(controllerutil.ContainsFinalizer(currentResource, v1beta1.EventTriggerFinalizer)).To(BeTrue())
 
 		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
 
-		currentResource.Status.ClusterInfo = []libsveltosv1alpha1.ClusterInfo{}
+		currentResource.Status.ClusterInfo = []libsveltosv1beta1.ClusterInfo{}
 		Expect(c.Status().Update(context.TODO(), currentResource)).To(Succeed())
 
 		// Because EventTrigger is currently deployed nowhere (Status.ClusterCondition is set
@@ -211,9 +216,9 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			WithObjects(initObjects...).Build()
 
 		dep := fakedeployer.GetClient(context.TODO(), logger, c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
+		Expect(dep.RegisterFeatureID(v1beta1.FeatureEventTrigger)).To(Succeed())
 
-		currentResource := &v1alpha1.EventTrigger{}
+		currentResource := &v1beta1.EventTrigger{}
 		Expect(c.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentResource)).To(Succeed())
 		currentResource.Status.MatchingClusterRefs = []corev1.ObjectReference{
 			{
@@ -225,8 +230,8 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			{
 				Namespace:  randomString(),
 				Name:       randomString(),
-				Kind:       libsveltosv1alpha1.SveltosClusterKind,
-				APIVersion: libsveltosv1alpha1.GroupVersion.String(),
+				Kind:       libsveltosv1beta1.SveltosClusterKind,
+				APIVersion: libsveltosv1beta1.GroupVersion.String(),
 			},
 		}
 
@@ -239,7 +244,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
@@ -274,7 +279,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		Expect(addTypeInformationToObject(scheme, resource)).To(Succeed())
 
 		dep := fakedeployer.GetClient(context.TODO(), logger, c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
+		Expect(dep.RegisterFeatureID(v1beta1.FeatureEventTrigger)).To(Succeed())
 
 		reconciler := controllers.EventTriggerReconciler{
 			Client:           c,
@@ -283,7 +288,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
@@ -301,15 +306,15 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		resourceRef := controllers.GetKeyFromObject(scheme, resource)
 
 		clusterInfo := &corev1.ObjectReference{Namespace: randomString(), Name: randomString(),
-			Kind: libsveltosv1alpha1.SveltosClusterKind, APIVersion: libsveltosv1alpha1.GroupVersion.String()}
+			Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
 		controllers.GetConsumersForEntry(reconciler.ClusterMap, clusterInfo).Insert(resourceRef)
 
 		eventSourceInfo := &corev1.ObjectReference{Name: randomString(),
-			Kind: libsveltosv1alpha1.EventSourceKind, APIVersion: libsveltosv1alpha1.GroupVersion.String()}
+			Kind: libsveltosv1beta1.EventSourceKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
 		controllers.GetConsumersForEntry(reconciler.ReferenceMap, eventSourceInfo).Insert(resourceRef)
 
 		clusterSetInfo := &corev1.ObjectReference{Name: randomString(),
-			Kind: libsveltosv1alpha1.ClusterSetKind, APIVersion: libsveltosv1alpha1.GroupVersion.String()}
+			Kind: libsveltosv1beta1.ClusterSetKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
 		controllers.GetConsumersForEntry(reconciler.ClusterSetMap, clusterSetInfo).Insert(resourceRef)
 
 		reconciler.EventTriggers[*resourceRef] = resource.Spec.SourceClusterSelector
@@ -334,8 +339,8 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		resource.Spec.ClusterSetRefs = []string{clusterSetName}
 		resource.Status.MatchingClusterRefs = []corev1.ObjectReference{
 			{
-				Kind:       libsveltosv1alpha1.SveltosClusterKind,
-				APIVersion: libsveltosv1alpha1.GroupVersion.String(),
+				Kind:       libsveltosv1beta1.SveltosClusterKind,
+				APIVersion: libsveltosv1beta1.GroupVersion.String(),
 				Namespace:  clusterNamespace,
 				Name:       clusterName,
 			},
@@ -349,7 +354,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			WithObjects(initObjects...).Build()
 
 		dep := fakedeployer.GetClient(context.TODO(), logger, c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
+		Expect(dep.RegisterFeatureID(v1beta1.FeatureEventTrigger)).To(Succeed())
 
 		reconciler := controllers.EventTriggerReconciler{
 			Client:           c,
@@ -358,7 +363,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
@@ -376,15 +381,15 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		controllers.UpdateMaps(&reconciler, resourceScope)
 
 		clusterInfo := &corev1.ObjectReference{Namespace: clusterNamespace, Name: clusterName,
-			Kind: libsveltosv1alpha1.SveltosClusterKind, APIVersion: libsveltosv1alpha1.GroupVersion.String()}
+			Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
 		Expect(controllers.GetConsumersForEntry(reconciler.ClusterMap, clusterInfo).Len()).To(Equal(1))
 
 		eventSourceInfo := &corev1.ObjectReference{Name: esName,
-			Kind: libsveltosv1alpha1.EventSourceKind, APIVersion: libsveltosv1alpha1.GroupVersion.String()}
+			Kind: libsveltosv1beta1.EventSourceKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
 		Expect(controllers.GetConsumersForEntry(reconciler.EventSourceMap, eventSourceInfo).Len()).To(Equal(1))
 
 		clusterSetInfo := &corev1.ObjectReference{Name: clusterSetName,
-			Kind: libsveltosv1alpha1.ClusterSetKind, APIVersion: libsveltosv1alpha1.GroupVersion.String()}
+			Kind: libsveltosv1beta1.ClusterSetKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
 		Expect(controllers.GetConsumersForEntry(reconciler.ClusterSetMap, clusterSetInfo).Len()).To(Equal(1))
 	})
 
@@ -402,23 +407,23 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		secretNamespace := randomString()
 		secretName := randomString()
 
-		resource.Spec.PolicyRefs = []configv1alpha1.PolicyRef{
+		resource.Spec.PolicyRefs = []configv1beta1.PolicyRef{
 			{
 				Namespace: cmNamespace,
 				Name:      cmName,
-				Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
+				Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
 			},
 			{
 				Namespace: secretNamespace,
 				Name:      secretName,
-				Kind:      string(libsveltosv1alpha1.SecretReferencedResourceKind),
+				Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
 			},
 		}
 
 		resource.Status.MatchingClusterRefs = []corev1.ObjectReference{
 			{
-				Kind:       libsveltosv1alpha1.SveltosClusterKind,
-				APIVersion: libsveltosv1alpha1.GroupVersion.String(),
+				Kind:       libsveltosv1beta1.SveltosClusterKind,
+				APIVersion: libsveltosv1beta1.GroupVersion.String(),
 				Namespace:  clusterNamespace,
 				Name:       clusterName,
 			},
@@ -432,7 +437,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			WithObjects(initObjects...).Build()
 
 		dep := fakedeployer.GetClient(context.TODO(), logger, c)
-		Expect(dep.RegisterFeatureID(v1alpha1.FeatureEventTrigger)).To(Succeed())
+		Expect(dep.RegisterFeatureID(v1beta1.FeatureEventTrigger)).To(Succeed())
 
 		reconciler := controllers.EventTriggerReconciler{
 			Client:           c,
@@ -441,7 +446,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
@@ -473,8 +478,8 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		v, ok = reconciler.ReferenceMap[index]
 		Expect(ok).To(BeTrue())
 		Expect(v.Items()).To(ContainElement(corev1.ObjectReference{
-			APIVersion: v1alpha1.GroupVersion.String(),
-			Kind:       v1alpha1.EventTriggerKind,
+			APIVersion: v1beta1.GroupVersion.String(),
+			Kind:       v1beta1.EventTriggerKind,
 			Name:       resourceScope.Name(),
 		}))
 
@@ -487,40 +492,40 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		v, ok = reconciler.ReferenceMap[index]
 		Expect(ok).To(BeTrue())
 		Expect(v.Items()).To(ContainElement(corev1.ObjectReference{
-			APIVersion: v1alpha1.GroupVersion.String(),
-			Kind:       v1alpha1.EventTriggerKind,
+			APIVersion: v1beta1.GroupVersion.String(),
+			Kind:       v1beta1.EventTriggerKind,
 			Name:       resourceScope.Name(),
 		}))
 	})
 
 	It("getClustersFromClusterSets gets cluster selected by referenced clusterSet", func() {
-		clusterSet1 := &libsveltosv1alpha1.ClusterSet{
+		clusterSet1 := &libsveltosv1beta1.ClusterSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Status: libsveltosv1alpha1.Status{
+			Status: libsveltosv1beta1.Status{
 				SelectedClusterRefs: []corev1.ObjectReference{
 					{
 						Namespace: randomString(), Name: randomString(),
-						Kind: libsveltosv1alpha1.SveltosClusterKind, APIVersion: libsveltosv1alpha1.GroupVersion.String(),
+						Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String(),
 					},
 					{
 						Namespace: randomString(), Name: randomString(),
-						Kind: libsveltosv1alpha1.SveltosClusterKind, APIVersion: libsveltosv1alpha1.GroupVersion.String(),
+						Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String(),
 					},
 				},
 			},
 		}
 
-		clusterSet2 := &libsveltosv1alpha1.ClusterSet{
+		clusterSet2 := &libsveltosv1beta1.ClusterSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Status: libsveltosv1alpha1.Status{
+			Status: libsveltosv1beta1.Status{
 				SelectedClusterRefs: []corev1.ObjectReference{
 					{
 						Namespace: randomString(), Name: randomString(),
-						Kind: libsveltosv1alpha1.SveltosClusterKind, APIVersion: libsveltosv1alpha1.GroupVersion.String(),
+						Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String(),
 					},
 				},
 			},
@@ -543,7 +548,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),

@@ -23,7 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
 
@@ -41,13 +41,13 @@ func (r *SveltosClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	logger.V(logs.LogInfo).Info("Reconciling SveltosCluster")
 
 	// Fecth the SveltosCluster instance
-	sveltosCluster := &libsveltosv1alpha1.SveltosCluster{}
+	sveltosCluster := &libsveltosv1beta1.SveltosCluster{}
 	return processCluster(ctx, r.Client, sveltosCluster, req, logger)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SveltosClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&libsveltosv1alpha1.SveltosCluster{}).
+		For(&libsveltosv1beta1.SveltosCluster{}).
 		Complete(r)
 }

@@ -31,9 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/controllers"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
@@ -57,21 +57,33 @@ var _ = Describe("EventTriggerReconciler map functions", func() {
 			},
 		}
 
-		matchingEventTrigger := &v1alpha1.EventTrigger{
+		matchingEventTrigger := &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
-			Spec: v1alpha1.EventTriggerSpec{
-				SourceClusterSelector: libsveltosv1alpha1.Selector("env=production"),
+			Spec: v1beta1.EventTriggerSpec{
+				SourceClusterSelector: libsveltosv1beta1.Selector{
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"env": "production",
+						},
+					},
+				},
 			},
 		}
 
-		nonMatchingEventTrigger := &v1alpha1.EventTrigger{
+		nonMatchingEventTrigger := &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
-			Spec: v1alpha1.EventTriggerSpec{
-				SourceClusterSelector: libsveltosv1alpha1.Selector("env=qa"),
+			Spec: v1beta1.EventTriggerSpec{
+				SourceClusterSelector: libsveltosv1beta1.Selector{
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"env": "qa",
+						},
+					},
+				},
 			},
 		}
 
@@ -89,7 +101,7 @@ var _ = Describe("EventTriggerReconciler map functions", func() {
 			Scheme:           scheme,
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 			ClusterLabels:    make(map[corev1.ObjectReference]map[string]string),
@@ -100,10 +112,10 @@ var _ = Describe("EventTriggerReconciler map functions", func() {
 
 		By("Setting EventTriggerReconciler internal structures")
 		matchingInfo := corev1.ObjectReference{APIVersion: cluster.APIVersion,
-			Kind: v1alpha1.EventTriggerKind, Name: matchingEventTrigger.Name}
+			Kind: v1beta1.EventTriggerKind, Name: matchingEventTrigger.Name}
 		reconciler.EventTriggers[matchingInfo] = matchingEventTrigger.Spec.SourceClusterSelector
 		nonMatchingInfo := corev1.ObjectReference{APIVersion: cluster.APIVersion,
-			Kind: v1alpha1.EventTriggerKind, Name: nonMatchingEventTrigger.Name}
+			Kind: v1beta1.EventTriggerKind, Name: nonMatchingEventTrigger.Name}
 		reconciler.EventTriggers[nonMatchingInfo] = nonMatchingEventTrigger.Spec.SourceClusterSelector
 
 		// ClusterMap contains, per ClusterName, list of EventTriggers matching it.
@@ -145,7 +157,14 @@ var _ = Describe("EventTriggerReconciler map functions", func() {
 		Expect(requests).To(ContainElement(expected))
 
 		By("Changing eventTrigger ClusterSelector again to have no EventTrigger match")
-		matchingEventTrigger.Spec.SourceClusterSelector = libsveltosv1alpha1.Selector("env=qa")
+		matchingEventTrigger.Spec.SourceClusterSelector = libsveltosv1beta1.Selector{
+			LabelSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"env": "qa",
+				},
+			},
+		}
+
 		Expect(c.Update(context.TODO(), matchingEventTrigger)).To(Succeed())
 		nonMatchingEventTrigger.Spec.SourceClusterSelector = matchingEventTrigger.Spec.SourceClusterSelector
 		Expect(c.Update(context.TODO(), nonMatchingEventTrigger)).To(Succeed())
@@ -184,12 +203,18 @@ var _ = Describe("EventTriggerReconciler map functions", func() {
 			},
 		}
 
-		eventTrigger := &v1alpha1.EventTrigger{
+		eventTrigger := &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: upstreamClusterNamePrefix + randomString(),
 			},
-			Spec: v1alpha1.EventTriggerSpec{
-				SourceClusterSelector: libsveltosv1alpha1.Selector("env=production"),
+			Spec: v1beta1.EventTriggerSpec{
+				SourceClusterSelector: libsveltosv1beta1.Selector{
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"env": "production",
+						},
+					},
+				},
 			},
 		}
 

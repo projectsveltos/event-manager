@@ -49,7 +49,7 @@ import (
 
 	//+kubebuilder:scaffold:imports
 
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/crd"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	"github.com/projectsveltos/libsveltos/lib/logsettings"
@@ -123,7 +123,7 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	logsettings.RegisterForLogSettings(ctx,
-		libsveltosv1alpha1.ComponentEventManager, ctrl.Log.WithName("log-setter"),
+		libsveltosv1beta1.ComponentEventManager, ctrl.Log.WithName("log-setter"),
 		ctrl.GetConfigOrDie())
 
 	d := deployer.GetClient(ctx, ctrl.Log.WithName("deployer"), mgr.GetClient(), workers)
@@ -140,7 +140,7 @@ func main() {
 		Logger:               ctrl.Log.WithName("eventTriggerReconciler"),
 		ClusterMap:           make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ToClusterMap:         make(map[types.NamespacedName]*libsveltosset.Set),
-		EventTriggers:        make(map[corev1.ObjectReference]libsveltosv1alpha1.Selector),
+		EventTriggers:        make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 		ClusterLabels:        make(map[corev1.ObjectReference]map[string]string),
 		EventSourceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ToEventSourceMap:     make(map[types.NamespacedName]*libsveltosset.Set),

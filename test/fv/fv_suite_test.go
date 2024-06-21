@@ -27,7 +27,9 @@ import (
 
 	"github.com/TwiN/go-color"
 	ginkgotypes "github.com/onsi/ginkgo/v2/types"
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -38,8 +40,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	"github.com/projectsveltos/event-manager/api/v1alpha1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 var (
@@ -90,8 +95,11 @@ var _ = BeforeSuite(func() {
 
 	Expect(clientgoscheme.AddToScheme(scheme)).To(Succeed())
 	Expect(clusterv1.AddToScheme(scheme)).To(Succeed())
+	Expect(v1beta1.AddToScheme(scheme)).To(Succeed())
 	Expect(v1alpha1.AddToScheme(scheme)).To(Succeed())
+	Expect(configv1beta1.AddToScheme(scheme)).To(Succeed())
 	Expect(configv1alpha1.AddToScheme(scheme)).To(Succeed())
+	Expect(libsveltosv1beta1.AddToScheme(scheme)).To(Succeed())
 	Expect(libsveltosv1alpha1.AddToScheme(scheme)).To(Succeed())
 	Expect(networkingv1.AddToScheme(scheme)).To(Succeed())
 
@@ -149,3 +157,38 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).To(BeNil())
 })
+
+func createNamespaceAndService(c client.Client, serviceNamespace string) {
+	Byf("Create namespace %s in the managed cluster", serviceNamespace)
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: serviceNamespace,
+		},
+	}
+	Expect(c.Create(context.TODO(), ns)).To(Succeed())
+
+	Byf("Creating a Service in namespace %s in the managed cluster", serviceNamespace)
+	var port int32 = 5467
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: serviceNamespace, // EventSource filters service in this namespace
+			Name:      randomString(),
+			Labels: map[string]string{
+				"sveltos": "fv", // those labels are needed to match lua script
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				randomString(): randomString(),
+				randomString(): randomString(),
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Name: randomString(),
+					Port: port,
+				},
+			},
+		},
+	}
+	Expect(c.Create(context.TODO(), service)).To(Succeed())
+}
