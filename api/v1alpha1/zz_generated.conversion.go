@@ -23,16 +23,15 @@ package v1alpha1
 import (
 	unsafe "unsafe"
 
-	v1 "k8s.io/api/core/v1"
-	conversion "k8s.io/apimachinery/pkg/conversion"
-	runtime "k8s.io/apimachinery/pkg/runtime"
-	intstr "k8s.io/apimachinery/pkg/util/intstr"
-
 	apiv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
 	apiv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	v1beta1 "github.com/projectsveltos/event-manager/api/v1beta1"
 	libsveltosapiv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
 	libsveltosapiv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	v1 "k8s.io/api/core/v1"
+	conversion "k8s.io/apimachinery/pkg/conversion"
+	runtime "k8s.io/apimachinery/pkg/runtime"
+	intstr "k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func init() {

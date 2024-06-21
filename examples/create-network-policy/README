@@ -24,7 +24,7 @@ apiVersion: networking.k8s.io/v1
     name: front-my-service
     namespace: default
     ownerReferences:
-    - apiVersion: config.projectsveltos.io/v1alpha1
+    - apiVersion: config.projectsveltos.io/v1beta1
       kind: ClusterProfile
       name: sveltos-jmir32lwenr0lodpz2rv
       uid: 16c12bc4-698d-4688-bb32-dc0ec60d2949

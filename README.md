@@ -18,14 +18,14 @@ Sveltos supports an event-driven add-on deployment oworkflow:
 2. select on which clusters;
 3. define which add-ons to deploy when event happens.
 
-[EventSource](https://github.com/projectsveltos/libsveltos/blob/main/api/v1alpha1/eventsource_type.go) is the CRD introduced to define an event.
+[EventSource](https://github.com/projectsveltos/libsveltos/blob/main/api/v1beta1/eventsource_type.go) is the CRD introduced to define an event.
 
 Sveltos supports custom events written in [Lua](https://www.lua.org/).
 
 Following EventSource instance define an __event__ as a creation/deletion of a Service with label *sveltos: fv*.
 
 ```yaml
-apiVersion: lib.projectsveltos.io/v1alpha1
+apiVersion: lib.projectsveltos.io/v1beta1
 kind: EventSource
 metadata:
  name: sveltos-service
@@ -44,7 +44,7 @@ Sveltos supports custom events written in [Lua](https://www.lua.org/).
 Following EventSource instance again defines an Event as the creation/deletion of a Service with label *sveltos: fv* but using a Lua script. 
 
 ```yaml
-apiVersion: lib.projectsveltos.io/v1alpha1
+apiVersion: lib.projectsveltos.io/v1beta1
 kind: EventSource
 metadata:
  name: sveltos-service
@@ -71,7 +71,7 @@ spec:
   end
 ```
 
-[EventTrigger](https://github.com/projectsveltos/libsveltos/blob/main/api/v1alpha1/eventtrigger_type.go) is the CRD introduced to define what add-ons to deploy when an event happens.
+[EventTrigger](https://github.com/projectsveltos/libsveltos/blob/main/api/v1beta1/eventtrigger_type.go) is the CRD introduced to define what add-ons to deploy when an event happens.
 
 ![Sveltos Event Driven Framework](https://github.com/projectsveltos/demos/blob/main//event-driven/event_driven_framework.gif)
 

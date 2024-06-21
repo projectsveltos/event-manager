@@ -3,12 +3,14 @@
 # template which will be instatiated using information
 # from managed cluster resources matching the referenced
 # EventSource
-apiVersion: lib.projectsveltos.io/v1alpha1
+apiVersion: lib.projectsveltos.io/v1beta1
 kind: EventTrigger
 metadata:
  name: service-network-policy
 spec:
- sourceClusterSelector: env=fv
+ sourceClusterSelector:
+   matchLabels:
+     env: fv
  eventSourceName: sveltos-service
  policyRefs:
  - name: network-policy
