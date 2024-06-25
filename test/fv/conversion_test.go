@@ -150,7 +150,6 @@ var _ = Describe("Conversion", func() {
 			if err != nil {
 				return false
 			}
-			By("MGIANLUC")
 			return len(currentEventReport.Spec.Resources) != 0
 		}, timeout, pollingInterval).Should(BeTrue())
 
@@ -167,8 +166,19 @@ var _ = Describe("Conversion", func() {
 			return len(clusterProfileList.Items) == 1
 		}, timeout, pollingInterval).Should(BeTrue())
 
-		Byf("Verifying NewtworkPolicy is created in the namespace %s", serviceNamespace)
 		listOptions := []client.ListOption{
+			client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
+		}
+		clusterProfileList := &configv1beta1.ClusterProfileList{}
+		Expect(k8sClient.List(context.TODO(), clusterProfileList, listOptions...)).To(Succeed())
+		clusterProfile := &clusterProfileList.Items[0]
+		clusterSummary := verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
+
+		Byf("Verifying ClusterSummary %s status is set to Deployed for Resources feature", clusterSummary.Name)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1beta1.FeatureResources)
+
+		Byf("Verifying NewtworkPolicy is created in the namespace %s", serviceNamespace)
+		listOptions = []client.ListOption{
 			client.InNamespace(serviceNamespace),
 		}
 		networkPolicies := &networkingv1.NetworkPolicyList{}
