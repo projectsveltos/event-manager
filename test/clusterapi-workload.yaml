@@ -37,43 +37,6 @@ spec:
   - definitions:
     - jsonPatches:
       - op: add
-        path: /spec/template/spec/kubeadmConfigSpec/initConfiguration/nodeRegistration/kubeletExtraArgs/cgroup-driver
-        value: cgroupfs
-      - op: add
-        path: /spec/template/spec/kubeadmConfigSpec/joinConfiguration/nodeRegistration/kubeletExtraArgs/cgroup-driver
-        value: cgroupfs
-      selector:
-        apiVersion: controlplane.cluster.x-k8s.io/v1beta1
-        kind: KubeadmControlPlaneTemplate
-        matchResources:
-          controlPlane: true
-    description: |
-      Sets the cgroupDriver to cgroupfs if a Kubernetes version < v1.24 is referenced.
-      This is required because kind and the node images do not support the default
-      systemd cgroupDriver for kubernetes < v1.24.
-    enabledIf: '{{ semverCompare "<= v1.23" .builtin.controlPlane.version }}'
-    name: cgroupDriver-controlPlane
-  - definitions:
-    - jsonPatches:
-      - op: add
-        path: /spec/template/spec/joinConfiguration/nodeRegistration/kubeletExtraArgs/cgroup-driver
-        value: cgroupfs
-      selector:
-        apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
-        kind: KubeadmConfigTemplate
-        matchResources:
-          machineDeploymentClass:
-            names:
-            - default-worker
-    description: |
-      Sets the cgroupDriver to cgroupfs if a Kubernetes version < v1.24 is referenced.
-      This is required because kind and the node images do not support the default
-      systemd cgroupDriver for kubernetes < v1.24.
-    enabledIf: '{{ semverCompare "<= v1.23" .builtin.machineDeployment.version }}'
-    name: cgroupDriver-machineDeployment
-  - definitions:
-    - jsonPatches:
-      - op: add
         path: /spec/template/spec/kubeadmConfigSpec/clusterConfiguration/etcd
         valueFrom:
           template: |
@@ -112,6 +75,19 @@ spec:
         kind: DockerMachineTemplate
         matchResources:
           machineDeploymentClass:
+            names:
+            - default-worker
+    - jsonPatches:
+      - op: add
+        path: /spec/template/spec/template/customImage
+        valueFrom:
+          template: |
+            kindest/node:{{ .builtin.machinePool.version | replace "+" "_" }}
+      selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: DockerMachinePoolTemplate
+        matchResources:
+          machinePoolClass:
             names:
             - default-worker
     - jsonPatches:
@@ -155,6 +131,8 @@ spec:
                     apiVersion: pod-security.admission.config.k8s.io/v1{{ if semverCompare "< v1.25" .builtin.controlPlane.version }}beta1{{ end }}
                     kind: PodSecurityConfiguration
                     defaults:
+                      enforce: "{{ .podSecurityStandard.enforce }}"
+                      enforce-version: "latest"
                       audit: "{{ .podSecurityStandard.audit }}"
                       audit-version: "latest"
                       warn: "{{ .podSecurityStandard.warn }}"
@@ -238,6 +216,19 @@ spec:
             apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
             kind: DockerMachineTemplate
             name: quick-start-default-worker-machinetemplate
+    machinePools:
+    - class: default-worker
+      template:
+        bootstrap:
+          ref:
+            apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+            kind: KubeadmConfigTemplate
+            name: quick-start-default-worker-bootstraptemplate
+        infrastructure:
+          ref:
+            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+            kind: DockerMachinePoolTemplate
+            name: quick-start-default-worker-machinepooltemplate
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: DockerClusterTemplate
@@ -264,19 +255,10 @@ spec:
             - 127.0.0.1
             - 0.0.0.0
             - host.docker.internal
-          controllerManager:
-            extraArgs:
-              enable-hostpath-provisioner: "true"
         initConfiguration:
-          nodeRegistration:
-            criSocket: unix:///var/run/containerd/containerd.sock
-            kubeletExtraArgs:
-              eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
+          nodeRegistration: {}
         joinConfiguration:
-          nodeRegistration:
-            criSocket: unix:///var/run/containerd/containerd.sock
-            kubeletExtraArgs:
-              eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
+          nodeRegistration: {}
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: DockerMachineTemplate
@@ -302,6 +284,16 @@ spec:
       - containerPath: /var/run/docker.sock
         hostPath: /var/run/docker.sock
 ---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: DockerMachinePoolTemplate
+metadata:
+  name: quick-start-default-worker-machinepooltemplate
+  namespace: default
+spec:
+  template:
+    spec:
+      template: {}
+---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: KubeadmConfigTemplate
 metadata:
@@ -311,16 +303,15 @@ spec:
   template:
     spec:
       joinConfiguration:
-        nodeRegistration:
-          criSocket: unix:///var/run/containerd/containerd.sock
-          kubeletExtraArgs:
-            eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
+        nodeRegistration: {}
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
   name: clusterapi-workload
   namespace: default
+  labels:
+    env: fv
 spec:
   clusterNetwork:
     pods:
@@ -348,9 +339,13 @@ spec:
         enabled: true
         enforce: baseline
         warn: restricted
-    version: v1.26.0
+    version: v1.30.0
     workers:
       machineDeployments:
       - class: default-worker
         name: md-0
-        replicas: 1
+        replicas: 2
+      machinePools:
+      - class: default-worker
+        name: mp-0
+        replicas: 2
