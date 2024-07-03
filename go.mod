@@ -12,17 +12,17 @@ require (
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/addon-controller v0.32.1-0.20240625081059-4d758080eef8
-	github.com/projectsveltos/libsveltos v0.32.1-0.20240624142620-affdfeb694be
+	github.com/projectsveltos/addon-controller v0.33.0
+	github.com/projectsveltos/libsveltos v0.33.0
 	github.com/prometheus/client_golang v1.19.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/text v0.16.0
-	k8s.io/api v0.30.1
-	k8s.io/apiextensions-apiserver v0.30.1
-	k8s.io/apimachinery v0.30.1
-	k8s.io/client-go v0.30.1
-	k8s.io/component-base v0.30.1
-	k8s.io/klog/v2 v2.130.0
+	k8s.io/api v0.30.2
+	k8s.io/apiextensions-apiserver v0.30.2
+	k8s.io/apimachinery v0.30.2
+	k8s.io/client-go v0.30.2
+	k8s.io/component-base v0.30.2
+	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
 	sigs.k8s.io/cluster-api v1.7.3
 	sigs.k8s.io/controller-runtime v0.18.4
@@ -40,7 +40,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/Microsoft/hcsshim v0.11.4 // indirect
 	github.com/antlr/antlr4/runtime/Go/antlr/v4 v4.0.0-20230305170008-8188dc5388df // indirect
-	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
+	github.com/asaskevich/govalidator v0.0.0-20200428143746-21a406dcc535 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
@@ -174,10 +174,10 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	helm.sh/helm/v3 v3.15.2 // indirect
-	k8s.io/apiserver v0.30.1 // indirect
-	k8s.io/cli-runtime v0.30.1 // indirect
+	k8s.io/apiserver v0.30.2 // indirect
+	k8s.io/cli-runtime v0.30.2 // indirect
 	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340 // indirect
-	k8s.io/kubectl v0.30.1 // indirect
+	k8s.io/kubectl v0.30.2 // indirect
 	oras.land/oras-go v1.2.5 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.29.0 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
