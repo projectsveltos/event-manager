@@ -30,9 +30,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
-	"github.com/projectsveltos/event-manager/api/v1alpha1"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 var (
@@ -85,18 +85,18 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		projectsveltos = "projectsveltos"
 	)
 
-	var clusterSummary *configv1alpha1.ClusterSummary
+	var clusterSummary *configv1beta1.ClusterSummary
 
 	It("Verifies ClusterProfiles is instantiated using eventreport values", Label("FV"), func() {
 		serviceNamespace := randomString()
 
 		Byf("Create a EventSource matching https Services in namespace: %s", serviceNamespace)
-		eventSource := libsveltosv1alpha1.EventSource{
+		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Spec: libsveltosv1alpha1.EventSourceSpec{
-				ResourceSelectors: []libsveltosv1alpha1.ResourceSelector{
+			Spec: libsveltosv1beta1.EventSourceSpec{
+				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 					{
 						Group:     "",
 						Version:   "v1",
@@ -118,7 +118,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					libsveltosv1alpha1.PolicyTemplateAnnotation: "ok",
+					libsveltosv1beta1.PolicyTemplateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{
@@ -127,15 +127,15 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		}
 		Expect(k8sClient.Create(context.TODO(), cm)).To(Succeed())
 
-		policyRef := configv1alpha1.PolicyRef{
-			Kind:      string(libsveltosv1alpha1.ConfigMapReferencedResourceKind),
+		policyRef := configv1beta1.PolicyRef{
+			Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
 			Namespace: cm.Namespace,
 			Name:      cm.Name,
 		}
 
 		Byf("Create a EventTrigger referencing EventSource %s", eventSource.Name)
 		eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
-			map[string]string{key: value}, []configv1alpha1.PolicyRef{policyRef})
+			map[string]string{key: value}, []configv1beta1.PolicyRef{policyRef})
 		eventTrigger.Spec.OneForEvent = false
 		eventTrigger.Spec.HelmCharts = nil
 		Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
@@ -147,14 +147,14 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 
 		Byf("Verifying EventSource %s is present in the managed cluster", eventSource.Name)
 		Eventually(func() error {
-			currentEventSource := &libsveltosv1alpha1.EventSource{}
+			currentEventSource := &libsveltosv1beta1.EventSource{}
 			return workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
 				currentEventSource)
 		}, timeout, pollingInterval).Should(BeNil())
 
 		Byf("Verifying EventReports %s is present in the managed cluster", eventSource.Name)
 		Eventually(func() error {
-			currentEventReport := &libsveltosv1alpha1.EventReport{}
+			currentEventReport := &libsveltosv1beta1.EventReport{}
 			return workloadClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
 				currentEventReport)
@@ -162,7 +162,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 
 		Byf("Verifying EventReports %s is present in the management cluster", eventSource.Name)
 		Eventually(func() error {
-			currentEventReport := &libsveltosv1alpha1.EventReport{}
+			currentEventReport := &libsveltosv1beta1.EventReport{}
 			return k8sClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
@@ -227,7 +227,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 
 		Byf("Verifying EventReports %s is present in the managed cluster with matching resource", eventSource.Name)
 		Eventually(func() bool {
-			currentEventReport := &libsveltosv1alpha1.EventReport{}
+			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = workloadClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
 				currentEventReport)
@@ -239,7 +239,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 
 		Byf("Verifying EventReports %s is present in the management cluster with matching resource", getEventReportName(eventSource.Name))
 		Eventually(func() bool {
-			currentEventReport := &libsveltosv1alpha1.EventReport{}
+			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
@@ -255,7 +255,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 			listOptions := []client.ListOption{
 				client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
 			}
-			clusterProfileList := &configv1alpha1.ClusterProfileList{}
+			clusterProfileList := &configv1beta1.ClusterProfileList{}
 			err = k8sClient.List(context.TODO(), clusterProfileList, listOptions...)
 			if err != nil {
 				return false
@@ -266,13 +266,13 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		listOptions := []client.ListOption{
 			client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
 		}
-		clusterProfileList := &configv1alpha1.ClusterProfileList{}
+		clusterProfileList := &configv1beta1.ClusterProfileList{}
 		Expect(k8sClient.List(context.TODO(), clusterProfileList, listOptions...)).To(Succeed())
 		clusterProfile := &clusterProfileList.Items[0]
 		clusterSummary = verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
 
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Resources feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1alpha1.FeatureResources)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1beta1.FeatureResources)
 
 		Byf("Verifying Ingress is created in the namespace %s", serviceNamespace)
 		listOptions = []client.ListOption{
@@ -283,14 +283,14 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		Expect(len(ingresses.Items)).To(Equal(1))
 
 		Byf("Deleting EventTrigger %s", eventTrigger.Name)
-		currentEventTrigger := &v1alpha1.EventTrigger{}
+		currentEventTrigger := &v1beta1.EventTrigger{}
 		Expect(k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name},
 			currentEventTrigger)).To(Succeed())
 		Expect(k8sClient.Delete(context.TODO(), currentEventTrigger)).To(Succeed())
 
 		Byf("Verifying EventSource %s is removed from the managed cluster", eventSource.Name)
 		Eventually(func() bool {
-			currentEventSource := &libsveltosv1alpha1.EventSource{}
+			currentEventSource := &libsveltosv1beta1.EventSource{}
 			err = workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
 				currentEventSource)
 			return err != nil && apierrors.IsNotFound(err)
@@ -298,7 +298,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 
 		Byf("Verifying EventReports %s is removed from the managed cluster", eventSource.Name)
 		Eventually(func() bool {
-			currentEventReport := &libsveltosv1alpha1.EventReport{}
+			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = workloadClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
 				currentEventReport)
@@ -313,14 +313,14 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		}, timeout, pollingInterval).Should(BeTrue())
 
 		Byf("Deleting EventSource %s in the managed cluster", eventSource.Name)
-		currentEventSource := &libsveltosv1alpha1.EventSource{}
+		currentEventSource := &libsveltosv1beta1.EventSource{}
 		Expect(k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
 			currentEventSource)).To(Succeed())
 		Expect(k8sClient.Delete(context.TODO(), currentEventSource)).To(Succeed())
 
 		Byf("Verifying EventReports %s is removed from the management cluster", getEventReportName(eventSource.Name))
 		Eventually(func() bool {
-			currentEventReport := &libsveltosv1alpha1.EventReport{}
+			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
 				currentEventReport)

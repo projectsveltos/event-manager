@@ -28,7 +28,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -41,9 +40,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	v1alpha1 "github.com/projectsveltos/event-manager/api/v1alpha1"
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/pkg/scope"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
@@ -95,7 +94,7 @@ type EventTriggerReconciler struct {
 	ToClusterMap map[types.NamespacedName]*libsveltosset.Set
 
 	// key: EventTriggers; value EventTrigger Selector
-	EventTriggers map[corev1.ObjectReference]libsveltosv1alpha1.Selector
+	EventTriggers map[corev1.ObjectReference]libsveltosv1beta1.Selector
 
 	// For each cluster contains current labels
 	// This is needed in following scenario:
@@ -169,7 +168,7 @@ func (r *EventTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	logger.V(logs.LogInfo).Info("Reconciling")
 
 	// Fecth the EventTrigger instance
-	eventTrigger := &v1alpha1.EventTrigger{}
+	eventTrigger := &v1beta1.EventTrigger{}
 	if err := r.Get(ctx, req.NamespacedName, eventTrigger); err != nil {
 		if apierrors.IsNotFound(err) {
 			return reconcile.Result{}, nil
@@ -212,7 +211,7 @@ func (r *EventTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Handle non-deleted eventTrigger
-	return r.reconcileNormal(ctx, eventTriggerScope)
+	return r.reconcileNormal(ctx, eventTriggerScope), nil
 }
 
 func (r *EventTriggerReconciler) reconcileDelete(
@@ -227,15 +226,15 @@ func (r *EventTriggerReconciler) reconcileDelete(
 
 	r.cleanMaps(eventTriggerScope)
 
-	f := getHandlersForFeature(v1alpha1.FeatureEventTrigger)
+	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
 	err := r.undeployEventTrigger(ctx, eventTriggerScope, f, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to undeploy")
 		return reconcile.Result{Requeue: true, RequeueAfter: deleteRequeueAfter}
 	}
 
-	if controllerutil.ContainsFinalizer(eventTriggerScope.EventTrigger, v1alpha1.EventTriggerFinalizer) {
-		controllerutil.RemoveFinalizer(eventTriggerScope.EventTrigger, v1alpha1.EventTriggerFinalizer)
+	if controllerutil.ContainsFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer) {
+		controllerutil.RemoveFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer)
 	}
 
 	logger.V(logs.LogInfo).Info("Reconcile delete success")
@@ -245,32 +244,27 @@ func (r *EventTriggerReconciler) reconcileDelete(
 func (r *EventTriggerReconciler) reconcileNormal(
 	ctx context.Context,
 	eventTriggerScope *scope.EventTriggerScope,
-) (reconcile.Result, error) {
+) reconcile.Result {
 
 	logger := eventTriggerScope.Logger
 	logger.V(logs.LogInfo).Info("Reconciling EventTrigger")
 
-	if !controllerutil.ContainsFinalizer(eventTriggerScope.EventTrigger, v1alpha1.EventTriggerFinalizer) {
+	if !controllerutil.ContainsFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer) {
 		if err := r.addFinalizer(ctx, eventTriggerScope); err != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 		}
 	}
 
-	parsedSelector, err := labels.Parse(eventTriggerScope.GetSelector())
-	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse clusterSelector: %v", err))
-		return reconcile.Result{}, err
-	}
-	matchingCluster, err := clusterproxy.GetMatchingClusters(ctx, r.Client, parsedSelector, "",
+	matchingCluster, err := clusterproxy.GetMatchingClusters(ctx, r.Client, eventTriggerScope.GetSelector(), "",
 		eventTriggerScope.Logger)
 	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
 
 	// Get all clusters from referenced ClusterSets
 	clusterSetClusters, err := r.getClustersFromClusterSets(ctx, eventTriggerScope.EventTrigger.Spec.ClusterSetRefs, logger)
 	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
 
 	matchingCluster = append(matchingCluster, clusterSetClusters...)
@@ -280,47 +274,47 @@ func (r *EventTriggerReconciler) reconcileNormal(
 	err = r.updateClusterInfo(ctx, eventTriggerScope)
 	if err != nil {
 		logger.V(logs.LogDebug).Info("failed to update clusterConditions")
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
 
 	r.updateMaps(eventTriggerScope)
 
-	f := getHandlersForFeature(v1alpha1.FeatureEventTrigger)
+	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
 	if err := r.deployEventTrigger(ctx, eventTriggerScope, f, logger); err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to deploy")
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
 
 	logger.V(logs.LogInfo).Info("Reconcile success")
-	return reconcile.Result{}, nil
+	return reconcile.Result{}
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.Controller, error) {
 	c, err := ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.EventTrigger{}).
+		For(&v1beta1.EventTrigger{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.ConcurrentReconciles,
 		}).
-		Watches(&libsveltosv1alpha1.SveltosCluster{},
+		Watches(&libsveltosv1beta1.SveltosCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForSveltosCluster),
 			builder.WithPredicates(
 				SveltosClusterPredicates(mgr.GetLogger().WithValues("predicate", "sveltosclusterpredicates")),
 			),
 		).
-		Watches(&libsveltosv1alpha1.ClusterSet{},
+		Watches(&libsveltosv1beta1.ClusterSet{},
 			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForClusterSet),
 			builder.WithPredicates(
 				ClusterSetPredicates(mgr.GetLogger().WithValues("predicate", "clustersetpredicate")),
 			),
 		).
-		Watches(&libsveltosv1alpha1.EventReport{},
+		Watches(&libsveltosv1beta1.EventReport{},
 			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForEventReport),
 			builder.WithPredicates(
 				EventReportPredicates(mgr.GetLogger().WithValues("predicate", "eventreportpredicate")),
 			),
 		).
-		Watches(&libsveltosv1alpha1.EventSource{},
+		Watches(&libsveltosv1beta1.EventSource{},
 			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForEventSource),
 			builder.WithPredicates(
 				EventSourcePredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
@@ -346,7 +340,7 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 	/* TODO
 	// When projectsveltos ClusterProfile changes, according to ClusterProfilePredicates,
 	// one or more EventTriggers need to be reconciled.
-	err = c.Watch(&source.Kind{Type: &configv1alpha1.ClusterProfile{}},
+	err = c.Watch(&source.Kind{Type: &configv1beta1.ClusterProfile{}},
 		handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForClusterProfile),
 		ClusterProfilePredicates(mgr.GetLogger().WithValues("predicate", "clusterrofilepredicate")),
 	)
@@ -393,7 +387,7 @@ func (r *EventTriggerReconciler) WatchForCAPI(mgr ctrl.Manager, c controller.Con
 }
 
 func (r *EventTriggerReconciler) addFinalizer(ctx context.Context, eventTriggerScope *scope.EventTriggerScope) error {
-	controllerutil.AddFinalizer(eventTriggerScope.EventTrigger, v1alpha1.EventTriggerFinalizer)
+	controllerutil.AddFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer)
 	// Register the finalizer immediately to avoid orphaning eventTrigger resources on delete
 	if err := eventTriggerScope.PatchObject(ctx); err != nil {
 		eventTriggerScope.Error(err, "Failed to add finalizer")
@@ -415,8 +409,8 @@ func (r *EventTriggerReconciler) cleanMaps(eventTriggerScope *scope.EventTrigger
 	for k, l := range r.ClusterMap {
 		l.Erase(
 			&corev1.ObjectReference{
-				APIVersion: v1alpha1.GroupVersion.String(),
-				Kind:       v1alpha1.EventTriggerKind,
+				APIVersion: v1beta1.GroupVersion.String(),
+				Kind:       v1beta1.EventTriggerKind,
 				Name:       eventTriggerScope.Name(),
 			},
 		)
@@ -432,8 +426,8 @@ func (r *EventTriggerReconciler) cleanMaps(eventTriggerScope *scope.EventTrigger
 	for k, l := range r.EventSourceMap {
 		l.Erase(
 			&corev1.ObjectReference{
-				APIVersion: v1alpha1.GroupVersion.String(),
-				Kind:       v1alpha1.EventTriggerKind,
+				APIVersion: v1beta1.GroupVersion.String(),
+				Kind:       v1beta1.EventTriggerKind,
 				Name:       eventTriggerScope.Name(),
 			},
 		)
@@ -447,8 +441,8 @@ func (r *EventTriggerReconciler) cleanMaps(eventTriggerScope *scope.EventTrigger
 	for k, l := range r.ClusterSetMap {
 		l.Erase(
 			&corev1.ObjectReference{
-				APIVersion: v1alpha1.GroupVersion.String(),
-				Kind:       v1alpha1.EventTriggerKind,
+				APIVersion: v1beta1.GroupVersion.String(),
+				Kind:       v1beta1.EventTriggerKind,
 				Name:       eventTriggerScope.Name(),
 			},
 		)
@@ -501,7 +495,7 @@ func (r *EventTriggerReconciler) updateClusterSetMap(eventTriggerScope *scope.Ev
 	for i := range eventTriggerScope.EventTrigger.Spec.ClusterSetRefs {
 		clusterSet := eventTriggerScope.EventTrigger.Spec.ClusterSetRefs[i]
 		clusterSetInfo := &corev1.ObjectReference{Name: clusterSet,
-			Kind: libsveltosv1alpha1.ClusterSetKind, APIVersion: libsveltosv1alpha1.GroupVersion.String()}
+			Kind: libsveltosv1beta1.ClusterSetKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
 		getConsumersForEntry(r.ClusterSetMap, clusterSetInfo).Insert(eventTriggerInfo)
 	}
 }
@@ -549,8 +543,8 @@ func (r *EventTriggerReconciler) updateEventSourceMaps(eventTriggerScope *scope.
 	// Get list of EventSource currently referenced
 	currentReferences := &libsveltosset.Set{}
 	currentReferences.Insert(&corev1.ObjectReference{
-		APIVersion: libsveltosv1alpha1.GroupVersion.String(), // the only resources that can be referenced is EventSource
-		Kind:       libsveltosv1alpha1.EventSourceKind,
+		APIVersion: libsveltosv1beta1.GroupVersion.String(), // the only resources that can be referenced is EventSource
+		Kind:       libsveltosv1beta1.EventSourceKind,
 		Name:       eventTriggerScope.EventTrigger.Spec.EventSourceName,
 	})
 
@@ -569,8 +563,8 @@ func (r *EventTriggerReconciler) updateEventSourceMaps(eventTriggerScope *scope.
 		tmpResource := referencedResource
 		getConsumersForEntry(r.EventSourceMap, &tmpResource).Insert(
 			&corev1.ObjectReference{
-				APIVersion: v1alpha1.GroupVersion.String(),
-				Kind:       v1alpha1.EventTriggerKind,
+				APIVersion: v1beta1.GroupVersion.String(),
+				Kind:       v1beta1.EventTriggerKind,
 				Name:       eventTriggerScope.Name(),
 			},
 		)
@@ -581,8 +575,8 @@ func (r *EventTriggerReconciler) updateEventSourceMaps(eventTriggerScope *scope.
 		referencedResource := toBeRemoved[i]
 		getConsumersForEntry(r.EventSourceMap, &referencedResource).Erase(
 			&corev1.ObjectReference{
-				APIVersion: v1alpha1.GroupVersion.String(),
-				Kind:       v1alpha1.EventTriggerKind,
+				APIVersion: v1beta1.GroupVersion.String(),
+				Kind:       v1beta1.EventTriggerKind,
 				Name:       eventTriggerScope.Name(),
 			},
 		)
@@ -611,8 +605,8 @@ func (r *EventTriggerReconciler) updateReferencedResourceMap(eventTriggerScope *
 		tmpResource := referencedResource
 		getConsumersForEntry(r.ReferenceMap, &tmpResource).Insert(
 			&corev1.ObjectReference{
-				APIVersion: v1alpha1.GroupVersion.String(),
-				Kind:       v1alpha1.EventTriggerKind,
+				APIVersion: v1beta1.GroupVersion.String(),
+				Kind:       v1beta1.EventTriggerKind,
 				Name:       eventTriggerScope.Name(),
 			},
 		)
@@ -623,8 +617,8 @@ func (r *EventTriggerReconciler) updateReferencedResourceMap(eventTriggerScope *
 		referencedResource := toBeRemoved[i]
 		getConsumersForEntry(r.ReferenceMap, &referencedResource).Erase(
 			&corev1.ObjectReference{
-				APIVersion: v1alpha1.GroupVersion.String(),
-				Kind:       v1alpha1.EventTriggerKind,
+				APIVersion: v1beta1.GroupVersion.String(),
+				Kind:       v1beta1.EventTriggerKind,
 				Name:       eventTriggerScope.Name(),
 			},
 		)
@@ -663,12 +657,12 @@ func (r *EventTriggerReconciler) updateClusterInfo(ctx context.Context,
 		clusterMap[getClusterID(c.Cluster)] = true
 	}
 
-	newClusterInfo := make([]libsveltosv1alpha1.ClusterInfo, 0)
+	newClusterInfo := make([]libsveltosv1beta1.ClusterInfo, 0)
 	for i := range chc.Status.MatchingClusterRefs {
 		c := chc.Status.MatchingClusterRefs[i]
 		if _, ok := clusterMap[getClusterID(c)]; !ok {
 			newClusterInfo = append(newClusterInfo,
-				libsveltosv1alpha1.ClusterInfo{
+				libsveltosv1beta1.ClusterInfo{
 					Cluster: c,
 					Hash:    nil,
 				})
@@ -739,7 +733,7 @@ func (r *EventTriggerReconciler) getClustersFromClusterSets(ctx context.Context,
 
 	clusters := make([]corev1.ObjectReference, 0)
 	for i := range clusterSetRefs {
-		clusterSet := &libsveltosv1alpha1.ClusterSet{}
+		clusterSet := &libsveltosv1beta1.ClusterSet{}
 		if err := r.Client.Get(ctx,
 			types.NamespacedName{Name: clusterSetRefs[i]},
 			clusterSet); err != nil {
