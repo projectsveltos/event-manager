@@ -53,6 +53,7 @@ import (
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	"github.com/projectsveltos/libsveltos/lib/sharding"
+	libsveltostemplate "github.com/projectsveltos/libsveltos/lib/template"
 	libsveltosutils "github.com/projectsveltos/libsveltos/lib/utils"
 )
 
@@ -617,9 +618,17 @@ func deployEventSource(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
 	resource *v1beta1.EventTrigger, logger logr.Logger) error {
 
-	currentReferenced, err := fetchEventSource(ctx, c, resource.Spec.EventSourceName)
+	eventSourceName, err := libsveltostemplate.GetReferenceResourceName(clusterNamespace, clusterName,
+		string(clusterType), resource.Spec.EventSourceName)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventSource: %v", err))
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get EventSource Name %s: %v",
+			resource.Spec.EventSourceName, err))
+		return err
+	}
+
+	currentReferenced, err := fetchEventSource(ctx, c, eventSourceName)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventSource %s: %v", eventSourceName, err))
 		return err
 	}
 	if currentReferenced == nil {

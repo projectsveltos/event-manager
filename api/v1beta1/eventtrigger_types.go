@@ -57,6 +57,11 @@ type EventTriggerSpec struct {
 	// Resources contained in the referenced ConfigMaps/Secrets and HelmCharts
 	// will be customized using information from resources matching the EventSource
 	// in the managed cluster.
+	// Name can be expressed as a template and instantiate using:
+	// - cluster namespace: .Cluster.metadata.namespace
+	// - cluster name: .Cluster.metadata.name
+	// - cluster type: .Cluster.kind
+	// +kubebuilder:validation:MinLength=1
 	EventSourceName string `json:"eventSourceName"`
 
 	// DestinationClusterSelector identifies the cluster where add-ons will be deployed.
