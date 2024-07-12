@@ -198,6 +198,7 @@ func autoConvert_v1beta1_EventTriggerSpec_To_v1alpha1_EventTriggerSpec(in *v1bet
 	out.HelmCharts = *(*[]apiv1alpha1.HelmChart)(unsafe.Pointer(&in.HelmCharts))
 	out.KustomizationRefs = *(*[]apiv1alpha1.KustomizationRef)(unsafe.Pointer(&in.KustomizationRefs))
 	out.ValidateHealths = *(*[]apiv1alpha1.ValidateHealth)(unsafe.Pointer(&in.ValidateHealths))
+	// WARNING: in.Patches requires manual conversion: does not exist in peer-type
 	out.ExtraLabels = *(*map[string]string)(unsafe.Pointer(&in.ExtraLabels))
 	out.ExtraAnnotations = *(*map[string]string)(unsafe.Pointer(&in.ExtraAnnotations))
 	return nil
