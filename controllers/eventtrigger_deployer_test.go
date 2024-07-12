@@ -480,9 +480,14 @@ var _ = Describe("EventTrigger deployer", func() {
 	})
 
 	It("deployEventSource deploys referenced EventSource in the managed cluster", func() {
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+
+		eventSourceNamePrefix := "eventsource-"
 		eventSource := &libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: randomString(),
+				Name: eventSourceNamePrefix + clusterName,
 			},
 			Spec: libsveltosv1beta1.EventSourceSpec{
 				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
@@ -497,10 +502,6 @@ var _ = Describe("EventTrigger deployer", func() {
 
 		Expect(testEnv.Create(context.TODO(), eventSource)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventSource)).To(Succeed())
-
-		clusterNamespace := randomString()
-		clusterName := randomString()
-		clusterType := libsveltosv1beta1.ClusterTypeCapi
 
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -524,7 +525,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				Name: randomString(),
 			},
 			Spec: v1beta1.EventTriggerSpec{
-				EventSourceName: eventSource.Name,
+				EventSourceName: eventSourceNamePrefix + "{{ .Cluster.metadata.name }}",
 			},
 			Status: v1beta1.EventTriggerStatus{
 				MatchingClusterRefs: []corev1.ObjectReference{
@@ -552,8 +553,9 @@ var _ = Describe("EventTrigger deployer", func() {
 			clusterType, resource, logger)).To(Succeed())
 
 		Eventually(func() bool {
+			instantiatedEventSourceName := eventSourceNamePrefix + cluster.Name
 			currentEventSource := &libsveltosv1beta1.EventSource{}
-			err := testEnv.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name}, currentEventSource)
+			err := testEnv.Get(context.TODO(), types.NamespacedName{Name: instantiatedEventSourceName}, currentEventSource)
 			if err != nil {
 				return false
 			}

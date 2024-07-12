@@ -29,6 +29,8 @@ TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/$(BIN_DIR))
 
 GOBUILD=go build
 
+GENERATED_FILES:=./manifest/manifest.yaml
+
 # Define Docker related variables.
 REGISTRY ?= projectsveltos
 IMAGE_NAME ?= event-manager
@@ -50,7 +52,7 @@ KUBECTL := $(TOOLS_BIN_DIR)/kubectl
 CLUSTERCTL := $(TOOLS_BIN_DIR)/clusterctl
 
 GOLANGCI_LINT_VERSION := "v1.57.2"
-CLUSTERCTL_VERSION := "v1.7.3"
+CLUSTERCTL_VERSION := "v1.7.4"
 
 KUSTOMIZE_VER := v5.3.0
 KUSTOMIZE_BIN := kustomize
@@ -141,7 +143,7 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: $(CONTROLLER_GEN) $(KUSTOMIZE) $(ENVSUBST) fmt generate ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: $(CONTROLLER_GEN) $(KUSTOMIZE) $(ENVSUBST) generate generate-go-conversions fmt vet ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	MANIFEST_IMG=$(CONTROLLER_IMG) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
 	$(KUSTOMIZE) build config/default | $(ENVSUBST) > manifest/manifest.yaml
@@ -175,6 +177,11 @@ vet: ## Run go vet against code.
 .PHONY: lint
 lint: $(GOLANGCI_LINT) generate ## Lint codebase
 	$(GOLANGCI_LINT) run -v --fast=false --max-issues-per-linter 0 --max-same-issues 0 --timeout 5m	
+
+.PHONY: check-manifests
+check-manifests: manifests ## Verify manifests file is up to date
+	test `git status --porcelain $(GENERATED_FILES) | grep -cE '(^\?)|(^ M)'` -eq 0 || (echo "The manifest file changed, please 'make manifests' and commit the results"; exit 1)
+	test `git status --porcelain ./api/v1alpha1/zz_generated.conversion.go | grep -cE '(^\?)|(^ M)'` -eq 0 || (echo "The conversion generated file changed, please 'make generate-go-conversions' and commit the results"; exit 1)
 
 ##@ Testing
 
@@ -219,7 +226,7 @@ fv-sharding: $(KUBECTL) $(GINKGO) ## Run Sveltos Controller tests using existing
 	cd test/fv; $(GINKGO) -nodes $(NUM_NODES) --label-filter='FV' --v --trace --randomize-all
 
 .PHONY: test
-test: manifests generate fmt vet $(SETUP_ENVTEST) ## Run uts.
+test: manifests generate generate-go-conversions fmt vet check-manifests $(SETUP_ENVTEST) ## Run uts.
 	KUBEBUILDER_ASSETS="$(KUBEBUILDER_ASSETS)" go test $(shell go list ./... |grep -v test/fv |grep -v test/helpers) $(TEST_ARGS) -coverprofile cover.out 
 
 .PHONY: create-cluster
