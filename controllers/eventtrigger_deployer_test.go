@@ -61,6 +61,8 @@ const (
 	nginxDeploymentName = "nginx-deployment"
 )
 
+var ()
+
 var (
 	nginxDepl = `apiVersion: apps/v1
 kind: Deployment
@@ -105,6 +107,13 @@ spec:
         {{ range $port := .Resource.spec.ports }}
         - port: {{ $port.port }}
         {{ end }}`
+
+	sveltosCluster = `apiVersion: lib.projectsveltos.io/v1beta1
+kind: SveltosCluster
+metadata:
+	name: testing
+	namespace: testing
+spec:`
 )
 
 var _ = Describe("EventTrigger deployer", func() {
@@ -691,6 +700,7 @@ var _ = Describe("EventTrigger deployer", func() {
 	})
 
 	It("instantiateOneClusterProfilePerAllResource creates clusterProfile for all resource", func() {
+
 		nginxName := nginxDeploymentName
 		nginxNamespace := randomString()
 
@@ -707,10 +717,9 @@ var _ = Describe("EventTrigger deployer", func() {
 			result += string(tmpJson)
 			result += separator
 		}
-
-		eventSourceName := randomString()
 		clusterNamespace := randomString()
 		clusterName := randomString()
+		eventSourceName := randomString()
 		clusterType := libsveltosv1beta1.ClusterTypeCapi
 
 		eventReport := &libsveltosv1beta1.EventReport{
@@ -748,7 +757,11 @@ var _ = Describe("EventTrigger deployer", func() {
 			},
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: clusterNamespace},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
 
 		_, err = controllers.InstantiateOneClusterProfilePerAllResource(context.TODO(), c, clusterNamespace, clusterName, clusterType,
 			eventTrigger, eventReport, logger)
@@ -838,7 +851,10 @@ var _ = Describe("EventTrigger deployer", func() {
 			},
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: clusterNamespace},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
 
 		_, err = controllers.InstantiateOneClusterProfilePerResource(context.TODO(), c, clusterNamespace, clusterName, clusterType,
 			eventTrigger, eventReport, logger)
