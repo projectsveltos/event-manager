@@ -748,7 +748,11 @@ var _ = Describe("EventTrigger deployer", func() {
 			},
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: clusterNamespace},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
 
 		_, err = controllers.InstantiateOneClusterProfilePerAllResource(context.TODO(), c, clusterNamespace, clusterName, clusterType,
 			eventTrigger, eventReport, logger)
@@ -838,7 +842,11 @@ var _ = Describe("EventTrigger deployer", func() {
 			},
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: clusterNamespace},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
 
 		_, err = controllers.InstantiateOneClusterProfilePerResource(context.TODO(), c, clusterNamespace, clusterName, clusterType,
 			eventTrigger, eventReport, logger)
