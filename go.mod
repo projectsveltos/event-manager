@@ -3,7 +3,6 @@ module github.com/projectsveltos/event-manager
 go 1.22.0
 
 require (
-	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/TwiN/go-color v1.4.1
 	github.com/fluxcd/source-controller/api v1.3.0
 	github.com/gdexlab/go-render v1.0.1
@@ -34,7 +33,6 @@ require (
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/Masterminds/squirrel v1.5.4 // indirect
