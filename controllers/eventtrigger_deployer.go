@@ -756,6 +756,7 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 type currentObjects struct {
 	MatchingResources []corev1.ObjectReference
 	Resources         []map[string]interface{}
+	Cluster           map[string]interface{}
 }
 
 // When instantiating one ClusterProfile per resource those values are available.
@@ -764,6 +765,7 @@ type currentObjects struct {
 type currentObject struct {
 	MatchingResource corev1.ObjectReference
 	Resource         map[string]interface{}
+	Cluster          map[string]interface{}
 }
 
 // updateClusterProfiles creates/updates ClusterProfile(s).
@@ -886,6 +888,12 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	if resource != nil {
 		object.Resource = resource.UnstructuredContent()
 	}
+	cluster, err := fecthClusterObjects(ctx, c, clusterNamespace, clusterName, clusterType, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get cluster %v", err))
+		return nil, err
+	}
+	object.Cluster = cluster
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
 	tmpLabels := getInstantiatedObjectLabelsForResource(matchingResource.Namespace, matchingResource.Name)
@@ -983,10 +991,16 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	for i := range resources {
 		values[i] = resources[i].UnstructuredContent()
 	}
+	cluster, err := fecthClusterObjects(ctx, c, clusterNamespace, clusterName, clusterType, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get cluster %v", err))
+		return nil, err
+	}
 
 	objects := &currentObjects{
 		MatchingResources: eventReport.Spec.MatchingResources,
 		Resources:         values,
+		Cluster:           cluster,
 	}
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
@@ -1716,4 +1730,22 @@ func unstructuredToTyped(config *rest.Config, u *unstructured.Unstructured) (run
 	}
 
 	return obj, nil
+}
+
+// fecthClusterObjects fetches resources representing a cluster.
+// All fetched objects are in the management cluster.
+// Currently limited to Cluster and Infrastructure Provider
+func fecthClusterObjects(ctx context.Context, c client.Client,
+	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
+	logger logr.Logger) (map[string]interface{}, error) {
+
+	logger.V(logs.LogInfo).Info(fmt.Sprintf("Fetch cluster %s: %s/%s",
+		clusterType, clusterNamespace, clusterName))
+
+	genericCluster, err := clusterproxy.GetCluster(ctx, c, clusterNamespace, clusterName, clusterType)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to fetch cluster %v", err))
+		return nil, err
+	}
+	return runtime.DefaultUnstructuredConverter.ToUnstructured(genericCluster)
 }
