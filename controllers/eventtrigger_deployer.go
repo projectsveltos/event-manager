@@ -27,7 +27,6 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig"
 	"github.com/gdexlab/go-render/render"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -50,6 +49,7 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
+	"github.com/projectsveltos/libsveltos/lib/funcmap"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	"github.com/projectsveltos/libsveltos/lib/sharding"
@@ -1138,7 +1138,7 @@ func instantiateHelmChart(templateName string, helmCharts []configv1beta1.HelmCh
 		return nil, err
 	}
 
-	tmpl, err := template.New(templateName).Funcs(sprig.TxtFuncMap()).Parse(string(helmChartJson))
+	tmpl, err := template.New(templateName).Funcs(funcmap.SveltosFuncMap()).Parse(string(helmChartJson))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse template: %v", err))
 		return nil, err
@@ -1169,7 +1169,7 @@ func instantiateDataSection(templateName string, content map[string]string, data
 		return nil, err
 	}
 
-	tmpl, err := template.New(templateName).Funcs(sprig.TxtFuncMap()).Parse(string(contentJson))
+	tmpl, err := template.New(templateName).Funcs(funcmap.SveltosFuncMap()).Parse(string(contentJson))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse content: %v", err))
 		return nil, err
