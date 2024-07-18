@@ -162,10 +162,16 @@ type EventTriggerSpec struct {
 	// +optional
 	ValidateHealths []configv1beta1.ValidateHealth `json:"validateHealths,omitempty"`
 
+	// Define additional Kustomize inline Patches applied for all resources on this profile
+	// Within the Patch Spec you can use templating
+	// +optional
+	Patches []libsveltosv1beta1.Patch `json:"patches,omitempty"`
+
 	// ExtraLabels: These labels will be added by Sveltos to all Kubernetes resources deployed in
 	// a managed cluster based on this ClusterProfile/Profile instance.
 	// **Important:** If a resource deployed by Sveltos already has a label with a key present in
 	// `ExtraLabels`, the value from `ExtraLabels` will override the existing value.
+	// (Deprecated use Patches instead)
 	// +optional
 	ExtraLabels map[string]string `json:"extraLabels,omitempty"`
 
@@ -173,6 +179,7 @@ type EventTriggerSpec struct {
 	// deployed in a managed cluster based on this ClusterProfile/Profile instance.
 	// **Important:** If a resource deployed by Sveltos already has a annotation with a key present in
 	// `ExtraAnnotations`, the value from `ExtraAnnotations` will override the existing value.
+	// (Deprecated use Patches instead)
 	// +optional
 	ExtraAnnotations map[string]string `json:"extraAnnotations,omitempty"`
 }

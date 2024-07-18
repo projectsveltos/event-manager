@@ -134,6 +134,13 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.Patches != nil {
+		in, out := &in.Patches, &out.Patches
+		*out = make([]libsveltosapiv1beta1.Patch, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.ExtraLabels != nil {
 		in, out := &in.ExtraLabels, &out.ExtraLabels
 		*out = make(map[string]string, len(*in))
