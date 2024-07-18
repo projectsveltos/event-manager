@@ -47,6 +47,7 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
+	libsveltostemplate "github.com/projectsveltos/libsveltos/lib/template"
 )
 
 type ReportMode int
@@ -277,7 +278,11 @@ func (r *EventTriggerReconciler) reconcileNormal(
 		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
 
-	r.updateMaps(eventTriggerScope)
+	err = r.updateMaps(eventTriggerScope, logger)
+	if err != nil {
+		logger.V(logs.LogDebug).Info("failed to update maps")
+		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
+	}
 
 	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
 	if err := r.deployEventTrigger(ctx, eventTriggerScope, f, logger); err != nil {
@@ -461,12 +466,15 @@ func (r *EventTriggerReconciler) cleanMaps(eventTriggerScope *scope.EventTrigger
 	}
 }
 
-func (r *EventTriggerReconciler) updateMaps(eventTriggerScope *scope.EventTriggerScope) {
+func (r *EventTriggerReconciler) updateMaps(eventTriggerScope *scope.EventTriggerScope, logger logr.Logger) error {
 	r.updateClusterMaps(eventTriggerScope)
 
 	r.updateEventSourceMaps(eventTriggerScope)
 
-	r.updateReferencedResourceMap(eventTriggerScope)
+	if err := r.updateReferencedResourceMap(eventTriggerScope); err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update referenced resources map: %v", err))
+		return err
+	}
 
 	r.updateClusterSetMap(eventTriggerScope)
 
@@ -476,6 +484,7 @@ func (r *EventTriggerReconciler) updateMaps(eventTriggerScope *scope.EventTrigge
 	defer r.Mux.Unlock()
 
 	r.EventTriggers[*eventTriggerInfo] = eventTriggerScope.EventTrigger.Spec.SourceClusterSelector
+	return nil
 }
 
 func (r *EventTriggerReconciler) updateClusterSetMap(eventTriggerScope *scope.EventTriggerScope) {
@@ -586,9 +595,12 @@ func (r *EventTriggerReconciler) updateEventSourceMaps(eventTriggerScope *scope.
 	r.ToEventSourceMap[name] = currentReferences
 }
 
-func (r *EventTriggerReconciler) updateReferencedResourceMap(eventTriggerScope *scope.EventTriggerScope) {
+func (r *EventTriggerReconciler) updateReferencedResourceMap(eventTriggerScope *scope.EventTriggerScope) error {
 	// Get list of ConfigMap/Secret currently referenced
-	currentReferences := r.getCurrentReferences(eventTriggerScope)
+	currentReferences, err := r.getCurrentReferences(eventTriggerScope)
+	if err != nil {
+		return err
+	}
 
 	r.Mux.Lock()
 	defer r.Mux.Unlock()
@@ -626,6 +638,7 @@ func (r *EventTriggerReconciler) updateReferencedResourceMap(eventTriggerScope *
 
 	// Update list of ConfigMaps/Secrets currently referenced by EventTrigger
 	r.EventTriggerMap[eventTriggerName] = currentReferences
+	return nil
 }
 
 func getConsumersForEntry(currentMap map[corev1.ObjectReference]*libsveltosset.Set,
@@ -676,17 +689,23 @@ func (r *EventTriggerReconciler) updateClusterInfo(ctx context.Context,
 	return nil
 }
 
-func (r *EventTriggerReconciler) getCurrentReferences(eventTriggerScope *scope.EventTriggerScope) *libsveltosset.Set {
+func (r *EventTriggerReconciler) getCurrentReferences(eventTriggerScope *scope.EventTriggerScope) (*libsveltosset.Set, error) {
 	currentReferences := &libsveltosset.Set{}
 	for i := range eventTriggerScope.EventTrigger.Spec.PolicyRefs {
 		referencedNamespace := eventTriggerScope.EventTrigger.Spec.PolicyRefs[i].Namespace
-		referencedName := eventTriggerScope.EventTrigger.Spec.PolicyRefs[i].Name
 
 		// If referenced resource namespace is empty, at instantiation time the cluster namespace will be used.
 		// Here to track referenced ConfigMaps/Resource, we use all current matching clusters
 		for j := range eventTriggerScope.EventTrigger.Status.MatchingClusterRefs {
 			clusterRef := eventTriggerScope.EventTrigger.Status.MatchingClusterRefs[j]
-			namespace := getReferenceResourceNamespace(clusterRef.Namespace, referencedNamespace)
+			namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterRef.Namespace, referencedNamespace)
+
+			clusterType := clusterproxy.GetClusterType(&clusterRef)
+			referencedName, err := libsveltostemplate.GetReferenceResourceName(clusterRef.Namespace, clusterRef.Name,
+				string(clusterType), eventTriggerScope.EventTrigger.Spec.PolicyRefs[i].Name)
+			if err != nil {
+				return nil, err
+			}
 
 			currentReferences.Insert(&corev1.ObjectReference{
 				APIVersion: corev1.SchemeGroupVersion.String(), // the only resources that can be referenced are Secret and ConfigMap
@@ -699,13 +718,19 @@ func (r *EventTriggerReconciler) getCurrentReferences(eventTriggerScope *scope.E
 
 	for i := range eventTriggerScope.EventTrigger.Spec.KustomizationRefs {
 		referencedNamespace := eventTriggerScope.EventTrigger.Spec.KustomizationRefs[i].Namespace
-		referencedName := eventTriggerScope.EventTrigger.Spec.KustomizationRefs[i].Name
 
 		// If referenced resource namespace is empty, at instantiation time the cluster namespace will be used.
 		// Here to track referenced ConfigMaps/Resource, we use all current matching clusters
 		for j := range eventTriggerScope.EventTrigger.Status.MatchingClusterRefs {
 			clusterRef := eventTriggerScope.EventTrigger.Status.MatchingClusterRefs[j]
-			namespace := getReferenceResourceNamespace(clusterRef.Namespace, referencedNamespace)
+			namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterRef.Namespace, referencedNamespace)
+
+			clusterType := clusterproxy.GetClusterType(&clusterRef)
+			referencedName, err := libsveltostemplate.GetReferenceResourceName(clusterRef.Namespace, clusterRef.Name,
+				string(clusterType), eventTriggerScope.EventTrigger.Spec.KustomizationRefs[i].Name)
+			if err != nil {
+				return nil, err
+			}
 
 			ref := &corev1.ObjectReference{
 				Kind:      eventTriggerScope.EventTrigger.Spec.KustomizationRefs[i].Kind,
@@ -725,7 +750,7 @@ func (r *EventTriggerReconciler) getCurrentReferences(eventTriggerScope *scope.E
 			currentReferences.Insert(ref)
 		}
 	}
-	return currentReferences
+	return currentReferences, nil
 }
 
 func (r *EventTriggerReconciler) getClustersFromClusterSets(ctx context.Context, clusterSetRefs []string,

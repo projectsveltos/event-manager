@@ -378,7 +378,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		})
 		Expect(err).To(BeNil())
 
-		controllers.UpdateMaps(&reconciler, resourceScope)
+		Expect(controllers.UpdateMaps(&reconciler, resourceScope, logger)).To(Succeed())
 
 		clusterInfo := &corev1.ObjectReference{Namespace: clusterNamespace, Name: clusterName,
 			Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
@@ -461,7 +461,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		})
 		Expect(err).To(BeNil())
 
-		controllers.UpdateReferencedResourceMap(&reconciler, resourceScope)
+		Expect(controllers.UpdateReferencedResourceMap(&reconciler, resourceScope)).To(Succeed())
 
 		eventTriggerName := types.NamespacedName{Name: resourceScope.Name()}
 		v, ok := reconciler.EventTriggerMap[eventTriggerName]

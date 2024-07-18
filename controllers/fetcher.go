@@ -30,6 +30,7 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
+	libsveltostemplate "github.com/projectsveltos/libsveltos/lib/template"
 )
 
 // fetchReferencedResources fetches resources referenced by EventTrigger.
@@ -123,17 +124,24 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 		var err error
 		var object client.Object
 
-		namespace := getReferenceResourceNamespace(cluster.Namespace, policyRef.Namespace)
+		namespace := libsveltostemplate.GetReferenceResourceNamespace(cluster.Namespace, policyRef.Namespace)
+
+		clusterType := clusterproxy.GetClusterType(cluster)
+		referencedName, err := libsveltostemplate.GetReferenceResourceName(cluster.Namespace, cluster.Name,
+			string(clusterType), policyRef.Name)
+		if err != nil {
+			return nil, err
+		}
 
 		if policyRef.Kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
-			object, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: policyRef.Name})
+			object, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: referencedName})
 		} else {
-			object, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: policyRef.Name})
+			object, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: referencedName})
 		}
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("%s %s/%s does not exist yet",
-					policyRef.Kind, policyRef.Namespace, policyRef.Name))
+					policyRef.Kind, namespace, referencedName))
 				continue
 			}
 			return nil, err
@@ -142,17 +150,6 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 	}
 
 	return result, nil
-}
-
-// getReferenceResourceNamespace returns the namespace to use for a referenced resource.
-// If namespace is set on referencedResource, that namespace will be used.
-// If namespace is not set, cluster namespace will be used
-func getReferenceResourceNamespace(clusterNamespace, referencedResourceNamespace string) string {
-	if referencedResourceNamespace != "" {
-		return referencedResourceNamespace
-	}
-
-	return clusterNamespace
 }
 
 // getConfigMap retrieves any ConfigMap from the given name and namespace.

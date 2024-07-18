@@ -29,6 +29,7 @@ import (
 
 	"github.com/gdexlab/go-render/render"
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -876,7 +877,7 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 // and copying this value to ClusterProfile.Spec.HelmCharts
 // - instantiating eventTrigger.Spec.PolicyRefs with passed in resource (one of the resource matching referenced EventSource)
 // in new ConfigMaps/Secrets and have ClusterProfile.Spec.PolicyRefs reference those;
-// - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EventAddOn
+// - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EventTrigger
 func instantiateClusterProfileForResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
 	matchingResource *corev1.ObjectReference, resource *unstructured.Unstructured, logger logr.Logger,
@@ -946,12 +947,19 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	}
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
-	instantiateHelmChartsWithResource, err := instantiateHelmChartsWithResource(templateName, eventTrigger.Spec.HelmCharts,
-		object, logger)
+	instantiateHelmChartsWithResource, err := instantiateHelmChartsWithResource(ctx, c, clusterNamespace, templateName,
+		eventTrigger.Spec.HelmCharts, object, labels, logger)
 	if err != nil {
 		return nil, err
 	}
 	clusterProfile.Spec.HelmCharts = instantiateHelmChartsWithResource
+
+	instantiateKustomizeRefsWithResource, err := instantiateKustomizationRefsWithResource(ctx, c, clusterNamespace,
+		templateName, eventTrigger.Spec.KustomizationRefs, object, labels, logger)
+	if err != nil {
+		return nil, err
+	}
+	clusterProfile.Spec.KustomizationRefs = instantiateKustomizeRefsWithResource
 
 	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
 	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventTrigger, clusterRef, object, labels, logger)
@@ -976,7 +984,7 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 // and copying this value to ClusterProfile.Spec.HelmCharts
 // - instantiating eventTrigger.Spec.PolicyRefs with passed in resource (one of the resource matching referenced EventSource)
 // in new ConfigMaps/Secrets and have ClusterProfile.Spec.PolicyRefs reference those;
-// - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EventAddOn
+// - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EvnteTrigger
 func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
 	eventReport *libsveltosv1beta1.EventReport, logger logr.Logger) ([]*configv1beta1.ClusterProfile, error) {
@@ -1050,12 +1058,19 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	}
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
-	instantiateHelmChartsWithResources, err := instantiateHelmChartsWithAllResources(templateName, eventTrigger.Spec.HelmCharts,
-		objects, logger)
+	instantiateHelmChartsWithResources, err := instantiateHelmChartsWithAllResources(ctx, c, clusterNamespace, templateName,
+		eventTrigger.Spec.HelmCharts, objects, labels, logger)
 	if err != nil {
 		return nil, err
 	}
 	clusterProfile.Spec.HelmCharts = instantiateHelmChartsWithResources
+
+	instantiateKustomizeRefsWithResource, err := instantiateKustomizationRefsWithAllResources(ctx, c, clusterNamespace,
+		templateName, eventTrigger.Spec.KustomizationRefs, objects, labels, logger)
+	if err != nil {
+		return nil, err
+	}
+	clusterProfile.Spec.KustomizationRefs = instantiateKustomizeRefsWithResource
 
 	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
 	policyRef, err := instantiateReferencedPolicies(ctx, c, templateName, eventTrigger, clusterRef, objects, labels, logger)
@@ -1063,9 +1078,6 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 		return nil, err
 	}
 	clusterProfile.Spec.PolicyRefs = getClusterProfilePolicyRefs(policyRef)
-
-	// TODO: is it needed to instantiate kustomize files?
-	clusterProfile.Spec.KustomizationRefs = eventTrigger.Spec.KustomizationRefs
 
 	if createClusterProfile {
 		return []*configv1beta1.ClusterProfile{clusterProfile}, c.Create(ctx, clusterProfile)
@@ -1131,16 +1143,11 @@ func getResources(eventReport *libsveltosv1beta1.EventReport, logger logr.Logger
 	return result, nil
 }
 
-func instantiateHelmChart(templateName string, helmCharts []configv1beta1.HelmChart, data any,
-	logger logr.Logger) ([]configv1beta1.HelmChart, error) {
+func instantiateSection(templateName string, toBeInstantiated []byte, data any,
+	logger logr.Logger) ([]byte, error) {
 
-	helmChartJson, err := json.Marshal(helmCharts)
-	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to marshel helmCharts: %v", err))
-		return nil, err
-	}
-
-	tmpl, err := template.New(templateName).Funcs(funcmap.SveltosFuncMap()).Parse(string(helmChartJson))
+	tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
+		funcmap.SveltosFuncMap()).Parse(string(toBeInstantiated))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse template: %v", err))
 		return nil, err
@@ -1152,14 +1159,123 @@ func instantiateHelmChart(templateName string, helmCharts []configv1beta1.HelmCh
 		return nil, err
 	}
 
+	return buffer.Bytes(), nil
+}
+
+func instantiateHelmCharts(ctx context.Context, c client.Client, clusterNamespace, templateName string,
+	helmCharts []configv1beta1.HelmChart, data any, labels map[string]string, logger logr.Logger,
+) ([]configv1beta1.HelmChart, error) {
+
+	helmChartJson, err := json.Marshal(helmCharts)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to marshel helmCharts: %v", err))
+		return nil, err
+	}
+
+	instantiatedData, err := instantiateSection(templateName, helmChartJson, data, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute template: %v", err))
+		return nil, err
+	}
+
 	instantiatedHelmCharts := make([]configv1beta1.HelmChart, 0)
-	err = json.Unmarshal(buffer.Bytes(), &instantiatedHelmCharts)
+	err = json.Unmarshal(instantiatedData, &instantiatedHelmCharts)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to unmarshal helmCharts: %v", err))
 		return nil, err
 	}
 
+	for i := range instantiatedHelmCharts {
+		err = instantiateValuesFrom(ctx, c, instantiatedHelmCharts[i].ValuesFrom, clusterNamespace, templateName,
+			data, labels, logger)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return instantiatedHelmCharts, nil
+}
+
+func instantiateKustomizationRefs(ctx context.Context, c client.Client, clusterNamespace, templateName string,
+	kustomizationRefs []configv1beta1.KustomizationRef, data any, labels map[string]string, logger logr.Logger,
+) ([]configv1beta1.KustomizationRef, error) {
+
+	kustomizationRefsJson, err := json.Marshal(kustomizationRefs)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to marshel kustomizationRefs: %v", err))
+		return nil, err
+	}
+
+	instantiatedData, err := instantiateSection(templateName, kustomizationRefsJson, data, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute template: %v", err))
+		return nil, err
+	}
+
+	instantiatedKustomizationRefs := make([]configv1beta1.KustomizationRef, 0)
+	err = json.Unmarshal(instantiatedData, &instantiatedKustomizationRefs)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to unmarshal kustomizationRefs: %v", err))
+		return nil, err
+	}
+
+	for i := range instantiatedKustomizationRefs {
+		err = instantiateValuesFrom(ctx, c, instantiatedKustomizationRefs[i].ValuesFrom, clusterNamespace,
+			templateName, data, labels, logger)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return instantiatedKustomizationRefs, nil
+}
+
+func instantiateValuesFrom(ctx context.Context, c client.Client, valuesFrom []configv1beta1.ValueFrom,
+	clusterNamespace, templateName string, data any, labels map[string]string, logger logr.Logger) error {
+
+	for i := range valuesFrom {
+		ref := &valuesFrom[i]
+
+		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, ref.Namespace)
+
+		var err error
+		var resource client.Object
+		if ref.Kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
+			resource, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: ref.Name})
+		} else {
+			resource, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: ref.Name})
+		}
+
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				// referenced ConfigMap/Secret does not exist. Assume is not intended to be a template.
+				// So there is no need to instantiate a new one. Generated ClusterProfile can directly
+				// reference this one
+				continue
+			}
+			return err
+		}
+
+		if _, ok := resource.GetAnnotations()[libsveltosv1beta1.PolicyTemplateAnnotation]; !ok {
+			// referenced ConfigMap/Secret is not a template. So there is no
+			// need to instantiate a new one. Generated ClusterProfile can directly
+			// reference this one
+			continue
+		}
+
+		info, err := instantiateReferencedPolicy(ctx, c, resource, templateName, data, labels, logger)
+		if err != nil {
+			msg := fmt.Sprintf("failed to instantiate content for ValuesFrom: %s/%s",
+				resource.GetNamespace(), resource.GetName())
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("%s. Error: %v", msg, err))
+			return errors.Wrapf(err, msg)
+		}
+
+		ref.Name = info.Name
+		ref.Namespace = info.Namespace
+	}
+
+	return nil
 }
 
 func instantiateDataSection(templateName string, content map[string]string, data any,
@@ -1171,7 +1287,8 @@ func instantiateDataSection(templateName string, content map[string]string, data
 		return nil, err
 	}
 
-	tmpl, err := template.New(templateName).Funcs(funcmap.SveltosFuncMap()).Parse(string(contentJson))
+	tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
+		funcmap.SveltosFuncMap()).Parse(string(contentJson))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse content: %v", err))
 		return nil, err
@@ -1195,18 +1312,38 @@ func instantiateDataSection(templateName string, content map[string]string, data
 
 // instantiateHelmChartsWithResource instantiate eventTrigger.Spec.HelmCharts using information from passed in object
 // which represents one of the resource matching referenced EventSource in the managed cluster.
-func instantiateHelmChartsWithResource(templateName string, helmCharts []configv1beta1.HelmChart, object *currentObject,
-	logger logr.Logger) ([]configv1beta1.HelmChart, error) {
+func instantiateHelmChartsWithResource(ctx context.Context, c client.Client, clusterNamespace, templateName string,
+	helmCharts []configv1beta1.HelmChart, object *currentObject, labels map[string]string, logger logr.Logger,
+) ([]configv1beta1.HelmChart, error) {
 
-	return instantiateHelmChart(templateName, helmCharts, object, logger)
+	return instantiateHelmCharts(ctx, c, clusterNamespace, templateName, helmCharts, object, labels, logger)
 }
 
 // instantiateHelmChartsWithAllResources instantiate eventTrigger.Spec.HelmCharts using information from passed in objects
 // which represent all of the resources matching referenced EventSource in the managed cluster.
-func instantiateHelmChartsWithAllResources(templateName string, helmCharts []configv1beta1.HelmChart, objects *currentObjects,
-	logger logr.Logger) ([]configv1beta1.HelmChart, error) {
+func instantiateHelmChartsWithAllResources(ctx context.Context, c client.Client, clusterNamespace, templateName string,
+	helmCharts []configv1beta1.HelmChart, objects *currentObjects, labels map[string]string, logger logr.Logger,
+) ([]configv1beta1.HelmChart, error) {
 
-	return instantiateHelmChart(templateName, helmCharts, objects, logger)
+	return instantiateHelmCharts(ctx, c, clusterNamespace, templateName, helmCharts, objects, labels, logger)
+}
+
+// instantiateKustomizationRefsWithResource instantiate eventTrigger.Spec.KustomizationRefs using information from passed
+// in object which represents one of the resource matching referenced EventSource in the managed cluster.
+func instantiateKustomizationRefsWithResource(ctx context.Context, c client.Client, clusterNamespace, templateName string,
+	kustomizationRefs []configv1beta1.KustomizationRef, object *currentObject, labels map[string]string, logger logr.Logger,
+) ([]configv1beta1.KustomizationRef, error) {
+
+	return instantiateKustomizationRefs(ctx, c, clusterNamespace, templateName, kustomizationRefs, object, labels, logger)
+}
+
+// instantiateKustomizationRefsWithAllResources instantiate eventTrigger.Spec.KustomizationRefs using information from passed
+// in objects which represent all of the resources matching referenced EventSource in the managed cluster.
+func instantiateKustomizationRefsWithAllResources(ctx context.Context, c client.Client, clusterNamespace, templateName string,
+	kustomizationRefs []configv1beta1.KustomizationRef, objects *currentObjects, labels map[string]string, logger logr.Logger,
+) ([]configv1beta1.KustomizationRef, error) {
+
+	return instantiateKustomizationRefs(ctx, c, clusterNamespace, templateName, kustomizationRefs, objects, labels, logger)
 }
 
 // instantiateReferencedPolicies instantiate eventTrigger.Spec.PolicyRefs using information from passed in objects
@@ -1238,50 +1375,63 @@ func instantiateReferencedPolicies(ctx context.Context, c client.Client, templat
 			continue
 		}
 
-		// If referenced resource is a template, assume it needs to be instantiated using
-		// information from the resources in the managed cluster that generated the event.
-		// Generate then a new ConfigMap/Secret. The autocreated ClusterProfile will reference
-		// this new resource.
-		content := getDataSection(ref)
-
-		instantiatedContent, err := instantiateDataSection(templateName, content, objects, logger)
+		info, err := instantiateReferencedPolicy(ctx, c, ref, templateName, objects, labels, logger)
 		if err != nil {
 			return nil, err
 		}
-
-		// Resource name must depend on reference resource name as well. So add those labels.
-		// If an EventTrigger is referencing N configMaps/Secrets, N equivalent referenced
-		// resources must be created
-		labels[referencedResourceNamespaceLabel] = ref.GetNamespace()
-		labels[referencedResourceNameLabel] = ref.GetName()
-
-		name, create, err := getResourceName(ctx, c, ref, labels)
-		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get %s name: %v", ref.GetObjectKind(), err))
-			return nil, err
-		}
-
-		if create {
-			logger.V(logs.LogDebug).Info(fmt.Sprintf("create resource for %s %s:%s",
-				ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
-			err = createResource(ctx, c, ref, name, labels, instantiatedContent)
-			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create resource: %v", err))
-				return nil, err
-			}
-		} else {
-			logger.V(logs.LogDebug).Info(fmt.Sprintf("update resource for %s %s:%s",
-				ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
-			err = updateResource(ctx, c, ref, name, labels, instantiatedContent)
-			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update resource: %v", err))
-				return nil, err
-			}
-		}
-		result.Insert(&corev1.ObjectReference{APIVersion: apiVersion, Kind: kind, Namespace: ReportNamespace, Name: name})
+		result.Insert(&corev1.ObjectReference{APIVersion: apiVersion, Kind: kind,
+			Namespace: info.Namespace, Name: info.Name})
 	}
 
 	return &result, nil
+}
+
+func instantiateReferencedPolicy(ctx context.Context, c client.Client, ref client.Object,
+	templateName string, objects any, labels map[string]string, logger logr.Logger,
+) (*types.NamespacedName, error) {
+
+	// If referenced resource is a template, assume it needs to be instantiated using
+	// information from the resources in the managed cluster that generated the event.
+	// Generate then a new ConfigMap/Secret. The autocreated ClusterProfile will reference
+	// this new resource.
+	content := getDataSection(ref)
+
+	instantiatedContent, err := instantiateDataSection(templateName, content, objects, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resource name must depend on reference resource name as well. So add those labels.
+	// If an EventTrigger is referencing N configMaps/Secrets, N equivalent referenced
+	// resources must be created
+	labels[referencedResourceNamespaceLabel] = ref.GetNamespace()
+	labels[referencedResourceNameLabel] = ref.GetName()
+
+	name, create, err := getResourceName(ctx, c, ref, labels)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get %s name: %v", ref.GetObjectKind(), err))
+		return nil, err
+	}
+
+	if create {
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("create resource for %s %s:%s",
+			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
+		err = createResource(ctx, c, ref, name, labels, instantiatedContent)
+		if err != nil {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create resource: %v", err))
+			return nil, err
+		}
+	} else {
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("update resource for %s %s:%s",
+			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
+		err = updateResource(ctx, c, ref, name, labels, instantiatedContent)
+		if err != nil {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update resource: %v", err))
+			return nil, err
+		}
+	}
+
+	return &types.NamespacedName{Namespace: ReportNamespace, Name: name}, nil
 }
 
 // createResource creates either a ConfigMap or a Secret based on ref type.
@@ -1585,6 +1735,8 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 				Kind:      cp.Spec.PolicyRefs[j].Kind,
 			}] = true
 		}
+		policyRefs = appendHelmChartValuesFrom(policyRefs, cp.Spec.HelmCharts)
+		policyRefs = appendKustomizationRefValuesFrom(policyRefs, cp.Spec.KustomizationRefs)
 	}
 
 	if err := removeConfigMaps(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
@@ -1600,6 +1752,38 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 	}
 
 	return nil
+}
+
+func appendHelmChartValuesFrom(policyRefs map[libsveltosv1beta1.PolicyRef]bool, helmCharts []configv1beta1.HelmChart,
+) map[libsveltosv1beta1.PolicyRef]bool {
+
+	for i := range helmCharts {
+		for j := range helmCharts[i].ValuesFrom {
+			policyRefs[libsveltosv1beta1.PolicyRef{
+				Namespace: helmCharts[i].ValuesFrom[j].Namespace,
+				Name:      helmCharts[i].ValuesFrom[j].Name,
+				Kind:      helmCharts[i].ValuesFrom[j].Kind,
+			}] = true
+		}
+	}
+
+	return policyRefs
+}
+
+func appendKustomizationRefValuesFrom(policyRefs map[libsveltosv1beta1.PolicyRef]bool,
+	kustomizationRefs []configv1beta1.KustomizationRef) map[libsveltosv1beta1.PolicyRef]bool {
+
+	for i := range kustomizationRefs {
+		for j := range kustomizationRefs[i].ValuesFrom {
+			policyRefs[libsveltosv1beta1.PolicyRef{
+				Namespace: kustomizationRefs[i].ValuesFrom[j].Namespace,
+				Name:      kustomizationRefs[i].ValuesFrom[j].Name,
+				Kind:      kustomizationRefs[i].ValuesFrom[j].Kind,
+			}] = true
+		}
+	}
+
+	return policyRefs
 }
 
 // removeConfigMaps fetches all ConfigMaps created by EventTrigger instance for a given cluster.
