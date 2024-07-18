@@ -834,9 +834,17 @@ var _ = Describe("EventTrigger deployer", func() {
 						RepositoryURL:    randomString(),
 						ReleaseNamespace: "{{ .MatchingResource.Namespace }}",
 						ReleaseName:      randomString(),
-						ChartName:        randomString(),
+						ChartName:        randomString() + "{{ .Cluster.metadata.name }}",
 						ChartVersion:     randomString(),
 						HelmChartAction:  configv1beta1.HelmChartActionInstall,
+					},
+				},
+				KustomizationRefs: []configv1beta1.KustomizationRef{
+					{
+						Namespace: "{{ .MatchingResource.Namespace }}",
+						Name:      randomString() + "{{ .Cluster.metadata.name }}",
+						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+						Path:      randomString() + "{{ .Cluster.metadata.name }}" + "{{ .MatchingResource.Namespace }}",
 					},
 				},
 			},
@@ -869,6 +877,7 @@ var _ = Describe("EventTrigger deployer", func() {
 			Expect(clusterProfiles.Items[i].Spec.ClusterRefs[0].Name).To(Equal(clusterName))
 			Expect(clusterProfiles.Items[i].Spec.ClusterRefs[0].Kind).To(Equal("Cluster"))
 			Expect(len(clusterProfiles.Items[i].Spec.HelmCharts)).To(Equal(1))
+			Expect(len(clusterProfiles.Items[i].Spec.KustomizationRefs)).To(Equal(1))
 		}
 	})
 

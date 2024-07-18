@@ -18,13 +18,11 @@ package fv_test
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,62 +33,18 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
-var (
-	// This Lua script matches all Services with label
-	// sveltos: fv
-	serviceLuaScript = `
-function evaluate()
-    hs = {}
-	hs.matching = false
-	hs.message = ""	
-	if obj.metadata.labels ~= nil then
-	  for key, value in pairs(obj.metadata.labels) do
-        if key == "sveltos" then
-		  if value == "fv" then
-		    hs.matching = true
-		  end
-		end
-      end
-	end
-	return hs
-end`
-
-	networkPolicy = `kind: NetworkPolicy
-apiVersion: networking.k8s.io/v1
-metadata:
-  name: front-{{ .Resource.metadata.name }}
-  namespace: {{ .Resource.metadata.namespace }}
-  labels:
-    cluster: {{ .Cluster.metadata.name }}
-spec:
-  podSelector:
-    matchLabels:
-      {{ range $key, $value := .Resource.spec.selector }}
-      {{ $key }}: {{ $value }}
-      {{ end }}
-  ingress:
-    - from:
-      - podSelector:
-          matchLabels:
-            app: wordpress
-      ports:
-        {{ range $port := .Resource.spec.ports }}
-        - port: {{ $port.port }}
-        {{ end }}`
-)
-
-var _ = Describe("Instantiate one ClusterProfile per resource", func() {
+var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and deploy helm chart", func() {
 	const (
-		namePrefix     = "events-"
+		namePrefix     = "events-helm-chart"
 		projectsveltos = "projectsveltos"
 	)
 
 	var clusterSummary *configv1beta1.ClusterSummary
 
-	It("Verifies ClusterProfiles is instantiated using eventreport values", Label("FV"), func() {
+	It("Verifies ClusterProfiles with helmChart and ValuesFrom is instantiated", Label("FV"), func() {
 		serviceNamespace := randomString()
 
-		Byf("Create a EventSource matching Services in namespace: %s", serviceNamespace)
+		Byf("Create a EventSource matching in namespace: %s", serviceNamespace)
 		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
@@ -102,7 +56,6 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 						Version:   "v1",
 						Kind:      "Service",
 						Namespace: serviceNamespace,
-						Evaluate:  serviceLuaScript,
 					},
 				},
 				CollectResources: true,
@@ -110,7 +63,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 		}
 		Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
-		By("Creating a ConfigMap containing a calico policy")
+		By("Creating a ConfigMap containing helm chart values")
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
@@ -122,30 +75,31 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 				},
 			},
 			Data: map[string]string{
-				"calico": networkPolicy,
+				"values.yaml": `nameOverride: "{{ .Resource.metadata.name }}"`,
 			},
 		}
 		Expect(k8sClient.Create(context.TODO(), cm)).To(Succeed())
 
-		policyRef := configv1beta1.PolicyRef{
-			Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
-			Namespace: cm.Namespace,
-			Name:      cm.Name,
-		}
-
 		Byf("Create a EventTrigger referencing EventSource %s", eventSource.Name)
 		eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
-			map[string]string{key: value}, []configv1beta1.PolicyRef{policyRef})
+			map[string]string{key: value}, []configv1beta1.PolicyRef{})
 		eventTrigger.Spec.OneForEvent = true
 		eventTrigger.Spec.HelmCharts = []configv1beta1.HelmChart{
 			{
-				RepositoryURL:    "https://kyverno.github.io/kyverno/",
-				RepositoryName:   "kyverno",
-				ChartName:        "kyverno/kyverno",
-				ChartVersion:     "v2.6.0",
-				ReleaseName:      "kyverno-latest",
-				ReleaseNamespace: "{{ .MatchingResource.Namespace }}",
+				RepositoryURL:    "https://metallb.github.io/metallb",
+				RepositoryName:   "metallb",
+				ChartName:        "metallb/metallb",
+				ChartVersion:     "0.14.7",
+				ReleaseName:      "{{ .Cluster.metadata.name }}",
+				ReleaseNamespace: "{{ .Resource.metadata.namespace }}",
 				HelmChartAction:  configv1beta1.HelmChartActionInstall,
+				ValuesFrom: []configv1beta1.ValueFrom{
+					{
+						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+						Namespace: cm.Namespace,
+						Name:      cm.Name,
+					},
+				},
 			},
 		}
 		Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
@@ -178,7 +132,38 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 				currentEventReport)
 		}, timeout, pollingInterval).Should(BeNil())
 
-		createNamespaceAndService(workloadClient, serviceNamespace)
+		Byf("Create namespace %s in the managed cluster", serviceNamespace)
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: serviceNamespace,
+			},
+		}
+		Expect(workloadClient.Create(context.TODO(), ns)).To(Succeed())
+
+		Byf("Creating a Service in namespace %s in the managed cluster", serviceNamespace)
+		var port int32 = 8080
+		service := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: serviceNamespace, // EventSource filters service in this namespace
+				Name:      randomString(),
+				Labels: map[string]string{
+					randomString(): randomString(),
+				},
+			},
+			Spec: corev1.ServiceSpec{
+				Selector: map[string]string{
+					randomString(): randomString(),
+					randomString(): randomString(),
+				},
+				Ports: []corev1.ServicePort{
+					{
+						Name: randomString(),
+						Port: port,
+					},
+				},
+			},
+		}
+		Expect(workloadClient.Create(context.TODO(), service)).To(Succeed())
 
 		Byf("Verifying EventReports %s is present in the managed cluster with matching resource", eventSource.Name)
 		Eventually(func() bool {
@@ -229,16 +214,13 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Helm feature", clusterSummary.Name)
 		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1beta1.FeatureHelm)
 
-		Byf("Verifying ClusterSummary %s status is set to Deployed for Resources feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1beta1.FeatureResources)
-
-		Byf("Verifying NewtworkPolicy is created in the namespace %s", serviceNamespace)
-		listOptions = []client.ListOption{
-			client.InNamespace(serviceNamespace),
-		}
-		networkPolicies := &networkingv1.NetworkPolicyList{}
-		Expect(workloadClient.List(context.TODO(), networkPolicies, listOptions...)).To(Succeed())
-		Expect(len(networkPolicies.Items)).To(Equal(1))
+		Expect(len(clusterSummary.Spec.ClusterProfileSpec.HelmCharts)).To(Equal(1))
+		Expect(len(clusterSummary.Spec.ClusterProfileSpec.HelmCharts[0].ValuesFrom)).To(Equal(1))
+		configMapName := clusterSummary.Spec.ClusterProfileSpec.HelmCharts[0].ValuesFrom[0].Name
+		Byf("Verifying ConfigMap %s is instantiated in the projectsveltos namespace", configMapName)
+		configMap := &corev1.ConfigMap{}
+		Expect(k8sClient.Get(context.TODO(),
+			types.NamespacedName{Namespace: "projectsveltos", Name: configMapName}, configMap)).To(Succeed())
 
 		Byf("Deleting EventTrigger %s", eventTrigger.Name)
 		currentEventTrigger := &v1beta1.EventTrigger{}
@@ -302,17 +284,10 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 			}
 			return true
 		}, timeout, pollingInterval).Should(BeTrue())
+
+		Byf("Verifying ConfigMap %s in the projectsveltos namespace is removed", configMapName)
+		err = k8sClient.Get(context.TODO(),
+			types.NamespacedName{Namespace: "projectsveltos", Name: configMapName}, configMap)
+		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	})
 })
-
-func getEventReportName(eventSourceName string) string {
-	return fmt.Sprintf("capi--%s--clusterapi-workload", eventSourceName)
-}
-
-// getInstantiatedObjectLabels returns the labels to add to a ClusterProfile created
-// by an EventTrigger for a given cluster
-func getInstantiatedObjectLabels(eventTriggerName string) map[string]string {
-	return map[string]string{
-		"eventtrigger.lib.projectsveltos.io/eventtriggername": eventTriggerName,
-	}
-}

@@ -18,6 +18,7 @@ package controllers_test
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -136,6 +137,70 @@ var _ = Describe("Fetcher", func() {
 				Namespace: clusterNamespace,
 			},
 		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		result, err := controllers.FetchPolicyRefs(context.TODO(), c, e, getClusterRef(cluster),
+			textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))))
+		Expect(err).To(BeNil())
+		Expect(len(result)).To(Equal(2))
+	})
+
+	It("fetchPolicyRefs fetches referenced Secrets and ConfigMaps (names are expressed as templates)", func() {
+		clusterNamespace := randomString()
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: clusterNamespace,
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		namePrefix := randomString()
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", namePrefix, cluster.Name),
+				Namespace: randomString(),
+			},
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
+		}
+
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", namePrefix, cluster.Name),
+				Namespace: clusterNamespace, // this is put in cluster namespace on purpose
+				// PolicyRef does not set namespace when referencing Secret. So cluster namespace
+				// is used
+			},
+		}
+
+		e := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				PolicyRefs: []configv1beta1.PolicyRef{
+					{
+						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+						Name:      namePrefix + "-{{ .Cluster.metadata.name }}",
+						Namespace: "", // leaving it empty to use cluster namespace
+					},
+					{
+						Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
+						Name:      namePrefix + "-{{ .Cluster.metadata.name }}",
+						Namespace: secret.Namespace,
+					},
+				},
+			},
+		}
+
+		initObjects := []client.Object{
+			secret,
+			configMap,
+			e,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		result, err := controllers.FetchPolicyRefs(context.TODO(), c, e, getClusterRef(cluster),
 			textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))))
