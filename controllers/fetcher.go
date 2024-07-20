@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	v1beta1 "github.com/projectsveltos/event-manager/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
@@ -36,7 +37,6 @@ import (
 // fetchReferencedResources fetches resources referenced by EventTrigger.
 // This includes:
 // - EventSource and corresponding EventReports (from the passed in cluster only);
-// - ConfigMaps/Secrets
 func fetchReferencedResources(ctx context.Context, c client.Client,
 	e *v1beta1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]client.Object, error) {
 
@@ -47,7 +47,8 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 	}
 
 	logger.V(logs.LogDebug).Info("fetch EventSource")
-	resource, err := fetchEventSource(ctx, c, e.Spec.EventSourceName)
+	resource, err := fetchEventSource(ctx, c, cluster.Namespace, cluster.Name, e.Spec.EventSourceName,
+		clusterproxy.GetClusterType(cluster), logger)
 	if err != nil {
 		return nil, err
 	}
@@ -69,23 +70,31 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 		result = append(result, &eventReports.Items[i])
 	}
 
-	logger.V(logs.LogDebug).Info("fetch referenced ConfigMaps/Secrets")
-	var resources []client.Object
-	resources, err = fetchPolicyRefs(ctx, c, e, cluster, logger)
-	if err != nil {
-		return nil, err
-	}
-	result = append(result, resources...)
+	// Resources references in PolicyRefs and/or ValuesFrom are not
+	// considered. Those resource namespace/name info can be expressed
+	// as template and so for different clusters/events different resources
+	// might be used.
+	// Also, EventTrigger should deploy ClusterProfile based on the state
+	// in the cluster when the event happened.
 
 	return result, nil
 }
 
 // fetchEventSource fetches referenced EventSource
-func fetchEventSource(ctx context.Context, c client.Client, eventSourceName string,
-) (*libsveltosv1beta1.EventSource, error) {
+func fetchEventSource(ctx context.Context, c client.Client,
+	clusterNamespace, clusterName, eventSourceName string, clusterType libsveltosv1beta1.ClusterType,
+	logger logr.Logger) (*libsveltosv1beta1.EventSource, error) {
+
+	instantiatedEventSourceName, err := libsveltostemplate.GetReferenceResourceName(clusterNamespace, clusterName,
+		string(clusterType), eventSourceName)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get EventSource Name %s: %v",
+			eventSourceName, err))
+		return nil, err
+	}
 
 	eventSource := &libsveltosv1beta1.EventSource{}
-	err := c.Get(ctx, types.NamespacedName{Name: eventSourceName}, eventSource)
+	err = c.Get(ctx, types.NamespacedName{Name: instantiatedEventSourceName}, eventSource)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, nil
@@ -115,9 +124,11 @@ func fetchEventReports(ctx context.Context, c client.Client, clusterNamespace, c
 
 // fetchPolicyRefs fetches referenced ConfigMaps/Secrets
 func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
-	cluster *corev1.ObjectReference, logger logr.Logger) ([]client.Object, error) {
+	cluster *corev1.ObjectReference, objects any, templateName string, logger logr.Logger,
+) (local, remote []client.Object, err error) {
 
-	result := make([]client.Object, 0)
+	local = make([]client.Object, 0)
+	remote = make([]client.Object, 0)
 
 	for i := range e.Spec.PolicyRefs {
 		policyRef := &e.Spec.PolicyRefs[i]
@@ -126,17 +137,15 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 
 		namespace := libsveltostemplate.GetReferenceResourceNamespace(cluster.Namespace, policyRef.Namespace)
 
-		clusterType := clusterproxy.GetClusterType(cluster)
-		referencedName, err := libsveltostemplate.GetReferenceResourceName(cluster.Namespace, cluster.Name,
-			string(clusterType), policyRef.Name)
+		referencedName, err := instantiateSection(templateName, []byte(policyRef.Name), objects, logger)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if policyRef.Kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
-			object, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: referencedName})
+			object, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(referencedName)})
 		} else {
-			object, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: referencedName})
+			object, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(referencedName)})
 		}
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -144,12 +153,17 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 					policyRef.Kind, namespace, referencedName))
 				continue
 			}
-			return nil, err
+			return nil, nil, err
 		}
-		result = append(result, object)
+
+		if policyRef.DeploymentType == configv1beta1.DeploymentTypeLocal {
+			local = append(local, object)
+		} else {
+			remote = append(remote, object)
+		}
 	}
 
-	return result, nil
+	return local, remote, nil
 }
 
 // getConfigMap retrieves any ConfigMap from the given name and namespace.

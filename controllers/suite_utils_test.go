@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -49,15 +48,6 @@ import (
 
 const (
 	sveltosKubeconfigPostfix = "-kubeconfig"
-
-	viewClusterRole = `apiVersion: rbac.authorization.k8s.io/v1
-	kind: ClusterRole
-	metadata:
-	  name: %s
-	rules:
-	- apiGroups: [""] # "" indicates the core API group
-	  resources: ["pods"]
-	  verbs: ["get", "watch", "list"]`
 )
 
 var (
@@ -346,25 +336,4 @@ func createSecretWithKubeconfig(clusterNamespace, clusterName string) {
 
 	Expect(testEnv.Create(context.TODO(), secret)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv.Client, secret)).To(Succeed())
-}
-
-// createConfigMapWithPolicy creates a configMap with passed in policies.
-func createConfigMapWithPolicy(namespace, configMapName string, policyStrs ...string) *corev1.ConfigMap {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      configMapName,
-		},
-		Data: map[string]string{},
-	}
-	for i := range policyStrs {
-		key := fmt.Sprintf("policy%d.yaml", i)
-		if utf8.Valid([]byte(policyStrs[i])) {
-			cm.Data[key] = policyStrs[i]
-		} else {
-			cm.BinaryData[key] = []byte(policyStrs[i])
-		}
-	}
-
-	return cm
 }
