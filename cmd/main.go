@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -130,24 +131,8 @@ func main() {
 	controllers.RegisterFeatures(d, setupLog)
 
 	var eventTriggerController controller.Controller
-	eventTriggerReconciler := &controllers.EventTriggerReconciler{
-		Client:               mgr.GetClient(),
-		Scheme:               mgr.GetScheme(),
-		ConcurrentReconciles: concurrentReconciles,
-		ShardKey:             shardKey,
-		Mux:                  sync.Mutex{},
-		Deployer:             d,
-		Logger:               ctrl.Log.WithName("eventTriggerReconciler"),
-		ClusterMap:           make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ToClusterMap:         make(map[types.NamespacedName]*libsveltosset.Set),
-		EventTriggers:        make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
-		ClusterLabels:        make(map[corev1.ObjectReference]map[string]string),
-		EventSourceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ToEventSourceMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-		EventTriggerMap:      make(map[types.NamespacedName]*libsveltosset.Set),
-		ReferenceMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ClusterSetMap:        make(map[corev1.ObjectReference]*libsveltosset.Set),
-	}
+	eventTriggerReconciler := getEventTriggerReconciler(mgr)
+	eventTriggerReconciler.Deployer = d
 
 	eventTriggerController, err = eventTriggerReconciler.SetupWithManager(mgr)
 	if err != nil {
@@ -316,5 +301,25 @@ func getDiagnosticsOptions() metricsserver.Options {
 		BindAddress:    diagnosticsAddress,
 		SecureServing:  true,
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+}
+
+func getEventTriggerReconciler(mgr manager.Manager) *controllers.EventTriggerReconciler {
+	return &controllers.EventTriggerReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		ConcurrentReconciles: concurrentReconciles,
+		ShardKey:             shardKey,
+		Mux:                  sync.Mutex{},
+		Logger:               ctrl.Log.WithName("eventTriggerReconciler"),
+		ClusterMap:           make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ToClusterMap:         make(map[types.NamespacedName]*libsveltosset.Set),
+		EventTriggers:        make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
+		ClusterLabels:        make(map[corev1.ObjectReference]map[string]string),
+		EventSourceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ToEventSourceMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+		EventTriggerMap:      make(map[types.NamespacedName]*libsveltosset.Set),
+		ReferenceMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ClusterSetMap:        make(map[corev1.ObjectReference]*libsveltosset.Set),
 	}
 }

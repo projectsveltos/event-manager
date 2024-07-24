@@ -22,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1b2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -47,7 +45,6 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
-	libsveltostemplate "github.com/projectsveltos/libsveltos/lib/template"
 )
 
 type ReportMode int
@@ -161,8 +158,8 @@ type EventTriggerReconciler struct {
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines/status,verbs=get;watch;list
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=sveltosclusters,verbs=get;watch;list
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=sveltosclusters/status,verbs=get;watch;list
-//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;watch;list;create;update;delete
-//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;watch;list;create;update;delete
+//+kubebuilder:rbac:groups="",resources=secrets,verbs="*"
+//+kubebuilder:rbac:groups="",resources=configmaps,verbs="*"
 
 func (r *EventTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	logger := ctrl.LoggerFrom(ctx)
@@ -227,8 +224,7 @@ func (r *EventTriggerReconciler) reconcileDelete(
 
 	r.cleanMaps(eventTriggerScope)
 
-	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
-	err := r.undeployEventTrigger(ctx, eventTriggerScope, f, logger)
+	err := r.undeployEventTrigger(ctx, eventTriggerScope, eventTriggerScope.EventTrigger.Status.ClusterInfo, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to undeploy")
 		return reconcile.Result{Requeue: true, RequeueAfter: deleteRequeueAfter}
@@ -269,6 +265,14 @@ func (r *EventTriggerReconciler) reconcileNormal(
 	}
 
 	matchingCluster = append(matchingCluster, clusterSetClusters...)
+
+	// Undeploy EventTrigger from every clusters that used to be a match but it is not a match anymore
+	err = r.undeployEvenTriggerFromNonMatchingCluster(ctx, eventTriggerScope, removeDuplicates(matchingCluster),
+		logger)
+	if err != nil {
+		logger.V(logs.LogDebug).Info("failed to undeploy EvenTrigger from clusters that are no longer a match: %v", err)
+		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
+	}
 
 	eventTriggerScope.SetMatchingClusterRefs(removeDuplicates(matchingCluster))
 
@@ -317,24 +321,6 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForEventReport),
 			builder.WithPredicates(
 				EventReportPredicates(mgr.GetLogger().WithValues("predicate", "eventreportpredicate")),
-			),
-		).
-		Watches(&libsveltosv1beta1.EventSource{},
-			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForEventSource),
-			builder.WithPredicates(
-				EventSourcePredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
-			),
-		).
-		Watches(&corev1.ConfigMap{},
-			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForReference),
-			builder.WithPredicates(
-				ConfigMapPredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
-			),
-		).
-		Watches(&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForReference),
-			builder.WithPredicates(
-				SecretPredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
 			),
 		).
 		Build(r)
@@ -471,11 +457,6 @@ func (r *EventTriggerReconciler) updateMaps(eventTriggerScope *scope.EventTrigge
 
 	r.updateEventSourceMaps(eventTriggerScope)
 
-	if err := r.updateReferencedResourceMap(eventTriggerScope); err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update referenced resources map: %v", err))
-		return err
-	}
-
 	r.updateClusterSetMap(eventTriggerScope)
 
 	eventTriggerInfo := getKeyFromObject(r.Scheme, eventTriggerScope.EventTrigger)
@@ -595,52 +576,6 @@ func (r *EventTriggerReconciler) updateEventSourceMaps(eventTriggerScope *scope.
 	r.ToEventSourceMap[name] = currentReferences
 }
 
-func (r *EventTriggerReconciler) updateReferencedResourceMap(eventTriggerScope *scope.EventTriggerScope) error {
-	// Get list of ConfigMap/Secret currently referenced
-	currentReferences, err := r.getCurrentReferences(eventTriggerScope)
-	if err != nil {
-		return err
-	}
-
-	r.Mux.Lock()
-	defer r.Mux.Unlock()
-
-	// Get list of References not referenced anymore by EventTrigger
-	var toBeRemoved []corev1.ObjectReference
-	eventTriggerName := types.NamespacedName{Name: eventTriggerScope.Name()}
-	if v, ok := r.EventTriggerMap[eventTriggerName]; ok {
-		toBeRemoved = v.Difference(currentReferences)
-	}
-
-	// For each currently referenced instance, add EventTrigger as consumer
-	for _, referencedResource := range currentReferences.Items() {
-		tmpResource := referencedResource
-		getConsumersForEntry(r.ReferenceMap, &tmpResource).Insert(
-			&corev1.ObjectReference{
-				APIVersion: v1beta1.GroupVersion.String(),
-				Kind:       v1beta1.EventTriggerKind,
-				Name:       eventTriggerScope.Name(),
-			},
-		)
-	}
-
-	// For each resource not reference anymore, remove EventTrigger as consumer
-	for i := range toBeRemoved {
-		referencedResource := toBeRemoved[i]
-		getConsumersForEntry(r.ReferenceMap, &referencedResource).Erase(
-			&corev1.ObjectReference{
-				APIVersion: v1beta1.GroupVersion.String(),
-				Kind:       v1beta1.EventTriggerKind,
-				Name:       eventTriggerScope.Name(),
-			},
-		)
-	}
-
-	// Update list of ConfigMaps/Secrets currently referenced by EventTrigger
-	r.EventTriggerMap[eventTriggerName] = currentReferences
-	return nil
-}
-
 func getConsumersForEntry(currentMap map[corev1.ObjectReference]*libsveltosset.Set,
 	entry *corev1.ObjectReference) *libsveltosset.Set {
 
@@ -689,70 +624,6 @@ func (r *EventTriggerReconciler) updateClusterInfo(ctx context.Context,
 	return nil
 }
 
-func (r *EventTriggerReconciler) getCurrentReferences(eventTriggerScope *scope.EventTriggerScope) (*libsveltosset.Set, error) {
-	currentReferences := &libsveltosset.Set{}
-	for i := range eventTriggerScope.EventTrigger.Spec.PolicyRefs {
-		referencedNamespace := eventTriggerScope.EventTrigger.Spec.PolicyRefs[i].Namespace
-
-		// If referenced resource namespace is empty, at instantiation time the cluster namespace will be used.
-		// Here to track referenced ConfigMaps/Resource, we use all current matching clusters
-		for j := range eventTriggerScope.EventTrigger.Status.MatchingClusterRefs {
-			clusterRef := eventTriggerScope.EventTrigger.Status.MatchingClusterRefs[j]
-			namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterRef.Namespace, referencedNamespace)
-
-			clusterType := clusterproxy.GetClusterType(&clusterRef)
-			referencedName, err := libsveltostemplate.GetReferenceResourceName(clusterRef.Namespace, clusterRef.Name,
-				string(clusterType), eventTriggerScope.EventTrigger.Spec.PolicyRefs[i].Name)
-			if err != nil {
-				return nil, err
-			}
-
-			currentReferences.Insert(&corev1.ObjectReference{
-				APIVersion: corev1.SchemeGroupVersion.String(), // the only resources that can be referenced are Secret and ConfigMap
-				Kind:       eventTriggerScope.EventTrigger.Spec.PolicyRefs[i].Kind,
-				Namespace:  namespace,
-				Name:       referencedName,
-			})
-		}
-	}
-
-	for i := range eventTriggerScope.EventTrigger.Spec.KustomizationRefs {
-		referencedNamespace := eventTriggerScope.EventTrigger.Spec.KustomizationRefs[i].Namespace
-
-		// If referenced resource namespace is empty, at instantiation time the cluster namespace will be used.
-		// Here to track referenced ConfigMaps/Resource, we use all current matching clusters
-		for j := range eventTriggerScope.EventTrigger.Status.MatchingClusterRefs {
-			clusterRef := eventTriggerScope.EventTrigger.Status.MatchingClusterRefs[j]
-			namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterRef.Namespace, referencedNamespace)
-
-			clusterType := clusterproxy.GetClusterType(&clusterRef)
-			referencedName, err := libsveltostemplate.GetReferenceResourceName(clusterRef.Namespace, clusterRef.Name,
-				string(clusterType), eventTriggerScope.EventTrigger.Spec.KustomizationRefs[i].Name)
-			if err != nil {
-				return nil, err
-			}
-
-			ref := &corev1.ObjectReference{
-				Kind:      eventTriggerScope.EventTrigger.Spec.KustomizationRefs[i].Kind,
-				Namespace: namespace,
-				Name:      referencedName,
-			}
-
-			switch eventTriggerScope.EventTrigger.Spec.KustomizationRefs[i].Kind {
-			case sourcev1.GitRepositoryKind:
-				ref.APIVersion = sourcev1.GroupVersion.String()
-			case sourcev1b2.OCIRepositoryKind:
-				ref.APIVersion = sourcev1b2.GroupVersion.String()
-			case sourcev1b2.BucketKind:
-				ref.APIVersion = sourcev1b2.GroupVersion.String()
-			}
-
-			currentReferences.Insert(ref)
-		}
-	}
-	return currentReferences, nil
-}
-
 func (r *EventTriggerReconciler) getClustersFromClusterSets(ctx context.Context, clusterSetRefs []string,
 	logger logr.Logger) ([]corev1.ObjectReference, error) {
 
@@ -785,4 +656,36 @@ func removeDuplicates(references []corev1.ObjectReference) []corev1.ObjectRefere
 	}
 
 	return set.Items()
+}
+
+func (r *EventTriggerReconciler) undeployEvenTriggerFromNonMatchingCluster(ctx context.Context,
+	eventTriggerScope *scope.EventTriggerScope, currentMatchingClusters []corev1.ObjectReference,
+	logger logr.Logger) error {
+
+	matchingClusters := libsveltosset.Set{}
+	for i := range currentMatchingClusters {
+		matchingClusters.Insert(&currentMatchingClusters[i])
+	}
+
+	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
+
+	// At this point we have not update Status yet, so those are the clusters
+	// that used to be a match
+	for i := range eventTriggerScope.EventTrigger.Status.ClusterInfo {
+		oldMatchingCluster := eventTriggerScope.EventTrigger.Status.ClusterInfo[i]
+		if !matchingClusters.Has(&oldMatchingCluster.Cluster) {
+			logger.V(logs.LogDebug).Info(fmt.Sprintf("undeploy EventTrigger from cluster %s:%s/%s",
+				oldMatchingCluster.Cluster.Kind, oldMatchingCluster.Cluster.Namespace,
+				oldMatchingCluster.Cluster.Name))
+			clusterInfo, err := r.removeEventTrigger(ctx, eventTriggerScope, &oldMatchingCluster.Cluster, f, logger)
+			if err != nil {
+				logger.V(logs.LogInfo).Error(err, "failed to undeploy")
+				eventTriggerScope.EventTrigger.Status.ClusterInfo[i].Status = clusterInfo.Status
+				return err
+			}
+			eventTriggerScope.EventTrigger.Status.ClusterInfo[i].Status = libsveltosv1beta1.SveltosStatusRemoved
+		}
+	}
+
+	return nil
 }

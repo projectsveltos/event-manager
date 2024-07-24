@@ -32,7 +32,6 @@ var (
 	UpdateMaps                    = (*EventTriggerReconciler).updateMaps
 	IsClusterEntryRemoved         = (*EventTriggerReconciler).isClusterEntryRemoved
 	ProcessEventTrigger           = (*EventTriggerReconciler).processEventTrigger
-	UpdateReferencedResourceMap   = (*EventTriggerReconciler).updateReferencedResourceMap
 	GetClustersFromClusterSets    = (*EventTriggerReconciler).getClustersFromClusterSets
 
 	GetKeyFromObject      = getKeyFromObject
@@ -49,6 +48,7 @@ var (
 	RemoveClusterInfoEntry  = removeClusterInfoEntry
 	EventTriggerHash        = eventTriggerHash
 	RemoveStaleEventSources = removeStaleEventSources
+	RemoveStaleEventReports = removeStaleEventReports
 	DeployEventSource       = deployEventSource
 
 	InstantiateOneClusterProfilePerAllResource = instantiateOneClusterProfilePerAllResource
@@ -63,6 +63,12 @@ var (
 	RemoveConfigMaps              = removeConfigMaps
 	RemoveSecrets                 = removeSecrets
 	UnstructuredToTyped           = unstructuredToTyped
+
+	BuildEventTriggersForEventSourceMap = buildEventTriggersForEventSourceMap
+	BuildEventTriggersForClusterMap     = buildEventTriggersForClusterMap
+	ShouldIgnore                        = shouldIgnore
+	ShouldReprocess                     = shouldReprocess
+	IsEventTriggerMatchingTheCluster    = isEventTriggerMatchingTheCluster
 )
 
 const (
