@@ -692,6 +692,9 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 	// Copy labels. If admin-label is set, sveltos-agent will impersonate
 	// ServiceAccount representing the tenant admin when fetching resources
 	currentEventSource.Labels = eventSource.Labels
+	currentEventSource.Annotations = map[string]string{
+		libsveltosv1beta1.DeployedBySveltosAnnotation: "true",
+	}
 	deployer.AddOwnerReference(currentEventSource, resource)
 
 	logger.V(logs.LogDebug).Info("creating eventSource")
