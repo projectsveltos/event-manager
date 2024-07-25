@@ -708,8 +708,13 @@ func removeStaleEventReports(ctx context.Context, c client.Client,
 		client.MatchingLabels{
 			libsveltosv1beta1.EventReportClusterNameLabel: clusterName,
 			libsveltosv1beta1.EventReportClusterTypeLabel: strings.ToLower(string(clusterType)),
-			libsveltosv1beta1.EventSourceNameLabel:        eventSourceName,
 		},
+	}
+
+	if eventSourceName != "" {
+		listOptions = append(listOptions,
+			client.MatchingLabels{libsveltosv1beta1.EventSourceNameLabel: eventSourceName},
+		)
 	}
 
 	eventReportList := &libsveltosv1beta1.EventReportList{}
@@ -746,7 +751,11 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 		clusterName, clusterType)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil
+			// Remove all EventReports pulled from this managed cluster because of this EventSource
+			err = removeStaleEventReports(ctx, c, clusterNamespace, clusterName, "", clusterType, logger)
+			if err != nil {
+				return nil
+			}
 		}
 		return err
 	}
