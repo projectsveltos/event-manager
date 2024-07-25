@@ -740,6 +740,17 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
 	resource *v1beta1.EventTrigger, removeAll bool, logger logr.Logger) error {
 
+	// If the cluster does not exist anymore, return (cluster has been deleted
+	// there is nothing to clear)
+	_, err := clusterproxy.GetCluster(ctx, c, clusterNamespace,
+		clusterName, clusterType)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
 	remoteClient, err := clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
 		"", "", clusterType, logger)
 	if err != nil {
