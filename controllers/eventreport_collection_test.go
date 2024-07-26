@@ -18,6 +18,7 @@ package controllers_test
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -33,8 +34,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
 var _ = Describe("EventSource Deployer", func() {
@@ -167,8 +170,11 @@ var _ = Describe("EventSource Deployer", func() {
 
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport)).To(Succeed())
 
+		eventSourceMap := map[string][]*v1beta1.EventTrigger{}
+		eventTriggerMap := map[string]libsveltosset.Set{}
+
 		Expect(controllers.CollectAndProcessEventReportsFromCluster(context.TODO(), testEnv.Client, getClusterRef(cluster),
-			logger)).To(Succeed())
+			eventSourceMap, eventTriggerMap, logger)).To(Succeed())
 
 		clusterType := libsveltosv1beta1.ClusterTypeCapi
 
@@ -176,9 +182,232 @@ var _ = Describe("EventSource Deployer", func() {
 
 		// Update EventReports and validate again
 		Expect(controllers.CollectAndProcessEventReportsFromCluster(context.TODO(), testEnv.Client, getClusterRef(cluster),
-			logger)).To(Succeed())
+			eventSourceMap, eventTriggerMap, logger)).To(Succeed())
 
 		validateEventReports(eventSourceName, cluster, &clusterType)
+	})
+
+	It("buildEventTriggersForEventSourceMap builds a map of EventTriggers referencing an EventSource", func() {
+		eventSourceName1 := randomString()
+		et1 := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: eventSourceName1,
+			},
+		}
+
+		cluster := &corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+		prefix := "test-template"
+		eventSourceName2 := fmt.Sprintf("%s-{{ .Cluster.metadata.name }}", prefix)
+		et2 := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: eventSourceName2,
+			},
+		}
+
+		initObjects := []client.Object{
+			et1, et2,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		eventTriggers := &v1beta1.EventTriggerList{}
+		Expect(c.List(context.TODO(), eventTriggers)).To(Succeed())
+
+		eventSourceMap, err := controllers.BuildEventTriggersForEventSourceMap(cluster, eventTriggers)
+		Expect(err).To(BeNil())
+		Expect(eventSourceMap).ToNot(BeNil())
+
+		v, ok := eventSourceMap[eventSourceName1]
+		Expect(ok).To(BeTrue())
+		Expect(v).To(ContainElement(et1))
+
+		v, ok = eventSourceMap[fmt.Sprintf("%s-%s", prefix, cluster.Name)]
+		Expect(ok).To(BeTrue())
+		Expect(v).To(ContainElement(et2))
+	})
+
+	It("buildEventTriggersForClusterMap builds a map of clusters matching an eventTrigger", func() {
+		cluster1 := &corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+
+		cluster2 := &corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+
+		et1 := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: randomString(),
+			},
+			Status: v1beta1.EventTriggerStatus{
+				MatchingClusterRefs: []corev1.ObjectReference{
+					*cluster1, *cluster2,
+				},
+			},
+		}
+
+		et2 := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: randomString(),
+			},
+			Status: v1beta1.EventTriggerStatus{
+				MatchingClusterRefs: []corev1.ObjectReference{
+					*cluster1,
+				},
+			},
+		}
+
+		initObjects := []client.Object{
+			et1, et2,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		eventTriggers := &v1beta1.EventTriggerList{}
+		Expect(c.List(context.TODO(), eventTriggers)).To(Succeed())
+
+		eventTriggerMap := controllers.BuildEventTriggersForClusterMap(eventTriggers)
+
+		v, ok := eventTriggerMap[et1.Name]
+		Expect(ok).To(BeTrue())
+		Expect(v.Len()).To(Equal(2))
+		Expect(v.Has(cluster1)).To(BeTrue())
+		Expect(v.Has(cluster2)).To(BeTrue())
+
+		v, ok = eventTriggerMap[et2.Name]
+		Expect(ok).To(BeTrue())
+		Expect(v.Len()).To(Equal(1))
+		Expect(v.Has(cluster1)).To(BeTrue())
+		Expect(v.Has(cluster2)).To(BeFalse())
+	})
+
+	It("shouldIgnore ignore eventReports collected from managed clusters to the management cluster", func() {
+		eventReport := libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+		}
+
+		Expect(controllers.ShouldIgnore(&eventReport)).To(BeFalse())
+
+		eventReport.Labels = map[string]string{
+			libsveltosv1beta1.EventReportClusterNameLabel: randomString(),
+		}
+
+		Expect(controllers.ShouldIgnore(&eventReport)).To(BeTrue())
+	})
+
+	It("shouldReprocess returns true for EventReport with Status set to processed", func() {
+		eventReport := libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventReportClusterNameLabel: randomString(),
+				},
+			},
+		}
+
+		Expect(controllers.ShouldReprocess(&eventReport)).To(BeTrue())
+
+		phase := libsveltosv1beta1.ReportWaitingForDelivery
+		eventReport.Status.Phase = &phase
+		Expect(controllers.ShouldReprocess(&eventReport)).To(BeTrue())
+
+		phase = libsveltosv1beta1.ReportProcessed
+		eventReport.Status.Phase = &phase
+		Expect(controllers.ShouldReprocess(&eventReport)).To(BeFalse())
+	})
+
+	It("isEventTriggerMatchingTheCluster returns true if a cluster is a match for an EventTrigger", func() {
+		cluster1 := &corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+
+		cluster2 := &corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+
+		cluster3 := &corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+
+		et1 := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: randomString(),
+			},
+			Status: v1beta1.EventTriggerStatus{
+				MatchingClusterRefs: []corev1.ObjectReference{
+					*cluster1, *cluster2,
+				},
+			},
+		}
+
+		et2 := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: randomString(),
+			},
+			Status: v1beta1.EventTriggerStatus{},
+		}
+
+		initObjects := []client.Object{
+			et1, et2,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		eventTriggers := &v1beta1.EventTriggerList{}
+		Expect(c.List(context.TODO(), eventTriggers)).To(Succeed())
+
+		eventTriggerMap := controllers.BuildEventTriggersForClusterMap(eventTriggers)
+
+		Expect(controllers.IsEventTriggerMatchingTheCluster(et1, cluster1, eventTriggerMap)).To(BeTrue())
+		Expect(controllers.IsEventTriggerMatchingTheCluster(et1, cluster2, eventTriggerMap)).To(BeTrue())
+		Expect(controllers.IsEventTriggerMatchingTheCluster(et1, cluster3, eventTriggerMap)).To(BeFalse())
+
+		Expect(controllers.IsEventTriggerMatchingTheCluster(et2, cluster1, eventTriggerMap)).To(BeFalse())
+		Expect(controllers.IsEventTriggerMatchingTheCluster(et2, cluster2, eventTriggerMap)).To(BeFalse())
+		Expect(controllers.IsEventTriggerMatchingTheCluster(et2, cluster3, eventTriggerMap)).To(BeFalse())
 	})
 })
 

@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/controllers"
 	"github.com/projectsveltos/event-manager/pkg/scope"
@@ -378,7 +377,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		})
 		Expect(err).To(BeNil())
 
-		controllers.UpdateMaps(&reconciler, resourceScope)
+		Expect(controllers.UpdateMaps(&reconciler, resourceScope, logger)).To(Succeed())
 
 		clusterInfo := &corev1.ObjectReference{Namespace: clusterNamespace, Name: clusterName,
 			Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
@@ -391,111 +390,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		clusterSetInfo := &corev1.ObjectReference{Name: clusterSetName,
 			Kind: libsveltosv1beta1.ClusterSetKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
 		Expect(controllers.GetConsumersForEntry(reconciler.ClusterSetMap, clusterSetInfo).Len()).To(Equal(1))
-	})
-
-	It("updateReferencedResourceMap properly update referenced maps", func() {
-		esName := randomString()
-
-		resource.Spec.EventSourceName = esName
-
-		clusterNamespace := randomString()
-		clusterName := randomString()
-
-		cmNamespace := randomString()
-		cmName := randomString()
-
-		secretNamespace := randomString()
-		secretName := randomString()
-
-		resource.Spec.PolicyRefs = []configv1beta1.PolicyRef{
-			{
-				Namespace: cmNamespace,
-				Name:      cmName,
-				Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
-			},
-			{
-				Namespace: secretNamespace,
-				Name:      secretName,
-				Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
-			},
-		}
-
-		resource.Status.MatchingClusterRefs = []corev1.ObjectReference{
-			{
-				Kind:       libsveltosv1beta1.SveltosClusterKind,
-				APIVersion: libsveltosv1beta1.GroupVersion.String(),
-				Namespace:  clusterNamespace,
-				Name:       clusterName,
-			},
-		}
-
-		initObjects := []client.Object{
-			resource,
-		}
-
-		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
-			WithObjects(initObjects...).Build()
-
-		dep := fakedeployer.GetClient(context.TODO(), logger, c)
-		Expect(dep.RegisterFeatureID(v1beta1.FeatureEventTrigger)).To(Succeed())
-
-		reconciler := controllers.EventTriggerReconciler{
-			Client:           c,
-			Deployer:         dep,
-			Scheme:           c.Scheme(),
-			Mux:              sync.Mutex{},
-			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
-			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ClusterSetMap:    make(map[corev1.ObjectReference]*libsveltosset.Set),
-		}
-		resourceScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
-			Client:         c,
-			Logger:         logger,
-			EventTrigger:   resource,
-			ControllerName: "classifier",
-		})
-		Expect(err).To(BeNil())
-
-		controllers.UpdateReferencedResourceMap(&reconciler, resourceScope)
-
-		eventTriggerName := types.NamespacedName{Name: resourceScope.Name()}
-		v, ok := reconciler.EventTriggerMap[eventTriggerName]
-		Expect(ok).To(BeTrue())
-		Expect(v.Len()).To(Equal(2))
-
-		Expect(len(reconciler.ReferenceMap)).To(Equal(2))
-		index := corev1.ObjectReference{
-			Kind:       "ConfigMap",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Namespace:  cmNamespace,
-			Name:       cmName,
-		}
-		v, ok = reconciler.ReferenceMap[index]
-		Expect(ok).To(BeTrue())
-		Expect(v.Items()).To(ContainElement(corev1.ObjectReference{
-			APIVersion: v1beta1.GroupVersion.String(),
-			Kind:       v1beta1.EventTriggerKind,
-			Name:       resourceScope.Name(),
-		}))
-
-		index = corev1.ObjectReference{
-			Kind:       "Secret",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Namespace:  secretNamespace,
-			Name:       secretName,
-		}
-		v, ok = reconciler.ReferenceMap[index]
-		Expect(ok).To(BeTrue())
-		Expect(v.Items()).To(ContainElement(corev1.ObjectReference{
-			APIVersion: v1beta1.GroupVersion.String(),
-			Kind:       v1beta1.EventTriggerKind,
-			Name:       resourceScope.Name(),
-		}))
 	})
 
 	It("getClustersFromClusterSets gets cluster selected by referenced clusterSet", func() {

@@ -2111,23 +2111,13 @@ rules:
   resources:
   - configmaps
   verbs:
-  - create
-  - delete
-  - get
-  - list
-  - update
-  - watch
+  - '*'
 - apiGroups:
   - ""
   resources:
   - secrets
   verbs:
-  - create
-  - delete
-  - get
-  - list
-  - update
-  - watch
+  - '*'
 - apiGroups:
   - apiextensions.k8s.io
   resources:
@@ -2317,7 +2307,7 @@ spec:
         - --v=5
         command:
         - /manager
-        image: projectsveltos/event-manager:main
+        image: docker.io/projectsveltos/event-manager:main
         livenessProbe:
           failureThreshold: 3
           httpGet:

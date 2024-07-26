@@ -344,8 +344,7 @@ var _ = Describe("EventTrigger deployer", func() {
 		config += render.AsCode(e.Labels)
 		config += render.AsCode(eventSource.Spec)
 		config += render.AsCode(eventReport.Spec)
-		config += render.AsCode(configMap.Data)
-		config += render.AsCode(secret.Data)
+		// Content of referenced resources in PolicyRef/ValuesFrom is not included
 		h := sha256.New()
 		h.Write([]byte(config))
 		expectedHash := h.Sum(nil)
@@ -358,6 +357,82 @@ var _ = Describe("EventTrigger deployer", func() {
 		Expect(err).To(BeNil())
 		Expect(hash).ToNot(BeNil())
 		Expect(reflect.DeepEqual(hash, expectedHash)).To(BeTrue())
+	})
+
+	It("removeStaleEventReports removes all EventReports for a given cluster/eventSource pair", func() {
+		eventSourceName := randomString()
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+
+		eventReport1 := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: clusterNamespace,
+				Name:      randomString(),
+				Labels:    libsveltosv1beta1.GetEventReportLabels(eventSourceName, clusterName, &clusterType),
+			},
+		}
+
+		eventReport2 := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+				Labels:    libsveltosv1beta1.GetEventReportLabels(eventSourceName, clusterName, &clusterType),
+			},
+		}
+
+		eventReport3 := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+				Labels:    libsveltosv1beta1.GetEventReportLabels(eventSourceName, randomString(), &clusterType),
+			},
+		}
+
+		wrongClusterType := libsveltosv1beta1.ClusterTypeSveltos
+		eventReport4 := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+				Labels:    libsveltosv1beta1.GetEventReportLabels(eventSourceName, clusterName, &wrongClusterType),
+			},
+		}
+
+		initObjects := []client.Object{
+			eventReport1,
+			eventReport2,
+			eventReport3,
+			eventReport4,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		Expect(controllers.RemoveStaleEventReports(context.TODO(), c,
+			clusterNamespace, clusterName, eventSourceName, clusterType, logger)).To(Succeed())
+
+		currentEventReport := &libsveltosv1beta1.EventReport{}
+
+		// EventReport1 was coming from this cluster/eventSource => expect it to be gone
+		err := c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport1.Namespace, Name: eventReport1.Name}, currentEventReport)
+		Expect(err).ToNot(BeNil())
+		Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+		// EventReport2 was coming from different cluster/eventSource (wrong namespace) => expect it to be still present
+		err = c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport2.Namespace, Name: eventReport2.Name}, currentEventReport)
+		Expect(err).To(BeNil())
+
+		// EventReport3 was coming from different cluster/eventSource (wrong cluster name) => expect it to be still present
+		err = c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport3.Namespace, Name: eventReport3.Name}, currentEventReport)
+		Expect(err).To(BeNil())
+
+		// EventReport4 was coming from different cluster/eventSource (wrong clusterType) => expect it to be still present
+		err = c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport4.Namespace, Name: eventReport4.Name}, currentEventReport)
+		Expect(err).To(BeNil())
 	})
 
 	It("removeStaleEventSources removes stale eventSources from managed cluster", func() {
@@ -443,7 +518,7 @@ var _ = Describe("EventTrigger deployer", func() {
 		// Test has EventTrigger instance reference this EventSource instance.
 		// RemoveStaleEventSources will not remove the EventSource test created.
 		Expect(controllers.RemoveStaleEventSources(context.TODO(), testEnv.Client, clusterNamespace, clusterName, clusterType,
-			resource, logger)).To(Succeed())
+			resource, false, logger)).To(Succeed())
 
 		Consistently(func() bool {
 			currentEventSource := &libsveltosv1beta1.EventSource{}
@@ -467,7 +542,7 @@ var _ = Describe("EventTrigger deployer", func() {
 		// Test has EventTrigger instance reference a different EventSource.
 		// RemoveStaleEventSources will remove the EventSource test created.
 		Expect(controllers.RemoveStaleEventSources(context.TODO(), testEnv.Client, clusterNamespace, clusterName, clusterType,
-			currentResource, logger)).To(Succeed())
+			currentResource, false, logger)).To(Succeed())
 
 		Eventually(func() bool {
 			currentEventSource := &libsveltosv1beta1.EventSource{}
@@ -758,7 +833,8 @@ var _ = Describe("EventTrigger deployer", func() {
 			eventTrigger, eventReport, logger)
 		Expect(err).To(BeNil())
 
-		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
+		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
+			eventReport, clusterType)
 
 		listOptions := []client.ListOption{
 			client.MatchingLabels(labels),
@@ -834,9 +910,17 @@ var _ = Describe("EventTrigger deployer", func() {
 						RepositoryURL:    randomString(),
 						ReleaseNamespace: "{{ .MatchingResource.Namespace }}",
 						ReleaseName:      randomString(),
-						ChartName:        randomString(),
+						ChartName:        randomString() + "{{ .Cluster.metadata.name }}",
 						ChartVersion:     randomString(),
 						HelmChartAction:  configv1beta1.HelmChartActionInstall,
+					},
+				},
+				KustomizationRefs: []configv1beta1.KustomizationRef{
+					{
+						Namespace: "{{ .MatchingResource.Namespace }}",
+						Name:      randomString() + "{{ .Cluster.metadata.name }}",
+						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+						Path:      randomString() + "{{ .Cluster.metadata.name }}" + "{{ .MatchingResource.Namespace }}",
 					},
 				},
 			},
@@ -852,7 +936,8 @@ var _ = Describe("EventTrigger deployer", func() {
 			eventTrigger, eventReport, logger)
 		Expect(err).To(BeNil())
 
-		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name, clusterType)
+		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
+			eventReport, clusterType)
 
 		listOptions := []client.ListOption{
 			client.MatchingLabels(labels),
@@ -869,6 +954,7 @@ var _ = Describe("EventTrigger deployer", func() {
 			Expect(clusterProfiles.Items[i].Spec.ClusterRefs[0].Name).To(Equal(clusterName))
 			Expect(clusterProfiles.Items[i].Spec.ClusterRefs[0].Kind).To(Equal("Cluster"))
 			Expect(len(clusterProfiles.Items[i].Spec.HelmCharts)).To(Equal(1))
+			Expect(len(clusterProfiles.Items[i].Spec.KustomizationRefs)).To(Equal(1))
 		}
 	})
 
@@ -878,24 +964,36 @@ var _ = Describe("EventTrigger deployer", func() {
 		clusterName := randomString()
 		clusterType := libsveltosv1beta1.ClusterTypeSveltos
 
+		eventSourceName := randomString()
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
+				},
+			},
+		}
+
 		clusterProfile := &configv1beta1.ClusterProfile{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   randomString(),
-				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName, clusterType),
+				Name: randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
+					eventReport, clusterType),
 			},
 		}
 
 		toBeRemovedClusterProfile := &configv1beta1.ClusterProfile{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   randomString(),
-				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName, clusterType),
+				Name: randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
+					eventReport, clusterType),
 			},
 		}
 
 		eventTrigger := &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
 			Spec: v1beta1.EventTriggerSpec{
-				EventSourceName: randomString(),
+				EventSourceName: eventSourceName,
 				HelmCharts: []configv1beta1.HelmChart{
 					{
 						RepositoryName:   randomString(),
@@ -918,7 +1016,7 @@ var _ = Describe("EventTrigger deployer", func() {
 			WithObjects(initObjects...).Build()
 
 		Expect(controllers.RemoveClusterProfiles(context.TODO(), c, clusterNamespace, clusterName, clusterType, eventTrigger,
-			[]*configv1beta1.ClusterProfile{clusterProfile}, logger)).To(Succeed())
+			eventReport, []*configv1beta1.ClusterProfile{clusterProfile}, logger)).To(Succeed())
 
 		clusterProfiles := &configv1beta1.ClusterProfileList{}
 		Expect(c.List(context.TODO(), clusterProfiles)).To(Succeed())
@@ -932,9 +1030,20 @@ var _ = Describe("EventTrigger deployer", func() {
 		clusterName := randomString()
 		clusterType := libsveltosv1beta1.ClusterTypeSveltos
 
+		eventSourceName := randomString()
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
+				},
+			},
+		}
+
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName, clusterType)
+		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
+			eventReport, clusterType)
 
 		name, create, err := controllers.GetClusterProfileName(context.TODO(), c, labels)
 		Expect(err).To(BeNil())
@@ -943,8 +1052,9 @@ var _ = Describe("EventTrigger deployer", func() {
 
 		clusterProfile := &configv1beta1.ClusterProfile{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   name,
-				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName, clusterType),
+				Name: name,
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
+					eventReport, clusterType),
 			},
 		}
 
@@ -993,20 +1103,32 @@ var _ = Describe("EventTrigger deployer", func() {
 			},
 		}
 
+		eventSourceName := randomString()
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
+				},
+			},
+		}
+
 		eventTrigger := &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
 			Spec: v1beta1.EventTriggerSpec{
-				EventSourceName: randomString(),
+				EventSourceName: eventSourceName,
 				PolicyRefs: []configv1beta1.PolicyRef{
 					{
-						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
-						Name:      configMap.Name,
-						Namespace: configMap.Namespace,
+						DeploymentType: configv1beta1.DeploymentTypeLocal,
+						Kind:           string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+						Name:           configMap.Name,
+						Namespace:      configMap.Namespace,
 					},
 					{
-						Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
-						Name:      secret.Name,
-						Namespace: secret.Namespace,
+						DeploymentType: configv1beta1.DeploymentTypeRemote,
+						Kind:           string(libsveltosv1beta1.SecretReferencedResourceKind),
+						Name:           secret.Name,
+						Namespace:      secret.Namespace,
 					},
 				},
 			},
@@ -1036,13 +1158,15 @@ var _ = Describe("EventTrigger deployer", func() {
 		}
 
 		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventTrigger.Name,
-			libsveltosv1beta1.ClusterTypeCapi)
+			eventReport, libsveltosv1beta1.ClusterTypeCapi)
 
-		set, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventTrigger,
+		localSet, remoteSet, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventTrigger,
 			clusterRef, object, labels, logger)
 		Expect(err).To(BeNil())
-		Expect(set).ToNot(BeNil())
-		Expect(set.Len()).To(Equal(2))
+		Expect(localSet).ToNot(BeNil())
+		Expect(localSet.Len()).To(Equal(1))
+		Expect(remoteSet).ToNot(BeNil())
+		Expect(remoteSet.Len()).To(Equal(1))
 
 		listOptions := []client.ListOption{
 			client.InNamespace(controllers.ReportNamespace),
@@ -1114,9 +1238,10 @@ var _ = Describe("EventTrigger deployer", func() {
 				OneForEvent:     false,
 				PolicyRefs: []configv1beta1.PolicyRef{
 					{
-						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
-						Name:      configMap.Name,
-						Namespace: configMap.Namespace,
+						DeploymentType: configv1beta1.DeploymentTypeRemote,
+						Kind:           string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+						Name:           configMap.Name,
+						Namespace:      configMap.Namespace,
 					},
 				},
 			},
@@ -1129,8 +1254,18 @@ var _ = Describe("EventTrigger deployer", func() {
 			APIVersion: clusterv1.GroupVersion.String(),
 		}
 
+		eventSourceName := randomString()
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
+				},
+			},
+		}
+
 		initObjects := []client.Object{
-			configMap, eventTrigger,
+			configMap, eventTrigger, eventReport,
 		}
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
@@ -1185,13 +1320,15 @@ spec:
 		}
 
 		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventTrigger.Name,
-			libsveltosv1beta1.ClusterTypeCapi)
+			eventReport, libsveltosv1beta1.ClusterTypeCapi)
 
-		set, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventTrigger,
+		localSet, remoteSet, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventTrigger,
 			clusterRef, objects, labels, logger)
 		Expect(err).To(BeNil())
-		Expect(set).ToNot(BeNil())
-		Expect(set.Len()).To(Equal(1))
+		Expect(localSet).ToNot(BeNil())
+		Expect(localSet.Len()).To(Equal(0))
+		Expect(remoteSet).ToNot(BeNil())
+		Expect(remoteSet.Len()).To(Equal(1))
 
 		listOptions := []client.ListOption{
 			client.InNamespace(controllers.ReportNamespace),
@@ -1211,12 +1348,22 @@ spec:
 		clusterType := libsveltosv1beta1.ClusterTypeCapi
 		eventTriggerName := randomString()
 
+		eventSourceName := randomString()
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
+				},
+			},
+		}
+
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: controllers.ReportNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
-					clusterName, eventTriggerName, clusterType),
+					clusterName, eventTriggerName, eventReport, clusterType),
 			},
 			Data: map[string]string{
 				randomString(): randomString(),
@@ -1228,7 +1375,7 @@ spec:
 				Namespace: controllers.ReportNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
-					clusterName, eventTriggerName, clusterType),
+					clusterName, eventTriggerName, eventReport, clusterType),
 			},
 			Data: map[string]string{
 				randomString(): randomString(),
@@ -1255,7 +1402,7 @@ spec:
 		policyRefs := map[libsveltosv1beta1.PolicyRef]bool{policyRef: true}
 
 		Expect(controllers.RemoveConfigMaps(context.TODO(), c, clusterNamespace, clusterName, clusterType,
-			&eventTrigger, policyRefs, logger)).To(Succeed())
+			&eventTrigger, eventReport, policyRefs, logger)).To(Succeed())
 
 		listOptions := []client.ListOption{
 			client.InNamespace(controllers.ReportNamespace),
@@ -1272,12 +1419,22 @@ spec:
 		clusterType := libsveltosv1beta1.ClusterTypeCapi
 		eventTriggerName := randomString()
 
+		eventSourceName := randomString()
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
+				},
+			},
+		}
+
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: controllers.ReportNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
-					clusterName, eventTriggerName, clusterType),
+					clusterName, eventTriggerName, eventReport, clusterType),
 			},
 			Type: libsveltosv1beta1.ClusterProfileSecretType,
 			Data: map[string][]byte{
@@ -1290,7 +1447,7 @@ spec:
 				Namespace: controllers.ReportNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
-					clusterName, eventTriggerName, clusterType),
+					clusterName, eventTriggerName, eventReport, clusterType),
 			},
 			Type: libsveltosv1beta1.ClusterProfileSecretType,
 			Data: map[string][]byte{
@@ -1318,7 +1475,7 @@ spec:
 		policyRefs := map[libsveltosv1beta1.PolicyRef]bool{policyRef: true}
 
 		Expect(controllers.RemoveSecrets(context.TODO(), c, clusterNamespace, clusterName, clusterType,
-			&eventTrigger, policyRefs, logger)).To(Succeed())
+			&eventTrigger, eventReport, policyRefs, logger)).To(Succeed())
 
 		listOptions := []client.ListOption{
 			client.InNamespace(controllers.ReportNamespace),
@@ -1422,7 +1579,7 @@ func validateLabels(labels map[string]string, clusterRef *corev1.ObjectReference
 	Expect(v).To(Equal(referencedResource.GetName()))
 
 	expectedLabels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace,
-		clusterRef.Name, eventTriggerName, clusterproxy.GetClusterType(clusterRef))
+		clusterRef.Name, eventTriggerName, nil, clusterproxy.GetClusterType(clusterRef))
 
 	for k := range expectedLabels {
 		v = labels[k]

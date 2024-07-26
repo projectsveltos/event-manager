@@ -18,12 +18,15 @@ package controllers_test
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2/textlogger"
 
@@ -38,6 +41,12 @@ import (
 )
 
 var _ = Describe("Fetcher", func() {
+	var logger logr.Logger
+
+	BeforeEach(func() {
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+	})
+
 	It("getConfigMap fetches configMap", func() {
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -108,14 +117,16 @@ var _ = Describe("Fetcher", func() {
 			Spec: v1beta1.EventTriggerSpec{
 				PolicyRefs: []configv1beta1.PolicyRef{
 					{
-						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
-						Name:      configMap.Name,
-						Namespace: configMap.Namespace,
+						DeploymentType: configv1beta1.DeploymentTypeLocal,
+						Kind:           string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+						Name:           configMap.Name,
+						Namespace:      configMap.Namespace,
 					},
 					{
-						Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
-						Name:      secret.Name,
-						Namespace: "", // leaving it empty to use cluster namespace
+						DeploymentType: configv1beta1.DeploymentTypeLocal,
+						Kind:           string(libsveltosv1beta1.SecretReferencedResourceKind),
+						Name:           secret.Name,
+						Namespace:      "", // leaving it empty to use cluster namespace
 					},
 				},
 			},
@@ -136,11 +147,87 @@ var _ = Describe("Fetcher", func() {
 				Namespace: clusterNamespace,
 			},
 		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
 
-		result, err := controllers.FetchPolicyRefs(context.TODO(), c, e, getClusterRef(cluster),
-			textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))))
+		local, remote, err := controllers.FetchPolicyRefs(context.TODO(), c, e, getClusterRef(cluster), nil,
+			randomString(), logger)
 		Expect(err).To(BeNil())
-		Expect(len(result)).To(Equal(2))
+		Expect(len(local)).To(Equal(2))
+		Expect(len(remote)).To(Equal(0))
+	})
+
+	It("fetchPolicyRefs fetches referenced Secrets and ConfigMaps (names are expressed as templates)", func() {
+		clusterNamespace := randomString()
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: clusterNamespace,
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		namePrefix := randomString()
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", namePrefix, cluster.Name),
+				Namespace: randomString(),
+			},
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
+		}
+
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", namePrefix, cluster.Name),
+				Namespace: clusterNamespace, // this is put in cluster namespace on purpose
+				// PolicyRef does not set namespace when referencing Secret. So cluster namespace
+				// is used
+			},
+		}
+
+		e := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				PolicyRefs: []configv1beta1.PolicyRef{
+					{
+						DeploymentType: configv1beta1.DeploymentTypeLocal,
+						Kind:           string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+						Name:           namePrefix + "-{{ .Cluster.metadata.name }}",
+						Namespace:      "", // leaving it empty to use cluster namespace
+					},
+					{
+						DeploymentType: configv1beta1.DeploymentTypeRemote,
+						Kind:           string(libsveltosv1beta1.SecretReferencedResourceKind),
+						Name:           namePrefix + "-{{ .Cluster.metadata.name }}",
+						Namespace:      secret.Namespace,
+					},
+				},
+			},
+		}
+
+		initObjects := []client.Object{
+			secret,
+			configMap,
+			e,
+			cluster,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cluster)
+		Expect(err).To(BeNil())
+
+		object := &controllers.CurrentObject{
+			Cluster: content,
+		}
+
+		local, remote, err := controllers.FetchPolicyRefs(context.TODO(), c, e, getClusterRef(cluster),
+			object, randomString(), logger)
+		Expect(err).To(BeNil())
+		Expect(len(local)).To(Equal(1))
+		Expect(len(remote)).To(Equal(1))
 	})
 
 	It("fetchEventReports fetch EventReports for a given EventSource/Cluster pair", func() {
@@ -200,7 +287,8 @@ var _ = Describe("Fetcher", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		es, err := controllers.FetchEventSource(context.TODO(), c, e.Spec.EventSourceName)
+		es, err := controllers.FetchEventSource(context.TODO(), c, randomString(), randomString(),
+			e.Spec.EventSourceName, libsveltosv1beta1.ClusterTypeSveltos, logger)
 		Expect(err).To(BeNil())
 		Expect(es).ToNot(BeNil())
 	})
@@ -280,9 +368,8 @@ var _ = Describe("Fetcher", func() {
 			WithObjects(initObjects...).Build()
 		Expect(addTypeInformationToObject(c.Scheme(), cluster)).To(Succeed())
 
-		result, err := controllers.FetchReferencedResources(context.TODO(), c, e, getClusterRef(cluster),
-			textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))))
+		result, err := controllers.FetchReferencedResources(context.TODO(), c, e, getClusterRef(cluster), logger)
 		Expect(err).To(BeNil())
-		Expect(len(result)).To(Equal(4)) // EventSource + EventReport + ConfigMap + Secret
+		Expect(len(result)).To(Equal(2)) // EventSource + EventReport (no referenced resources)
 	})
 })
