@@ -141,6 +141,13 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.DriftExclusions != nil {
+		in, out := &in.DriftExclusions, &out.DriftExclusions
+		*out = make([]apiv1beta1.DriftExclusion, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.ExtraLabels != nil {
 		in, out := &in.ExtraLabels, &out.ExtraLabels
 		*out = make(map[string]string, len(*in))
