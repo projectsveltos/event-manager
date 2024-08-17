@@ -45,6 +45,9 @@ func (src *EventTrigger) ConvertTo(dstRaw conversion.Hub) error {
 		dst.Spec.DestinationClusterSelector.LabelSelector = metav1.LabelSelector{}
 	}
 
+	dst.Spec.DriftExclusions = nil
+	dst.Spec.Patches = nil
+
 	return nil
 }
 

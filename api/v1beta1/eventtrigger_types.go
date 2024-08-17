@@ -167,6 +167,12 @@ type EventTriggerSpec struct {
 	// +optional
 	Patches []libsveltosv1beta1.Patch `json:"patches,omitempty"`
 
+	// DriftExclusions is a list of configuration drift exclusions to be applied when syncMode is
+	// set to ContinuousWithDriftDetection. Each exclusion specifies JSON6902 paths to ignore
+	// when evaluating drift, optionally targeting specific resources and features.
+	// +optional
+	DriftExclusions []configv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
+
 	// ExtraLabels: These labels will be added by Sveltos to all Kubernetes resources deployed in
 	// a managed cluster based on this ClusterProfile/Profile instance.
 	// **Important:** If a resource deployed by Sveltos already has a label with a key present in
