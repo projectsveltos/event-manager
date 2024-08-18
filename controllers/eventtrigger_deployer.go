@@ -1010,6 +1010,8 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	}
 	clusterProfile.Spec.KustomizationRefs = instantiateKustomizeRefsWithResource
 
+	clusterProfile.Spec.DriftExclusions = eventTrigger.Spec.DriftExclusions
+
 	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
 	localPolicyRef, remotePolicyRef, err := instantiateReferencedPolicies(ctx, c, templateName,
 		eventTrigger, clusterRef, object, labels, logger)
@@ -1100,6 +1102,8 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 		return nil, err
 	}
 	clusterProfile.Spec.KustomizationRefs = instantiateKustomizeRefsWithResource
+
+	clusterProfile.Spec.DriftExclusions = eventTrigger.Spec.DriftExclusions
 
 	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
 	localPolicyRef, remotePolicyRef, err := instantiateReferencedPolicies(ctx, c, templateName,
