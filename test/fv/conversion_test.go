@@ -72,10 +72,8 @@ var _ = Describe("Conversion", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
 				Name:      randomString(),
-				// Mark resource as template so instantiateReferencedPolicies
-				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					libsveltosv1alpha1.PolicyTemplateAnnotation: "ok",
+					"projectsveltos.io/instantiate": "ok",
 				},
 			},
 			Data: map[string]string{

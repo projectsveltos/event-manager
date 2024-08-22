@@ -187,6 +187,8 @@ func autoConvert_v1beta1_EventTriggerSpec_To_v1alpha1_EventTriggerSpec(in *v1bet
 	out.OneForEvent = in.OneForEvent
 	out.EventSourceName = in.EventSourceName
 	// WARNING: in.DestinationClusterSelector requires manual conversion: inconvertible types (github.com/projectsveltos/libsveltos/api/v1beta1.Selector vs *github.com/projectsveltos/libsveltos/api/v1alpha1.Selector)
+	// WARNING: in.ConfigMapGenerator requires manual conversion: does not exist in peer-type
+	// WARNING: in.SecretGenerator requires manual conversion: does not exist in peer-type
 	out.SyncMode = apiv1alpha1.SyncMode(in.SyncMode)
 	out.Tier = in.Tier
 	out.ContinueOnConflict = in.ContinueOnConflict
