@@ -26,11 +26,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/projectsveltos/event-manager/controllers"
 	"github.com/projectsveltos/event-manager/internal/test/helpers"
 	libsveltoscrd "github.com/projectsveltos/libsveltos/lib/crd"
 	"github.com/projectsveltos/libsveltos/lib/utils"
@@ -104,7 +107,18 @@ var _ = BeforeSuite(func() {
 	Expect(testEnv.Create(context.TODO(), dcCRD)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv, dcCRD)).To(Succeed())
 
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: controllers.ReportNamespace,
+		},
+	}
+	Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+	Expect(waitForObject(context.TODO(), testEnv, ns)).To(Succeed())
+
 	time.Sleep(time.Second)
+
+	controllers.SetSchema(scheme)
+	controllers.SetConfig(testEnv.Config)
 
 	if synced := testEnv.GetCache().WaitForCacheSync(ctx); !synced {
 		time.Sleep(time.Second)

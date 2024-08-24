@@ -149,7 +149,7 @@ type EventTriggerReconciler struct {
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventtriggers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventsources,verbs=get;list;watch
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventreports,verbs=create;update;delete;get;watch;list
-//+kubebuilder:rbac:groups=config.projectsveltos.io,resources=clusterprofiles,verbs=get;list;update;create;delete;watch
+//+kubebuilder:rbac:groups=config.projectsveltos.io,resources=clusterprofiles,verbs=get;list;update;create;delete;watch;patch
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=clustersets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=clustersets/status,verbs=get;watch;list
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters,verbs=get;watch;list
@@ -341,7 +341,7 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 	*/
 
 	if r.EventReportMode == CollectFromManagementCluster {
-		go collectEventReports(mgr.GetClient(), r.ShardKey, mgr.GetLogger())
+		go collectEventReports(mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(), r.ShardKey, mgr.GetLogger())
 	}
 
 	return c, nil
