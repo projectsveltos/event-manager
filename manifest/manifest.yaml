@@ -8,7 +8,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: projectsveltos/projectsveltos-serving-cert
-    controller-gen.kubebuilder.io/version: v0.16.1
+    controller-gen.kubebuilder.io/version: v0.16.2
   name: eventtriggers.lib.projectsveltos.io
 spec:
   conversion:
@@ -2342,7 +2342,7 @@ spec:
         - --v=5
         command:
         - /manager
-        image: docker.io/projectsveltos/event-manager:dev
+        image: docker.io/projectsveltos/event-manager:v0.37.0
         livenessProbe:
           failureThreshold: 3
           httpGet:
