@@ -195,32 +195,45 @@ var _ = Describe("EventTrigger deployer", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
 			},
-			Status: v1beta1.EventTriggerStatus{
-				ClusterInfo: []libsveltosv1beta1.ClusterInfo{
-					*getClusterInfo(clusterNamespace, clusterName, clusterType),
-					*getClusterInfo(clusterNamespace, randomString(), clusterType),
-					*getClusterInfo(randomString(), clusterName, clusterType),
-					*getClusterInfo(clusterNamespace, clusterName, libsveltosv1beta1.ClusterTypeSveltos),
-				},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: randomString(),
 			},
 		}
 
-		initObjects := []client.Object{
-			resource,
-		}
+		Expect(testEnv.Create(context.TODO(), resource)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, resource)).To(Succeed())
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
-			WithObjects(initObjects...).Build()
+		resource.Status = v1beta1.EventTriggerStatus{
+			ClusterInfo: []libsveltosv1beta1.ClusterInfo{
+				*getClusterInfo(clusterNamespace, clusterName, clusterType),
+				*getClusterInfo(clusterNamespace, randomString(), clusterType),
+				*getClusterInfo(randomString(), clusterName, clusterType),
+				*getClusterInfo(clusterNamespace, clusterName, libsveltosv1beta1.ClusterTypeSveltos),
+			},
+		}
+		Expect(testEnv.Client.Status().Update(context.TODO(), resource)).To(Succeed())
+		Eventually(func() bool {
+			currentChc := &v1beta1.EventTrigger{}
+			err := testEnv.Client.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)
+			if err != nil {
+				return false
+			}
+			return len(currentChc.Status.ClusterInfo) != 0
+		}, timeout, pollingInterval).Should(BeTrue())
 
 		length := len(resource.Status.ClusterInfo)
 
-		Expect(controllers.RemoveClusterInfoEntry(context.TODO(), c, clusterNamespace, clusterName,
+		Expect(controllers.RemoveClusterInfoEntry(context.TODO(), testEnv.Client, clusterNamespace, clusterName,
 			clusterType, resource, logger)).To(Succeed())
 
-		currentChc := &v1beta1.EventTrigger{}
-		Expect(c.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)).To(Succeed())
-
-		Expect(len(currentChc.Status.ClusterInfo)).To(Equal(length - 1))
+		Eventually(func() bool {
+			currentChc := &v1beta1.EventTrigger{}
+			err := testEnv.Client.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)
+			if err != nil {
+				return false
+			}
+			return len(currentChc.Status.ClusterInfo) == length-1
+		}, timeout, pollingInterval).Should(BeTrue())
 	})
 
 	It("isClusterEntryRemoved returns true when there is no entry for a Cluster in EventTrigger status", func() {
@@ -398,41 +411,73 @@ var _ = Describe("EventTrigger deployer", func() {
 			},
 		}
 
-		initObjects := []client.Object{
-			eventReport1,
-			eventReport2,
-			eventReport3,
-			eventReport4,
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: eventReport1.Namespace,
+			},
 		}
+		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
-			WithObjects(initObjects...).Build()
+		Expect(testEnv.Client.Create(context.TODO(), eventReport1)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport1)).To(Succeed())
 
-		Expect(controllers.RemoveStaleEventReports(context.TODO(), c,
+		ns.Name = eventReport2.Namespace
+		ns.SetResourceVersion("")
+		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+		Expect(testEnv.Client.Create(context.TODO(), eventReport2)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport2)).To(Succeed())
+
+		ns.Name = eventReport3.Namespace
+		ns.SetResourceVersion("")
+		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+		Expect(testEnv.Client.Create(context.TODO(), eventReport3)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport3)).To(Succeed())
+
+		ns.Name = eventReport4.Namespace
+		ns.SetResourceVersion("")
+		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+		Expect(testEnv.Client.Create(context.TODO(), eventReport4)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport4)).To(Succeed())
+
+		Expect(controllers.RemoveStaleEventReports(context.TODO(), testEnv.Client,
 			clusterNamespace, clusterName, eventSourceName, clusterType, logger)).To(Succeed())
 
 		currentEventReport := &libsveltosv1beta1.EventReport{}
 
 		// EventReport1 was coming from this cluster/eventSource => expect it to be gone
-		err := c.Get(context.TODO(),
-			types.NamespacedName{Namespace: eventReport1.Namespace, Name: eventReport1.Name}, currentEventReport)
-		Expect(err).ToNot(BeNil())
-		Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		Eventually(func() bool {
+			err := testEnv.Get(context.TODO(),
+				types.NamespacedName{Namespace: eventReport1.Namespace, Name: eventReport1.Name}, currentEventReport)
+			return apierrors.IsNotFound(err)
+		}, timeout, pollingInterval).Should(BeTrue())
 
 		// EventReport2 was coming from different cluster/eventSource (wrong namespace) => expect it to be still present
-		err = c.Get(context.TODO(),
-			types.NamespacedName{Namespace: eventReport2.Namespace, Name: eventReport2.Name}, currentEventReport)
-		Expect(err).To(BeNil())
+		Eventually(func() bool {
+			err := testEnv.Get(context.TODO(),
+				types.NamespacedName{Namespace: eventReport2.Namespace, Name: eventReport2.Name}, currentEventReport)
+			return err == nil
+		}, timeout, pollingInterval).Should(BeTrue())
 
 		// EventReport3 was coming from different cluster/eventSource (wrong cluster name) => expect it to be still present
-		err = c.Get(context.TODO(),
-			types.NamespacedName{Namespace: eventReport3.Namespace, Name: eventReport3.Name}, currentEventReport)
-		Expect(err).To(BeNil())
+		Eventually(func() bool {
+			err := testEnv.Get(context.TODO(),
+				types.NamespacedName{Namespace: eventReport3.Namespace, Name: eventReport3.Name}, currentEventReport)
+			return err == nil
+		}, timeout, pollingInterval).Should(BeTrue())
 
 		// EventReport4 was coming from different cluster/eventSource (wrong clusterType) => expect it to be still present
-		err = c.Get(context.TODO(),
-			types.NamespacedName{Namespace: eventReport4.Namespace, Name: eventReport4.Name}, currentEventReport)
-		Expect(err).To(BeNil())
+		Eventually(func() bool {
+			err := testEnv.Get(context.TODO(),
+				types.NamespacedName{Namespace: eventReport4.Namespace, Name: eventReport4.Name}, currentEventReport)
+			return err == nil
+		}, timeout, pollingInterval).Should(BeTrue())
 	})
 
 	It("removeStaleEventSources removes stale eventSources from managed cluster", func() {
@@ -827,10 +872,19 @@ var _ = Describe("EventTrigger deployer", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: clusterNamespace},
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: clusterNamespace,
+			},
+		}
+		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		_, err = controllers.InstantiateOneClusterProfilePerAllResource(context.TODO(), c, clusterNamespace, clusterName, clusterType,
-			eventTrigger, eventReport, logger)
+		Expect(testEnv.Client.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
+
+		_, err = controllers.InstantiateOneClusterProfilePerAllResource(context.TODO(), testEnv.Client,
+			clusterNamespace, clusterName, clusterType, eventTrigger, eventReport, logger)
 		Expect(err).To(BeNil())
 
 		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
@@ -840,8 +894,17 @@ var _ = Describe("EventTrigger deployer", func() {
 			client.MatchingLabels(labels),
 		}
 
+		Eventually(func() bool {
+			clusterProfiles := &configv1beta1.ClusterProfileList{}
+			err := testEnv.List(context.TODO(), clusterProfiles, listOptions...)
+			if err != nil {
+				return false
+			}
+			return len(clusterProfiles.Items) == 1
+		}, timeout, pollingInterval).Should(BeTrue())
+
 		clusterProfiles := &configv1beta1.ClusterProfileList{}
-		Expect(c.List(context.TODO(), clusterProfiles, listOptions...)).To(Succeed())
+		Expect(testEnv.List(context.TODO(), clusterProfiles, listOptions...)).To(Succeed())
 		Expect(len(clusterProfiles.Items)).To(Equal(1))
 		Expect(clusterProfiles.Items[0].Spec.ClusterRefs).ToNot(BeNil())
 		Expect(len(clusterProfiles.Items[0].Spec.ClusterRefs)).To(Equal(1))
@@ -930,10 +993,19 @@ var _ = Describe("EventTrigger deployer", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: clusterNamespace},
 		}
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: clusterNamespace,
+			},
+		}
+		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		_, err = controllers.InstantiateOneClusterProfilePerResource(context.TODO(), c, clusterNamespace, clusterName, clusterType,
-			eventTrigger, eventReport, logger)
+		Expect(testEnv.Client.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
+
+		_, err = controllers.InstantiateOneClusterProfilePerResource(context.TODO(), testEnv.Client,
+			clusterNamespace, clusterName, clusterType, eventTrigger, eventReport, logger)
 		Expect(err).To(BeNil())
 
 		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
@@ -943,8 +1015,17 @@ var _ = Describe("EventTrigger deployer", func() {
 			client.MatchingLabels(labels),
 		}
 
+		Eventually(func() bool {
+			clusterProfiles := &configv1beta1.ClusterProfileList{}
+			err := testEnv.List(context.TODO(), clusterProfiles, listOptions...)
+			if err != nil {
+				return false
+			}
+			return len(clusterProfiles.Items) == 2
+		}, timeout, pollingInterval).Should(BeTrue())
+
 		clusterProfiles := &configv1beta1.ClusterProfileList{}
-		Expect(c.List(context.TODO(), clusterProfiles, listOptions...)).To(Succeed())
+		Expect(testEnv.List(context.TODO(), clusterProfiles, listOptions...)).To(Succeed())
 		Expect(len(clusterProfiles.Items)).To(Equal(2))
 
 		for i := 0; i < 2; i++ {
@@ -1045,9 +1126,8 @@ var _ = Describe("EventTrigger deployer", func() {
 		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
 			eventReport, clusterType)
 
-		name, create, err := controllers.GetClusterProfileName(context.TODO(), c, labels)
+		name, err := controllers.GetClusterProfileName(context.TODO(), c, labels)
 		Expect(err).To(BeNil())
-		Expect(create).To(BeTrue())
 		Expect(name).ToNot(BeEmpty())
 
 		clusterProfile := &configv1beta1.ClusterProfile{
@@ -1061,9 +1141,8 @@ var _ = Describe("EventTrigger deployer", func() {
 		Expect(c.Create(context.TODO(), clusterProfile)).To(Succeed())
 
 		var currentName string
-		currentName, create, err = controllers.GetClusterProfileName(context.TODO(), c, labels)
+		currentName, err = controllers.GetClusterProfileName(context.TODO(), c, labels)
 		Expect(err).To(BeNil())
-		Expect(create).To(BeFalse())
 		Expect(currentName).To(Equal(name))
 	})
 
@@ -1079,7 +1158,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					libsveltosv1beta1.PolicyTemplateAnnotation: "ok",
+					controllers.InstantiateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{
@@ -1094,7 +1173,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					libsveltosv1beta1.PolicyTemplateAnnotation: "ok",
+					controllers.InstantiateAnnotation: "ok",
 				},
 			},
 			Type: libsveltosv1beta1.ClusterProfileSecretType,
@@ -1141,17 +1220,27 @@ var _ = Describe("EventTrigger deployer", func() {
 			APIVersion: clusterv1.GroupVersion.String(),
 		}
 
-		initObjects := []client.Object{
-			secret, configMap, eventTrigger,
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespace,
+			},
 		}
+		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
-			WithObjects(initObjects...).Build()
+		Expect(testEnv.Client.Create(context.TODO(), secret)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, secret)).To(Succeed())
+
+		Expect(testEnv.Client.Create(context.TODO(), configMap)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, configMap)).To(Succeed())
+
+		Expect(testEnv.Client.Create(context.TODO(), eventTrigger)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventTrigger)).To(Succeed())
 
 		object := &controllers.CurrentObject{
 			MatchingResource: corev1.ObjectReference{
 				Kind:       "Service",
-				APIVersion: "",
+				APIVersion: "v1",
 				Namespace:  randomString(),
 				Name:       randomString(),
 			},
@@ -1160,8 +1249,8 @@ var _ = Describe("EventTrigger deployer", func() {
 		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventTrigger.Name,
 			eventReport, libsveltosv1beta1.ClusterTypeCapi)
 
-		localSet, remoteSet, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventTrigger,
-			clusterRef, object, labels, logger)
+		localSet, remoteSet, err := controllers.InstantiateReferencedPolicyRefs(context.TODO(), testEnv.Client,
+			randomString(), eventTrigger, clusterRef, object, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(localSet).ToNot(BeNil())
 		Expect(localSet.Len()).To(Equal(1))
@@ -1173,13 +1262,13 @@ var _ = Describe("EventTrigger deployer", func() {
 		}
 
 		configMaps := &corev1.ConfigMapList{}
-		Expect(c.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
+		Expect(testEnv.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
 		Expect(len(configMaps.Items)).To(Equal(1))
 		validateLabels(configMaps.Items[0].Labels, clusterRef, eventTriggerName, configMap)
 		Expect(reflect.DeepEqual(configMaps.Items[0].Data, configMap.Data)).To(BeTrue())
 
 		secrets := &corev1.SecretList{}
-		Expect(c.List(context.TODO(), secrets, listOptions...)).To(Succeed())
+		Expect(testEnv.List(context.TODO(), secrets, listOptions...)).To(Succeed())
 		Expect(len(secrets.Items)).To(Equal(1))
 		validateLabels(secrets.Items[0].Labels, clusterRef, eventTriggerName, secret)
 		Expect(reflect.DeepEqual(secrets.Items[0].Data, secret.Data)).To(BeTrue())
@@ -1223,7 +1312,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					libsveltosv1beta1.PolicyTemplateAnnotation: "ok",
+					controllers.InstantiateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{
@@ -1257,19 +1346,30 @@ var _ = Describe("EventTrigger deployer", func() {
 		eventSourceName := randomString()
 		eventReport := &libsveltosv1beta1.EventReport{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: randomString(),
+				Name:      randomString(),
+				Namespace: namespace,
 				Labels: map[string]string{
 					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
 				},
 			},
 		}
 
-		initObjects := []client.Object{
-			configMap, eventTrigger, eventReport,
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: configMap.Namespace,
+			},
 		}
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, ns)).To(Succeed())
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
-			WithObjects(initObjects...).Build()
+		Expect(testEnv.Create(context.TODO(), configMap)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, configMap)).To(Succeed())
+
+		Expect(testEnv.Create(context.TODO(), eventReport)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, eventReport)).To(Succeed())
+
+		Expect(testEnv.Create(context.TODO(), eventTrigger)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, eventTrigger)).To(Succeed())
 
 		httpsService1 := `apiVersion: v1
 kind: Service
@@ -1322,8 +1422,8 @@ spec:
 		labels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventTrigger.Name,
 			eventReport, libsveltosv1beta1.ClusterTypeCapi)
 
-		localSet, remoteSet, err := controllers.InstantiateReferencedPolicies(context.TODO(), c, randomString(), eventTrigger,
-			clusterRef, objects, labels, logger)
+		localSet, remoteSet, err := controllers.InstantiateReferencedPolicyRefs(context.TODO(), testEnv,
+			randomString(), eventTrigger, clusterRef, objects, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(localSet).ToNot(BeNil())
 		Expect(localSet.Len()).To(Equal(0))
@@ -1332,10 +1432,20 @@ spec:
 
 		listOptions := []client.ListOption{
 			client.InNamespace(controllers.ReportNamespace),
+			client.MatchingLabels(labels),
 		}
 
+		Eventually(func() bool {
+			configMaps := &corev1.ConfigMapList{}
+			err := testEnv.List(context.TODO(), configMaps, listOptions...)
+			if err != nil {
+				return false
+			}
+			return len(configMaps.Items) == 1
+		}, timeout, pollingInterval).Should(BeTrue())
+
 		configMaps := &corev1.ConfigMapList{}
-		Expect(c.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
+		Expect(testEnv.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
 		Expect(len(configMaps.Items)).To(Equal(1))
 		Expect(configMaps.Items[0].Data).ToNot(BeEmpty())
 		Expect(configMaps.Items[0].Data["policy"]).To(ContainSubstring("443"))
@@ -1548,6 +1658,133 @@ spec:
 			}
 		}
 	})
+
+	It("instantiateFromGeneratorsPerResource instantiates from SecretGenerator", func() {
+		token := []byte(randomString())
+		// This is the resource in the managed cluster that created the event.
+		// The eventReport instance test creates later on, contains it in its report.
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: randomString(),
+			},
+			Data: map[string][]byte{
+				"token": token,
+			},
+		}
+
+		eventSourceName := randomString()
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+
+		// This is the namespace where cluster and eventReport will be
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: clusterNamespace,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+		// This is the cluster the eventReport is for
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: clusterNamespace,
+				Name:      clusterName,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
+
+		Expect(addTypeInformationToObject(scheme, secret)).To(Succeed())
+
+		uContent, err := runtime.DefaultUnstructuredConverter.ToUnstructured(secret)
+		Expect(err).To(BeNil())
+
+		u := &unstructured.Unstructured{}
+		u.SetUnstructuredContent(uContent)
+
+		result := ""
+
+		tmpJson, jsonErr := u.MarshalJSON()
+		Expect(jsonErr).To(BeNil())
+		result += string(tmpJson)
+		result += separator
+
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: clusterNamespace,
+				Name:      randomString(),
+				Labels:    libsveltosv1beta1.GetEventReportLabels(eventSourceName, clusterName, &clusterType),
+			},
+			Spec: libsveltosv1beta1.EventReportSpec{
+				MatchingResources: []corev1.ObjectReference{
+					{Kind: "Secret", APIVersion: corev1.SchemeGroupVersion.String(),
+						Namespace: secret.Namespace, Name: secret.Name},
+				},
+				Resources:        []byte(result),
+				ClusterNamespace: clusterNamespace,
+				ClusterName:      clusterName,
+				ClusterType:      clusterType,
+				EventSourceName:  eventSourceName,
+			},
+		}
+
+		Expect(testEnv.Create(context.TODO(), eventReport)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport)).To(Succeed())
+
+		//nolint: gosec // just a test
+		secretData := `kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: "{{ .Cluster.metadata.name }}"
+  namespace: "{{ .Cluster.metadata.namespace }}"
+data:
+  token: "{{ .Resource.data.token }}"`
+
+		// Create a Secret that EventTrigger will reference in its SecretGenerator
+		// Event-manager will generate a new Secret by instantiating this one using
+		// event/cluster data
+		secretGenerator := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: ns.Name,
+				Name:      randomString(),
+				Annotations: map[string]string{
+					"projectsveltos.io/instantiate": "ok",
+				},
+			},
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
+			Data: map[string][]byte{
+				"configmap.yaml": []byte(secretData),
+			},
+		}
+
+		Expect(testEnv.Create(context.TODO(), secretGenerator)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, secretGenerator)).To(Succeed())
+
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: randomString()},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: eventSourceName,
+				SecretGenerator: []v1beta1.GeneratorReference{
+					{
+						Namespace:                      secretGenerator.Namespace,
+						Name:                           secretGenerator.Name,
+						InstantiatedResourceNameFormat: "{{ .Cluster.metadata.name}}-generated",
+					},
+				},
+			},
+		}
+
+		Expect(testEnv.Create(context.TODO(), eventTrigger)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventTrigger)).To(Succeed())
+
+		instantiatedSecrets, err := controllers.InstantiateFromGeneratorsPerResource(context.TODO(), testEnv.Client, eventTrigger, eventReport,
+			clusterNamespace, clusterName, clusterType, logger)
+		Expect(err).To(BeNil())
+		Expect(len(instantiatedSecrets)).To(Equal(1))
+	})
 })
 
 func getClusterInfo(clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType) *libsveltosv1beta1.ClusterInfo {
@@ -1567,6 +1804,7 @@ func getClusterInfo(clusterNamespace, clusterName string, clusterType libsveltos
 			Kind:       kind,
 			APIVersion: apiVersion,
 		},
+		Hash: []byte(randomString()),
 	}
 }
 

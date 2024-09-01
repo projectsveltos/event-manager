@@ -35,6 +35,30 @@ const (
 	FeatureEventTrigger = "EventTrigger"
 )
 
+type GeneratorReference struct {
+	// Namespace of the referenced resource.
+	// Nnamespace can be left empty. In such a case, namespace will
+	// be implicit set to cluster's namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// Name of the referenced resource.
+	// Name can be expressed as a template and instantiate using
+	// - `.Cluster.metadata.namespace`: namespace of the managed cluster
+	// - `.Cluster.metadata.name`: name of the managed cluster
+	// - `.Cluster.kind`: kind of the managed cluster object
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// InstantiatedResourceNameFormat defines a template used to generate the name
+	// of the resource created in the management cluster. The template can reference:
+	// - `.Cluster.metadata.namespace`: namespace of the managed cluster
+	// - `.Cluster.metadata.name`: name of the managed cluster
+	// - `.Cluster.kind`: kind of the managed cluster object
+	// +kubebuilder:validation:MinLength=1
+	InstantiatedResourceNameFormat string `json:"nameFormat"`
+}
+
 // EventTriggerSpec defines the desired state of EventTrigger
 type EventTriggerSpec struct {
 	// SourceClusterSelector identifies clusters to associate to.
@@ -70,8 +94,20 @@ type EventTriggerSpec struct {
 	// If DestinationClusterSelector is set though, when an event happens in any of the
 	// cluster identified by SourceClusterSelector, add-ons will be deployed in each of
 	// the cluster indentified by DestinationClusterSelector.
-	// +omitempty
+	// +optional
 	DestinationClusterSelector libsveltosv1beta1.Selector `json:"destinationClusterSelector,omitempty"`
+
+	// The ConfigMapGenerator field references ConfigMaps containing templates.
+	// These referenced ConfigMaps will be dynamically instantiated in the management cluster
+	// based on event data.
+	// +optional
+	ConfigMapGenerator []GeneratorReference `json:"configMapGenerator,omitempty"`
+
+	// The SecretGenerator field references Secrets containing templates.
+	// These referenced Secret will be dynamically instantiated in the management cluster
+	// based on event data.
+	// +optional
+	SecretGenerator []GeneratorReference `json:"secretGenerator,omitempty"`
 
 	// SyncMode specifies how features are synced in a matching workload cluster.
 	// - OneTime means, first time a workload cluster matches the ClusterProfile,
@@ -83,6 +119,8 @@ type EventTriggerSpec struct {
 	// - DryRun means no change will be propagated to any matching cluster. A report
 	// instead will be generated summarizing what would happen in any matching cluster
 	// because of the changes made to ClusterProfile while in DryRun mode.
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +kubebuilder:default:=Continuous
 	// +optional
 	SyncMode configv1beta1.SyncMode `json:"syncMode,omitempty"`
@@ -98,6 +136,8 @@ type EventTriggerSpec struct {
 	// when multiple configurations manage the same resources.
 	// +kubebuilder:default:=100
 	// +kubebuilder:validation:Minimum=1
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +optional
 	Tier int32 `json:"tier,omitempty"`
 
@@ -105,6 +145,8 @@ type EventTriggerSpec struct {
 	// encountering the first conflict (e.g., another ClusterProfile already deployed the resource).
 	// If set to true, Sveltos will attempt to deploy remaining resources in the ClusterProfile even
 	// if conflicts are detected for previous resources.
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +kubebuilder:default:=false
 	// +optional
 	ContinueOnConflict bool `json:"continueOnConflict,omitempty"`
@@ -117,6 +159,8 @@ type EventTriggerSpec struct {
 	// in those cluster succeed, other matching clusters are updated.
 	// +kubebuilder:validation:XIntOrString
 	// +kubebuilder:validation:Pattern="^((100|[0-9]{1,2})%|[0-9]+)$"
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +optional
 	MaxUpdate *intstr.IntOrString `json:"maxUpdate,omitempty"`
 
@@ -125,6 +169,8 @@ type EventTriggerSpec struct {
 	// be withdrawn from Cluster. Setting StopMatchingBehavior to LeavePolicies will instead
 	// leave ClusterProfile deployed policies in the Cluster.
 	// +kubebuilder:default:=WithdrawPolicies
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +optional
 	StopMatchingBehavior configv1beta1.StopMatchingBehavior `json:"stopMatchingBehavior,omitempty"`
 
@@ -134,6 +180,8 @@ type EventTriggerSpec struct {
 	// When set to true, when any mounted ConfigMap/Secret is modified, Sveltos automatically
 	// starts a rolling upgrade for Deployment/StatefulSet/DaemonSet instances mounting it.
 	// +kubebuilder:default:=false
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +optional
 	Reloader bool `json:"reloader,omitempty"`
 
@@ -142,34 +190,50 @@ type EventTriggerSpec struct {
 	// PolicyRefs and Helm charts
 	// +patchMergeKey=identifier
 	// +patchStrategy=merge,retainKeys
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +optional
 	TemplateResourceRefs []configv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
 
 	// PolicyRefs references all the ConfigMaps/Secrets containing kubernetes resources
 	// that need to be deployed in the matching clusters based on EventSource.
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +optional
 	PolicyRefs []configv1beta1.PolicyRef `json:"policyRefs,omitempty"`
 
 	// Helm charts to be deployed in the matching clusters based on EventSource.
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
+	// +optional
 	HelmCharts []configv1beta1.HelmChart `json:"helmCharts,omitempty"`
 
 	// Kustomization refs
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
+	// +optional
 	KustomizationRefs []configv1beta1.KustomizationRef `json:"kustomizationRefs,omitempty"`
 
 	// ValidateHealths is a slice of Lua functions to run against
 	// the managed cluster to validate the state of those add-ons/applications
 	// is healthy
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +optional
 	ValidateHealths []configv1beta1.ValidateHealth `json:"validateHealths,omitempty"`
 
 	// Define additional Kustomize inline Patches applied for all resources on this profile
 	// Within the Patch Spec you can use templating
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +optional
 	Patches []libsveltosv1beta1.Patch `json:"patches,omitempty"`
 
 	// DriftExclusions is a list of configuration drift exclusions to be applied when syncMode is
 	// set to ContinuousWithDriftDetection. Each exclusion specifies JSON6902 paths to ignore
 	// when evaluating drift, optionally targeting specific resources and features.
+	// This field will be directly transferred to the ClusterProfile Spec
+	// generated in response to events.
 	// +optional
 	DriftExclusions []configv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 

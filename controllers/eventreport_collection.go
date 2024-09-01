@@ -26,7 +26,9 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/projectsveltos/event-manager/api/v1beta1"
@@ -40,6 +42,11 @@ import (
 const (
 	eventReportMalformedLabelError = "eventReport is malformed. Labels is empty"
 	eventReportMissingLabelError   = "eventReport is malformed. Label missing"
+)
+
+var (
+	mgmtClusterSchema *runtime.Scheme
+	mgmtClusterConfig *rest.Config
 )
 
 // removeEventReports deletes all EventReport corresponding to EventSource instance
@@ -168,12 +175,15 @@ func buildEventTriggersForClusterMap(eventTriggers *v1beta1.EventTriggerList,
 }
 
 // Periodically collects EventReports from each CAPI cluster.
-func collectEventReports(c client.Client, shardKey string, logger logr.Logger) {
+func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme, shardKey string, logger logr.Logger) {
 	interval := 10 * time.Second
 	if shardKey != "" {
 		// Make sharded controllers more aggressive in fetching
 		interval = 5 * time.Second
 	}
+
+	mgmtClusterSchema = s
+	mgmtClusterConfig = config
 
 	ctx := context.TODO()
 	for {

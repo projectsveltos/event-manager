@@ -16,6 +16,11 @@ limitations under the License.
 
 package controllers
 
+import (
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
+)
+
 var (
 	RemoveEventReports                       = removeEventReports
 	RemoveEventReportsFromCluster            = removeEventReportsFromCluster
@@ -55,14 +60,16 @@ var (
 	InstantiateOneClusterProfilePerResource    = instantiateOneClusterProfilePerResource
 	RemoveClusterProfiles                      = removeClusterProfiles
 
+	InstantiateFromGeneratorsPerResource = instantiateFromGeneratorsPerResource
+
 	GetInstantiatedObjectLabels = getInstantiatedObjectLabels
 	GetClusterProfileName       = getClusterProfileName
 
-	InstantiateReferencedPolicies = instantiateReferencedPolicies
-	InstantiateDataSection        = instantiateDataSection
-	RemoveConfigMaps              = removeConfigMaps
-	RemoveSecrets                 = removeSecrets
-	UnstructuredToTyped           = unstructuredToTyped
+	InstantiateReferencedPolicyRefs = instantiateReferencedPolicyRefs
+	InstantiateDataSection          = instantiateDataSection
+	RemoveConfigMaps                = removeConfigMaps
+	RemoveSecrets                   = removeSecrets
+	UnstructuredToTyped             = unstructuredToTyped
 
 	BuildEventTriggersForEventSourceMap = buildEventTriggersForEventSourceMap
 	BuildEventTriggersForClusterMap     = buildEventTriggersForClusterMap
@@ -85,3 +92,11 @@ var (
 	FetchEventSource         = fetchEventSource
 	FetchReferencedResources = fetchReferencedResources
 )
+
+func SetSchema(s *runtime.Scheme) {
+	mgmtClusterSchema = s
+}
+
+func SetConfig(config *rest.Config) {
+	mgmtClusterConfig = config
+}

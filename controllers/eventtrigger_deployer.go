@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -278,7 +279,7 @@ func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Clie
 
 	logger.V(logs.LogDebug).Info("Clearing instantiated ClusterProfile/ConfigMap/Secret instances")
 	return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType, resource,
-		nil, nil, logger)
+		nil, nil, nil, logger)
 }
 
 // eventTriggerHash returns the EventTrigger hash
@@ -856,25 +857,40 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 	// If no resource is currently matching, clear all
 	if !er.DeletionTimestamp.IsZero() || len(er.Spec.MatchingResources) == 0 {
 		return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType,
-			eventTrigger, er, nil, logger)
+			eventTrigger, er, nil, nil, logger)
 	}
 
 	var err error
 	var clusterProfiles []*configv1beta1.ClusterProfile
+	var fromGenerators []libsveltosv1beta1.PolicyRef
+
 	if eventTrigger.Spec.OneForEvent {
 		clusterProfiles, err = instantiateOneClusterProfilePerResource(ctx, c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, er, logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create one clusterProfile instance per matching resource: %v",
-				err))
+			logger.V(logs.LogInfo).Info(
+				fmt.Sprintf("failed to create one clusterProfile instance per matching resource: %v", err))
+			return err
+		}
+		// Instantiate ConfigMap/Secrets from ConfigMapGenerator/SecretGenerator
+		fromGenerators, err = instantiateFromGeneratorsPerResource(ctx, c, eventTrigger, er, clusterNamespace,
+			clusterName, clusterType, logger)
+		if err != nil {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate from generators: %v", err))
 			return err
 		}
 	} else {
 		clusterProfiles, err = instantiateOneClusterProfilePerAllResource(ctx, c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, er, logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create one clusterProfile instance per matching resource: %v",
-				err))
+			logger.V(logs.LogInfo).Info(
+				fmt.Sprintf("failed to create one clusterProfile instance per matching resource: %v", err))
+			return err
+		}
+		fromGenerators, err = instantiateFromGeneratorsPerAllResource(ctx, c, eventTrigger, er, clusterNamespace,
+			clusterName, clusterType, logger)
+		if err != nil {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate from generators: %v", err))
 			return err
 		}
 	}
@@ -882,7 +898,7 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 	// Remove stale ClusterProfiles/ConfigMaps/Secrets, i.e, resources previously created by this EventTrigger
 	// instance for this cluster but currently not needed anymore
 	return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger, er,
-		clusterProfiles, logger)
+		clusterProfiles, fromGenerators, logger)
 }
 
 // instantiateOneClusterProfilePerResource instantiate a ClusterProfile for each resource currently matching the referenced
@@ -896,35 +912,17 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 	eventReport *libsveltosv1beta1.EventReport, logger logr.Logger) ([]*configv1beta1.ClusterProfile, error) {
 
 	clusterProfiles := make([]*configv1beta1.ClusterProfile, 0)
-	resources, err := getResources(eventReport, logger)
+	objects, err := prepareCurrentObjectList(ctx, c, clusterNamespace, clusterName, clusterType, eventReport, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching resources %v", err))
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to prepare currentObject list %v", err))
 		return nil, err
 	}
 
-	if len(resources) == 0 {
-		for i := range eventReport.Spec.MatchingResources {
-			var clusterProfile *configv1beta1.ClusterProfile
-			clusterProfile, err = instantiateClusterProfileForResource(ctx, c, clusterNamespace, clusterName,
-				clusterType, eventTrigger, eventReport, &eventReport.Spec.MatchingResources[i], nil, logger)
-			if err != nil {
-				return nil, err
-			}
-			clusterProfiles = append(clusterProfiles, clusterProfile)
-		}
-		return clusterProfiles, nil
-	}
-
-	for i := range resources {
-		r := &resources[i]
+	for i := range objects {
 		var clusterProfile *configv1beta1.ClusterProfile
-		matchingResource := corev1.ObjectReference{
-			APIVersion: r.GetAPIVersion(), Kind: r.GetKind(),
-			Namespace: r.GetNamespace(), Name: r.GetName(),
-		}
 
 		clusterProfile, err = instantiateClusterProfileForResource(ctx, c, clusterNamespace, clusterName,
-			clusterType, eventTrigger, eventReport, &matchingResource, r, logger)
+			clusterType, eventTrigger, eventReport, &objects[i], logger)
 		if err != nil {
 			return nil, err
 		}
@@ -943,88 +941,80 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 // - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EventTrigger
 func instantiateClusterProfileForResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, er *libsveltosv1beta1.EventReport,
-	matchingResource *corev1.ObjectReference, resource *unstructured.Unstructured, logger logr.Logger,
+	object *currentObject, logger logr.Logger,
 ) (*configv1beta1.ClusterProfile, error) {
-
-	object, err := prepareCurrentObject(ctx, c, clusterNamespace, clusterName, clusterType, resource,
-		matchingResource, logger)
-	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to prepare currentObject %v", err))
-		return nil, err
-	}
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
 		er, clusterType)
+	labels = appendInstantiatedObjectLabelsForResource(labels,
+		object.MatchingResource.Namespace, object.MatchingResource.Name)
+	labels = appendServiceAccountLabels(eventTrigger, labels)
 
-	tmpLabels := getInstantiatedObjectLabelsForResource(matchingResource.Namespace, matchingResource.Name)
-	for k, v := range tmpLabels {
-		labels[k] = v
-	}
-
-	clusterProfileName, createClusterProfile, err := getClusterProfileName(ctx, c, labels)
+	clusterProfileName, err := getClusterProfileName(ctx, c, labels)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile name: %v", err))
 		return nil, err
 	}
 
-	// If EventTrigger was created by tenant admin, copy label over to created ClusterProfile
-	if eventTrigger.Labels != nil {
-		if serviceAccountName, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNameLabel]; ok {
-			labels[libsveltosv1beta1.ServiceAccountNameLabel] = serviceAccountName
-		}
-		if serviceAccountNamespace, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNamespaceLabel]; ok {
-			labels[libsveltosv1beta1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
-		}
-	}
-
 	clusterProfile := getNonInstantiatedClusterProfile(eventTrigger, clusterProfileName, labels)
 
-	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
-	templateResourceRefs, err := instantiateTemplateResourceRefs(templateName, object.Cluster, object,
-		eventTrigger.Spec.TemplateResourceRefs)
+	clusterProfileSpec, err := instantiateClusterProfileSpecForResource(ctx, c, clusterNamespace, clusterName,
+		clusterType, eventTrigger, labels, object, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate TemplateResourceRefs: %v", err))
 		return nil, err
 	}
-	clusterProfile.Spec.TemplateResourceRefs = templateResourceRefs
+	clusterProfile.Spec = *clusterProfileSpec
 
-	if reflect.DeepEqual(eventTrigger.Spec.DestinationClusterSelector, libsveltosv1beta1.Selector{}) {
-		clusterProfile.Spec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
-		clusterProfile.Spec.ClusterSelector = libsveltosv1beta1.Selector{}
-	} else {
-		clusterProfile.Spec.ClusterRefs = nil
-		clusterProfile.Spec.ClusterSelector = eventTrigger.Spec.DestinationClusterSelector
+	addTypeInformationToObject(mgmtClusterSchema, clusterProfile)
+
+	dr, err := libsveltosutils.GetDynamicResourceInterface(mgmtClusterConfig,
+		clusterProfile.GetObjectKind().GroupVersionKind(), clusterProfile.GetNamespace())
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get dynamic client: %v", err))
+		return nil, err
 	}
+
+	return clusterProfile, updateResource(ctx, dr, clusterProfile, logger)
+}
+
+// instantiateClusterProfileSpecForResource creates one ClusterProfile.Spec per event
+func instantiateClusterProfileSpecForResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, labels map[string]string,
+	object *currentObject, logger logr.Logger) (*configv1beta1.Spec, error) {
+
+	clusterProfileSpec := configv1beta1.Spec{}
+
+	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
+	err := setTemplateResourceRefs(&clusterProfileSpec, templateName, object.Cluster, object, eventTrigger, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	setClusterSelector(&clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger)
 
 	instantiateHelmChartsWithResource, err := instantiateHelmChartsWithResource(ctx, c, clusterNamespace, templateName,
 		eventTrigger.Spec.HelmCharts, object, labels, logger)
 	if err != nil {
 		return nil, err
 	}
-	clusterProfile.Spec.HelmCharts = instantiateHelmChartsWithResource
+	clusterProfileSpec.HelmCharts = instantiateHelmChartsWithResource
 
 	instantiateKustomizeRefsWithResource, err := instantiateKustomizationRefsWithResource(ctx, c, clusterNamespace,
 		templateName, eventTrigger.Spec.KustomizationRefs, object, labels, logger)
 	if err != nil {
 		return nil, err
 	}
-	clusterProfile.Spec.KustomizationRefs = instantiateKustomizeRefsWithResource
+	clusterProfileSpec.KustomizationRefs = instantiateKustomizeRefsWithResource
 
-	clusterProfile.Spec.DriftExclusions = eventTrigger.Spec.DriftExclusions
+	clusterProfileSpec.DriftExclusions = eventTrigger.Spec.DriftExclusions
 
-	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
-	localPolicyRef, remotePolicyRef, err := instantiateReferencedPolicies(ctx, c, templateName,
-		eventTrigger, clusterRef, object, labels, logger)
+	err = setPolicyRefs(ctx, c, &clusterProfileSpec, templateName, clusterNamespace, clusterName, clusterType,
+		object, eventTrigger, labels, logger)
 	if err != nil {
 		return nil, err
 	}
-	clusterProfile.Spec.PolicyRefs = getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef)
 
-	if createClusterProfile {
-		return clusterProfile, c.Create(ctx, clusterProfile)
-	}
-
-	return clusterProfile, updateClusterProfileSpec(ctx, c, clusterProfile, logger)
+	return &clusterProfileSpec, nil
 }
 
 // instantiateOneClusterProfilePerAllResource creates one ClusterProfile by:
@@ -1038,14 +1028,8 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
 	eventReport *libsveltosv1beta1.EventReport, logger logr.Logger) ([]*configv1beta1.ClusterProfile, error) {
 
-	resources, err := getResources(eventReport, logger)
-	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching resources %v", err))
-		return nil, err
-	}
-
 	objects, err := prepareCurrentObjects(ctx, c, clusterNamespace, clusterName, clusterType,
-		eventReport, resources, logger)
+		eventReport, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to prepare currentObjects %v", err))
 		return nil, err
@@ -1053,71 +1037,110 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
 		eventReport, clusterType)
+	labels = appendServiceAccountLabels(eventTrigger, labels)
 
-	clusterProfileName, createClusterProfile, err := getClusterProfileName(ctx, c, labels)
+	clusterProfileName, err := getClusterProfileName(ctx, c, labels)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile name: %v", err))
 		return nil, err
 	}
 
-	// If EventTrigger was created by tenant admin, copy label over to created ClusterProfile
-	if eventTrigger.Labels != nil {
-		if serviceAccountName, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNameLabel]; ok {
-			labels[libsveltosv1beta1.ServiceAccountNameLabel] = serviceAccountName
-		}
-		if serviceAccountNamespace, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNamespaceLabel]; ok {
-			labels[libsveltosv1beta1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
-		}
-	}
-
 	clusterProfile := getNonInstantiatedClusterProfile(eventTrigger, clusterProfileName, labels)
 
-	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
-	templateResourceRefs, err := instantiateTemplateResourceRefs(templateName, objects.Cluster, objects,
-		eventTrigger.Spec.TemplateResourceRefs)
+	clusterProfileSpec, err := instantiateClusterProfileSpecPerAllResource(ctx, c, clusterNamespace, clusterName, clusterType,
+		eventTrigger, labels, objects, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate TemplateResourceRefs: %v", err))
 		return nil, err
 	}
-	clusterProfile.Spec.TemplateResourceRefs = templateResourceRefs
+	clusterProfile.Spec = *clusterProfileSpec
 
-	if reflect.DeepEqual(eventTrigger.Spec.DestinationClusterSelector, libsveltosv1beta1.Selector{}) {
-		clusterProfile.Spec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
-		clusterProfile.Spec.ClusterSelector = libsveltosv1beta1.Selector{}
-	} else {
-		clusterProfile.Spec.ClusterRefs = nil
-		clusterProfile.Spec.ClusterSelector = eventTrigger.Spec.DestinationClusterSelector
+	addTypeInformationToObject(mgmtClusterSchema, clusterProfile)
+
+	dr, err := libsveltosutils.GetDynamicResourceInterface(mgmtClusterConfig, clusterProfile.GetObjectKind().GroupVersionKind(), clusterProfile.GetNamespace())
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get dynamic client: %v", err))
+		return nil, err
 	}
+
+	return []*configv1beta1.ClusterProfile{clusterProfile}, updateResource(ctx, dr, clusterProfile, logger)
+}
+
+func instantiateClusterProfileSpecPerAllResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, labels map[string]string,
+	objects *currentObjects, logger logr.Logger) (*configv1beta1.Spec, error) {
+
+	clusterProfileSpec := configv1beta1.Spec{}
+
+	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
+	err := setTemplateResourceRefs(&clusterProfileSpec, templateName, objects.Cluster, objects, eventTrigger, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	setClusterSelector(&clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger)
 
 	instantiateHelmChartsWithResources, err := instantiateHelmChartsWithAllResources(ctx, c, clusterNamespace, templateName,
 		eventTrigger.Spec.HelmCharts, objects, labels, logger)
 	if err != nil {
 		return nil, err
 	}
-	clusterProfile.Spec.HelmCharts = instantiateHelmChartsWithResources
+	clusterProfileSpec.HelmCharts = instantiateHelmChartsWithResources
 
 	instantiateKustomizeRefsWithResource, err := instantiateKustomizationRefsWithAllResources(ctx, c, clusterNamespace,
 		templateName, eventTrigger.Spec.KustomizationRefs, objects, labels, logger)
 	if err != nil {
 		return nil, err
 	}
-	clusterProfile.Spec.KustomizationRefs = instantiateKustomizeRefsWithResource
+	clusterProfileSpec.KustomizationRefs = instantiateKustomizeRefsWithResource
 
-	clusterProfile.Spec.DriftExclusions = eventTrigger.Spec.DriftExclusions
+	clusterProfileSpec.DriftExclusions = eventTrigger.Spec.DriftExclusions
 
-	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
-	localPolicyRef, remotePolicyRef, err := instantiateReferencedPolicies(ctx, c, templateName,
-		eventTrigger, clusterRef, objects, labels, logger)
+	err = setPolicyRefs(ctx, c, &clusterProfileSpec, templateName, clusterNamespace, clusterName, clusterType,
+		objects, eventTrigger, labels, logger)
 	if err != nil {
 		return nil, err
 	}
-	clusterProfile.Spec.PolicyRefs = getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef)
 
-	if createClusterProfile {
-		return []*configv1beta1.ClusterProfile{clusterProfile}, c.Create(ctx, clusterProfile)
+	return &clusterProfileSpec, nil
+}
+
+func setTemplateResourceRefs(clusterProfileSpec *configv1beta1.Spec, templateName string, clusterContent map[string]interface{},
+	data any, eventTrigger *v1beta1.EventTrigger, logger logr.Logger) error {
+
+	templateResourceRefs, err := instantiateTemplateResourceRefs(templateName, clusterContent, data,
+		eventTrigger.Spec.TemplateResourceRefs)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate TemplateResourceRefs: %v", err))
+		return err
 	}
+	clusterProfileSpec.TemplateResourceRefs = templateResourceRefs
+	return nil
+}
 
-	return []*configv1beta1.ClusterProfile{clusterProfile}, updateClusterProfileSpec(ctx, c, clusterProfile, logger)
+func setPolicyRefs(ctx context.Context, c client.Client, clusterProfileSpec *configv1beta1.Spec,
+	templateName, clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
+	data any, eventTrigger *v1beta1.EventTrigger, labels map[string]string, logger logr.Logger) error {
+
+	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
+	localPolicyRef, remotePolicyRef, err := instantiateReferencedPolicyRefs(ctx, c, templateName,
+		eventTrigger, clusterRef, data, labels, logger)
+	if err != nil {
+		return err
+	}
+	clusterProfileSpec.PolicyRefs = getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef)
+	return nil
+}
+
+func setClusterSelector(clusterProfileSpec *configv1beta1.Spec, clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
+	eventTrigger *v1beta1.EventTrigger) {
+
+	if reflect.DeepEqual(eventTrigger.Spec.DestinationClusterSelector, libsveltosv1beta1.Selector{}) {
+		clusterProfileSpec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
+		clusterProfileSpec.ClusterSelector = libsveltosv1beta1.Selector{}
+	} else {
+		clusterProfileSpec.ClusterRefs = nil
+		clusterProfileSpec.ClusterSelector = eventTrigger.Spec.DestinationClusterSelector
+	}
 }
 
 func getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef *libsveltosset.Set) []configv1beta1.PolicyRef {
@@ -1157,22 +1180,6 @@ func getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef *libsveltosset.
 	}
 
 	return result
-}
-
-func updateClusterProfileSpec(ctx context.Context, c client.Client, clusterProfile *configv1beta1.ClusterProfile,
-	logger logr.Logger) error {
-
-	currentClusterProfile := &configv1beta1.ClusterProfile{}
-
-	err := c.Get(ctx, types.NamespacedName{Name: clusterProfile.Name}, currentClusterProfile)
-	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile: %v", err))
-		return err
-	}
-
-	currentClusterProfile.Spec = clusterProfile.Spec
-
-	return c.Update(ctx, currentClusterProfile)
 }
 
 // getResources returns a slice of unstructured.Unstructured by processing eventReport.Spec.Resources field
@@ -1312,20 +1319,28 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, valuesFrom []co
 		}
 
 		var info *types.NamespacedName
-		if _, ok := resource.GetAnnotations()[libsveltosv1beta1.PolicyTemplateAnnotation]; !ok {
+		if _, ok := resource.GetAnnotations()[InstantiateAnnotation]; !ok {
 			// referenced ConfigMap/Secret is not a template. So there is no
 			// need to instantiate a new one. Generated ClusterProfile can directly
 			// reference this one
 			info = &types.NamespacedName{Namespace: resource.GetNamespace(), Name: resource.GetName()}
 		} else {
-			info, err = instantiateReferencedPolicy(ctx, c, resource, templateName, data, labels, logger)
-		}
-
-		if err != nil {
-			msg := fmt.Sprintf("failed to instantiate content for ValuesFrom: %s/%s",
-				resource.GetNamespace(), resource.GetName())
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("%s. Error: %v", msg, err))
-			return errors.Wrapf(err, msg)
+			name, err := getResourceName(ctx, c, resource, labels)
+			if err != nil {
+				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get %s name: %v", resource.GetObjectKind(), err))
+				return err
+			}
+			// If referenced resource is a template, assume it needs to be instantiated using
+			// information from the resources in the managed cluster that generated the event.
+			// Generate then a new ConfigMap/Secret. The autocreated ClusterProfile will reference
+			// this new resource.
+			info, err = instantiateReferencedPolicy(ctx, resource, templateName, name, data, labels, logger)
+			if err != nil {
+				msg := fmt.Sprintf("failed to instantiate content for ValuesFrom: %s/%s",
+					resource.GetNamespace(), resource.GetName())
+				logger.V(logs.LogInfo).Info(fmt.Sprintf("%s. Error: %v", msg, err))
+				return errors.Wrapf(err, msg)
+			}
 		}
 
 		ref.Name = info.Name
@@ -1401,42 +1416,42 @@ func instantiateTemplateResourceRefs(templateName string, clusterContent map[str
 // instantiateHelmChartsWithResource instantiate eventTrigger.Spec.HelmCharts using information from passed in object
 // which represents one of the resource matching referenced EventSource in the managed cluster.
 func instantiateHelmChartsWithResource(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	helmCharts []configv1beta1.HelmChart, object *currentObject, labels map[string]string, logger logr.Logger,
+	helmCharts []configv1beta1.HelmChart, data any, labels map[string]string, logger logr.Logger,
 ) ([]configv1beta1.HelmChart, error) {
 
-	return instantiateHelmCharts(ctx, c, clusterNamespace, templateName, helmCharts, object, labels, logger)
+	return instantiateHelmCharts(ctx, c, clusterNamespace, templateName, helmCharts, data, labels, logger)
 }
 
 // instantiateHelmChartsWithAllResources instantiate eventTrigger.Spec.HelmCharts using information from passed in objects
 // which represent all of the resources matching referenced EventSource in the managed cluster.
 func instantiateHelmChartsWithAllResources(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	helmCharts []configv1beta1.HelmChart, objects *currentObjects, labels map[string]string, logger logr.Logger,
+	helmCharts []configv1beta1.HelmChart, data any, labels map[string]string, logger logr.Logger,
 ) ([]configv1beta1.HelmChart, error) {
 
-	return instantiateHelmCharts(ctx, c, clusterNamespace, templateName, helmCharts, objects, labels, logger)
+	return instantiateHelmCharts(ctx, c, clusterNamespace, templateName, helmCharts, data, labels, logger)
 }
 
 // instantiateKustomizationRefsWithResource instantiate eventTrigger.Spec.KustomizationRefs using information from passed
 // in object which represents one of the resource matching referenced EventSource in the managed cluster.
 func instantiateKustomizationRefsWithResource(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	kustomizationRefs []configv1beta1.KustomizationRef, object *currentObject, labels map[string]string, logger logr.Logger,
+	kustomizationRefs []configv1beta1.KustomizationRef, data any, labels map[string]string, logger logr.Logger,
 ) ([]configv1beta1.KustomizationRef, error) {
 
-	return instantiateKustomizationRefs(ctx, c, clusterNamespace, templateName, kustomizationRefs, object, labels, logger)
+	return instantiateKustomizationRefs(ctx, c, clusterNamespace, templateName, kustomizationRefs, data, labels, logger)
 }
 
 // instantiateKustomizationRefsWithAllResources instantiate eventTrigger.Spec.KustomizationRefs using information from passed
 // in objects which represent all of the resources matching referenced EventSource in the managed cluster.
 func instantiateKustomizationRefsWithAllResources(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	kustomizationRefs []configv1beta1.KustomizationRef, objects *currentObjects, labels map[string]string, logger logr.Logger,
+	kustomizationRefs []configv1beta1.KustomizationRef, data any, labels map[string]string, logger logr.Logger,
 ) ([]configv1beta1.KustomizationRef, error) {
 
-	return instantiateKustomizationRefs(ctx, c, clusterNamespace, templateName, kustomizationRefs, objects, labels, logger)
+	return instantiateKustomizationRefs(ctx, c, clusterNamespace, templateName, kustomizationRefs, data, labels, logger)
 }
 
 // instantiateReferencedPolicies instantiate eventTrigger.Spec.PolicyRefs using information from passed in objects
 // which represent all of the resources matching referenced EventSource in the managed cluster.
-func instantiateReferencedPolicies(ctx context.Context, c client.Client, templateName string,
+func instantiateReferencedPolicyRefs(ctx context.Context, c client.Client, templateName string,
 	eventTrigger *v1beta1.EventTrigger, cluster *corev1.ObjectReference, objects any,
 	labels map[string]string, logger logr.Logger) (localSet, remoteSet *libsveltosset.Set, err error) {
 
@@ -1465,8 +1480,6 @@ func instantiateResources(ctx context.Context, c client.Client, templateName str
 
 	result := libsveltosset.Set{}
 
-	// For each referenced resource, instantiate it using objects collected from managed cluster
-	// and create/update corresponding ConfigMap/Secret in managemenent cluster
 	for i := range resources {
 		ref := resources[i]
 		apiVersion, kind := ref.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
@@ -1475,18 +1488,26 @@ func instantiateResources(ctx context.Context, c client.Client, templateName str
 			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
 		l.V(logs.LogDebug).Info("process referenced resource")
 		var info *types.NamespacedName
-		var err error
-		if _, ok := ref.GetAnnotations()[libsveltosv1beta1.PolicyTemplateAnnotation]; !ok {
+
+		if _, ok := ref.GetAnnotations()[InstantiateAnnotation]; !ok {
 			// referenced ConfigMap/Secret is not a template. So there is no
 			// need to instantiate a new one. Generated ClusterProfile can directly
 			// reference this one
 			info = &types.NamespacedName{Namespace: ref.GetNamespace(), Name: ref.GetName()}
 		} else {
-			info, err = instantiateReferencedPolicy(ctx, c, ref, templateName, objects, labels, logger)
-		}
-
-		if err != nil {
-			return nil, err
+			name, err := getResourceName(ctx, c, ref, labels)
+			if err != nil {
+				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get %s name: %v", ref.GetObjectKind(), err))
+				return nil, err
+			}
+			// If referenced resource is a template, assume it needs to be instantiated using
+			// information from the resources in the managed cluster that generated the event.
+			// Generate then a new ConfigMap/Secret. The autocreated ClusterProfile will reference
+			// this new resource.
+			info, err = instantiateReferencedPolicy(ctx, ref, templateName, name, objects, labels, logger)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		result.Insert(&corev1.ObjectReference{APIVersion: apiVersion, Kind: kind,
@@ -1496,18 +1517,14 @@ func instantiateResources(ctx context.Context, c client.Client, templateName str
 	return &result, nil
 }
 
-func instantiateReferencedPolicy(ctx context.Context, c client.Client, ref client.Object,
-	templateName string, objects any, labels map[string]string, logger logr.Logger,
+func instantiateReferencedPolicy(ctx context.Context, ref client.Object,
+	templateName, name string, objects any, labels map[string]string, logger logr.Logger,
 ) (*types.NamespacedName, error) {
 
 	l := logger.WithValues("referencedResource",
 		fmt.Sprintf("%s:%s/%s", ref.GetObjectKind(), ref.GetNamespace(), ref.GetName()))
 
 	content := getDataSection(ref)
-	// If referenced resource is a template, assume it needs to be instantiated using
-	// information from the resources in the managed cluster that generated the event.
-	// Generate then a new ConfigMap/Secret. The autocreated ClusterProfile will reference
-	// this new resource.
 
 	instantiatedContent, err := instantiateDataSection(templateName, content, objects, l)
 	if err != nil {
@@ -1522,53 +1539,36 @@ func instantiateReferencedPolicy(ctx context.Context, c client.Client, ref clien
 	labels[referencedResourceNamespaceLabel] = ref.GetNamespace()
 	labels[referencedResourceNameLabel] = ref.GetName()
 
-	name, create, err := getResourceName(ctx, c, ref, labels)
+	var instantiatedObject client.Object
+	if ref.GetObjectKind().GroupVersionKind().Kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
+		instantiatedObject = generateConfigMap(ref, name, labels, content)
+	} else {
+		instantiatedObject = generateSecret(ref, name, labels, content)
+	}
+	addTypeInformationToObject(mgmtClusterSchema, instantiatedObject)
+
+	dr, err := libsveltosutils.GetDynamicResourceInterface(mgmtClusterConfig,
+		instantiatedObject.GetObjectKind().GroupVersionKind(), instantiatedObject.GetNamespace())
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get %s name: %v", ref.GetObjectKind(), err))
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get dynamic client: %v", err))
 		return nil, err
 	}
 
-	if create {
-		logger.V(logs.LogDebug).Info(fmt.Sprintf("create resource for %s %s:%s",
-			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
-		err = createResource(ctx, c, ref, name, labels, content)
-		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create resource: %v", err))
-			return nil, err
-		}
-	} else {
-		logger.V(logs.LogDebug).Info(fmt.Sprintf("update resource for %s %s:%s",
-			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
-		err = updateResource(ctx, c, ref, name, labels, content)
-		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update resource: %v", err))
-			return nil, err
-		}
+	logger.V(logs.LogDebug).Info(fmt.Sprintf("patch resource %s %s:%s",
+		ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
+
+	err = updateResource(ctx, dr, instantiatedObject, logger)
+	if err != nil {
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("failed to patch resource %s %s:%s: %v",
+			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName(), err))
+		return nil, err
 	}
 
 	return &types.NamespacedName{Namespace: ReportNamespace, Name: name}, nil
 }
 
-// createResource creates either a ConfigMap or a Secret based on ref type.
-// Resource is created in the ReportNamespace.
-// On the newly created resource, labels and Data are set
-func createResource(ctx context.Context, c client.Client, ref client.Object, name string,
-	labels, content map[string]string) error {
-
-	switch ref.(type) {
-	case *corev1.ConfigMap:
-		return createConfigMap(ctx, c, ref, name, labels, content)
-	case *corev1.Secret:
-		return createSecret(ctx, c, ref, name, labels, content)
-	default:
-		panic(1) // only referenced resources are ConfigMap/Secret
-	}
-}
-
-func createConfigMap(ctx context.Context, c client.Client, ref client.Object, name string,
-	labels, content map[string]string) error {
-
-	cm := &corev1.ConfigMap{
+func generateConfigMap(ref client.Object, name string, labels, content map[string]string) client.Object {
+	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
 			Namespace:   ReportNamespace,
@@ -1577,19 +1577,15 @@ func createConfigMap(ctx context.Context, c client.Client, ref client.Object, na
 		},
 		Data: content,
 	}
-
-	return c.Create(ctx, cm)
 }
 
-func createSecret(ctx context.Context, c client.Client, ref client.Object, name string,
-	labels, content map[string]string) error {
-
+func generateSecret(ref client.Object, name string, labels, content map[string]string) client.Object {
 	data := make(map[string][]byte)
 	for key, value := range content {
 		data[key] = []byte(value)
 	}
 
-	secret := &corev1.Secret{
+	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
 			Namespace:   ReportNamespace,
@@ -1599,60 +1595,6 @@ func createSecret(ctx context.Context, c client.Client, ref client.Object, name 
 		Data: data,
 		Type: libsveltosv1beta1.ClusterProfileSecretType,
 	}
-
-	return c.Create(ctx, secret)
-}
-
-// updateResource updates either a ConfigMap or a Secret based on ref type.
-// Resource is in the ReportNamespace.
-// Resource's labels and Data are set
-func updateResource(ctx context.Context, c client.Client, ref client.Object, name string,
-	labels, content map[string]string) error {
-
-	switch ref.(type) {
-	case *corev1.ConfigMap:
-		return updateConfigMap(ctx, c, name, labels, content)
-	case *corev1.Secret:
-		return updateSecret(ctx, c, name, labels, content)
-	default:
-		panic(1) // only referenced resources are ConfigMap/Secret
-	}
-}
-
-func updateConfigMap(ctx context.Context, c client.Client, name string, labels, content map[string]string,
-) error {
-
-	cm := &corev1.ConfigMap{}
-	err := c.Get(ctx, types.NamespacedName{Namespace: ReportNamespace, Name: name}, cm)
-	if err != nil {
-		return err
-	}
-
-	cm.Labels = labels
-	cm.Data = content
-
-	return c.Update(ctx, cm)
-}
-
-func updateSecret(ctx context.Context, c client.Client, name string, labels, content map[string]string,
-) error {
-
-	data := make(map[string][]byte)
-	for key, value := range content {
-		data[key] = []byte(value)
-	}
-
-	secret := &corev1.Secret{}
-	err := c.Get(ctx, types.NamespacedName{Namespace: ReportNamespace, Name: name}, secret)
-	if err != nil {
-		return err
-	}
-
-	secret.Labels = labels
-	secret.Data = data
-	secret.Type = libsveltosv1beta1.ClusterProfileSecretType
-
-	return c.Update(ctx, secret)
 }
 
 func getDataSection(ref client.Object) map[string]string {
@@ -1697,7 +1639,7 @@ func getClusterRef(clusterNamespace, clusterName string,
 // should have. It also returns whether the ClusterProfile must be created (if create a false, ClusterProfile
 // should be simply updated). And an error if any occurs.
 func getClusterProfileName(ctx context.Context, c client.Client, labels map[string]string,
-) (name string, create bool, err error) {
+) (name string, err error) {
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
@@ -1718,13 +1660,13 @@ func getClusterProfileName(ctx context.Context, c client.Client, labels map[stri
 }
 
 func getResourceName(ctx context.Context, c client.Client, ref client.Object,
-	labels map[string]string) (name string, create bool, err error) {
+	labels map[string]string) (name string, err error) {
 
 	switch ref.(type) {
 	case *corev1.ConfigMap:
-		name, create, err = getConfigMapName(ctx, c, labels)
+		name, err = getConfigMapName(ctx, c, labels)
 	case *corev1.Secret:
-		name, create, err = getSecretName(ctx, c, labels)
+		name, err = getSecretName(ctx, c, labels)
 	default:
 		panic(1)
 	}
@@ -1732,10 +1674,9 @@ func getResourceName(ctx context.Context, c client.Client, ref client.Object,
 }
 
 // getConfigMapName returns the name for a given ConfigMap given the labels such ConfigMap
-// should have. It also returns whether the ConfigMap must be created (if create a false, ConfigMap
-// should be simply updated). And an error if any occurs.
+// should have. And an error if any occurs.
 func getConfigMapName(ctx context.Context, c client.Client, labels map[string]string,
-) (name string, create bool, err error) {
+) (name string, err error) {
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
@@ -1757,10 +1698,9 @@ func getConfigMapName(ctx context.Context, c client.Client, labels map[string]st
 }
 
 // getSecretName returns the name for a given Secret given the labels such Secret
-// should have. It also returns whether the Secret must be created (if create a false, Secret
-// should be simply updated). And an error if any occurs.
+// should have. And an error if any occurs.
 func getSecretName(ctx context.Context, c client.Client, labels map[string]string,
-) (name string, create bool, err error) {
+) (name string, err error) {
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
@@ -1781,7 +1721,7 @@ func getSecretName(ctx context.Context, c client.Client, labels map[string]strin
 	return getInstantiatedObjectName(objects)
 }
 
-func getInstantiatedObjectName(objects []client.Object) (name string, create bool, err error) {
+func getInstantiatedObjectName(objects []client.Object) (name string, err error) {
 	prefix := "sveltos-"
 	switch len(objects) {
 	case 0:
@@ -1791,16 +1731,14 @@ func getInstantiatedObjectName(objects []client.Object) (name string, create boo
 		// be picked
 		const nameLength = 20
 		name = prefix + util.RandomString(nameLength)
-		create = true
 		err = nil
 	case 1:
 		name = objects[0].GetName()
-		create = false
 		err = nil
 	default:
 		err = fmt.Errorf("more than one resource")
 	}
-	return name, create, err
+	return name, err
 }
 
 // getInstantiatedObjectLabels returns the labels to add to a ClusterProfile created
@@ -1823,12 +1761,9 @@ func getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName
 	return labels
 }
 
-// getInstantiatedObjectLabelsForResource returns the label to add to a ClusterProfile created
-// for a specific resource
-func getInstantiatedObjectLabelsForResource(resourceNamespace, resourceName string) map[string]string {
-	labels := map[string]string{
-		"eventtrigger.lib.projectsveltos.io/resourcename": resourceName,
-	}
+// appendInstantiatedObjectLabelsForResource appends labels specific to a specific resource
+func appendInstantiatedObjectLabelsForResource(labels map[string]string, resourceNamespace, resourceName string) map[string]string {
+	labels["eventtrigger.lib.projectsveltos.io/resourcename"] = resourceName
 
 	if resourceNamespace != "" {
 		labels["eventtrigger.lib.projectsveltos.io/resourcenamespace"] = resourceNamespace
@@ -1839,7 +1774,8 @@ func getInstantiatedObjectLabelsForResource(resourceNamespace, resourceName stri
 
 func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, er *libsveltosv1beta1.EventReport,
-	clusterProfiles []*configv1beta1.ClusterProfile, logger logr.Logger) error {
+	clusterProfiles []*configv1beta1.ClusterProfile, fromGenerators []libsveltosv1beta1.PolicyRef,
+	logger logr.Logger) error {
 
 	if err := removeClusterProfiles(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger, er,
 		clusterProfiles, logger); err != nil {
@@ -1859,6 +1795,11 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 		}
 		policyRefs = appendHelmChartValuesFrom(policyRefs, cp.Spec.HelmCharts)
 		policyRefs = appendKustomizationRefValuesFrom(policyRefs, cp.Spec.KustomizationRefs)
+	}
+
+	// Add all ConfigMap/Secret instances created started from Generators (ConfigMapGenerator/SecretGenerator)
+	for i := range fromGenerators {
+		policyRefs[fromGenerators[i]] = true
 	}
 
 	if err := removeConfigMaps(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
@@ -2085,7 +2026,13 @@ func getNonInstantiatedClusterProfile(eventTrigger *v1beta1.EventTrigger,
 
 func prepareCurrentObjects(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
 	clusterType libsveltosv1beta1.ClusterType, eventReport *libsveltosv1beta1.EventReport,
-	resources []unstructured.Unstructured, logger logr.Logger) (*currentObjects, error) {
+	logger logr.Logger) (*currentObjects, error) {
+
+	resources, err := getResources(eventReport, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching resources %v", err))
+		return nil, err
+	}
 
 	values := make([]map[string]interface{}, len(resources))
 	for i := range resources {
@@ -2104,22 +2051,252 @@ func prepareCurrentObjects(ctx context.Context, c client.Client, clusterNamespac
 	}, nil
 }
 
-func prepareCurrentObject(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
-	clusterType libsveltosv1beta1.ClusterType, resource *unstructured.Unstructured,
-	matchingResource *corev1.ObjectReference, logger logr.Logger) (*currentObject, error) {
+func prepareCurrentObjectList(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
+	clusterType libsveltosv1beta1.ClusterType, eventReport *libsveltosv1beta1.EventReport, logger logr.Logger,
+) ([]currentObject, error) {
 
-	object := &currentObject{
-		MatchingResource: *matchingResource,
-	}
-	if resource != nil {
-		object.Resource = resource.UnstructuredContent()
-	}
 	cluster, err := fecthClusterObjects(ctx, c, clusterNamespace, clusterName, clusterType, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get cluster %v", err))
 		return nil, err
 	}
-	object.Cluster = cluster
 
-	return object, nil
+	resources, err := getResources(eventReport, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching resources %v", err))
+		return nil, err
+	}
+
+	objects := make([]currentObject, 0)
+	if len(resources) != 0 {
+		for i := range resources {
+			matchingResource := corev1.ObjectReference{
+				APIVersion: resources[i].GetAPIVersion(),
+				Kind:       resources[i].GetKind(),
+				Namespace:  resources[i].GetNamespace(),
+				Name:       resources[i].GetName(),
+			}
+			objects = append(objects, currentObject{
+				MatchingResource: matchingResource,
+				Resource:         resources[i].UnstructuredContent(),
+				Cluster:          cluster,
+			})
+		}
+	} else {
+		for i := range eventReport.Spec.MatchingResources {
+			objects = append(objects, currentObject{
+				MatchingResource: eventReport.Spec.MatchingResources[i],
+				Resource:         nil,
+				Cluster:          cluster,
+			})
+		}
+	}
+
+	return objects, nil
+}
+
+// updateResource creates or updates a resource in a Cluster.
+// No action in DryRun mode.
+func updateResource(ctx context.Context, dr dynamic.ResourceInterface, object client.Object,
+	logger logr.Logger) error {
+
+	l := logger.WithValues("resourceNamespace", object.GetNamespace(), "resourceName", object.GetName(),
+		"resourceGVK", object.GetObjectKind().GroupVersionKind())
+	l.V(logs.LogDebug).Info("updating resource")
+
+	forceConflict := true
+	options := metav1.PatchOptions{
+		FieldManager: "application/apply-patch",
+		Force:        &forceConflict,
+	}
+
+	data, err := runtime.Encode(unstructured.UnstructuredJSONScheme, object)
+	if err != nil {
+		return err
+	}
+
+	_, err = dr.Patch(ctx, object.GetName(), types.ApplyPatchType, data, options)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func appendServiceAccountLabels(eventTrigger *v1beta1.EventTrigger, labels map[string]string) map[string]string {
+	// If EventTrigger was created by tenant admin, copy label over to created ClusterProfile
+	if eventTrigger.Labels != nil {
+		if serviceAccountName, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNameLabel]; ok {
+			labels[libsveltosv1beta1.ServiceAccountNameLabel] = serviceAccountName
+		}
+		if serviceAccountNamespace, ok := eventTrigger.Labels[libsveltosv1beta1.ServiceAccountNamespaceLabel]; ok {
+			labels[libsveltosv1beta1.ServiceAccountNamespaceLabel] = serviceAccountNamespace
+		}
+	}
+
+	return labels
+}
+
+// instantiateFromGenerators instantiates ConfigMaps from ConfigMapGenerator and Secrets from SecretGenerator
+func instantiateFromGeneratorsPerResource(ctx context.Context, c client.Client, eventTrigger *v1beta1.EventTrigger,
+	er *libsveltosv1beta1.EventReport, clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
+	logger logr.Logger) ([]libsveltosv1beta1.PolicyRef, error) {
+
+	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
+
+	objects, err := prepareCurrentObjectList(ctx, c, clusterNamespace, clusterName, clusterType, er, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to prepare currentObject list %v", err))
+		return nil, err
+	}
+
+	var result []libsveltosv1beta1.PolicyRef
+	for i := range objects {
+		labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
+			er, clusterType)
+		labels = appendServiceAccountLabels(eventTrigger, labels)
+
+		secretInfo, err := instantiateSecrets(ctx, c, eventTrigger, objects[i], templateName, clusterNamespace,
+			labels, logger)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, secretInfo...)
+
+		configMapInfo, err := instantiateConfigMaps(ctx, c, eventTrigger, objects[i], templateName,
+			clusterNamespace, labels, logger)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, configMapInfo...)
+	}
+
+	return result, nil
+}
+
+// instantiateFromGeneratorsPerAllResource instantiates ConfigMaps from ConfigMapGenerator and Secrets from SecretGenerator
+func instantiateFromGeneratorsPerAllResource(ctx context.Context, c client.Client, eventTrigger *v1beta1.EventTrigger,
+	er *libsveltosv1beta1.EventReport, clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
+	logger logr.Logger) ([]libsveltosv1beta1.PolicyRef, error) {
+
+	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
+
+	objects, err := prepareCurrentObjects(ctx, c, clusterNamespace, clusterName, clusterType, er, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to prepare currentObjects %v", err))
+		return nil, err
+	}
+
+	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
+		er, clusterType)
+	labels = appendServiceAccountLabels(eventTrigger, labels)
+
+	result, err := instantiateSecrets(ctx, c, eventTrigger, objects, templateName, clusterNamespace,
+		labels, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	configMapInfo, err := instantiateConfigMaps(ctx, c, eventTrigger, objects, templateName,
+		clusterNamespace, labels, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	result = append(result, configMapInfo...)
+
+	return result, nil
+}
+
+// instantiateSecrets instantiates Secrets in the management cluster from eventTrigger.Spec.SecretGenerator
+func instantiateSecrets(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	data any, templateName, clusterNamespace string, labels map[string]string, logger logr.Logger,
+) ([]libsveltosv1beta1.PolicyRef, error) {
+
+	resources := make([]libsveltosv1beta1.PolicyRef, 0)
+
+	for i := range e.Spec.SecretGenerator {
+		generator := &e.Spec.SecretGenerator[i]
+		info, err := instantiateResourceFromGenerator(ctx, c, generator, templateName, clusterNamespace, string(libsveltosv1beta1.SecretReferencedResourceKind),
+			data, labels, logger)
+		if err != nil {
+			return nil, err
+		}
+		if info != nil {
+			resources = append(resources, libsveltosv1beta1.PolicyRef{
+				Namespace: info.Namespace,
+				Name:      info.Name,
+				Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
+			})
+		}
+	}
+
+	return resources, nil
+}
+
+// instantiateConfigMaps instantiates ConfigMaps in the management cluster from eventTrigger.Spec.ConfigMapGenerator
+func instantiateConfigMaps(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	data any, templateName, clusterNamespace string, labels map[string]string, logger logr.Logger,
+) ([]libsveltosv1beta1.PolicyRef, error) {
+
+	resources := make([]libsveltosv1beta1.PolicyRef, 0)
+
+	for i := range e.Spec.ConfigMapGenerator {
+		generator := &e.Spec.ConfigMapGenerator[i]
+		info, err := instantiateResourceFromGenerator(ctx, c, generator, templateName, clusterNamespace, string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+			data, labels, logger)
+		if err != nil {
+			return nil, err
+		}
+		if info != nil {
+			resources = append(resources, libsveltosv1beta1.PolicyRef{
+				Namespace: info.Namespace,
+				Name:      info.Name,
+				Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+			})
+		}
+	}
+
+	return resources, nil
+}
+
+// instantiateResourceFromGenerator creates a resource from generator and patch it to the management cluster
+func instantiateResourceFromGenerator(ctx context.Context, c client.Client, generator *v1beta1.GeneratorReference, templateName, clusterNamespace, kind string,
+	data any, labels map[string]string, logger logr.Logger) (*types.NamespacedName, error) {
+
+	namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, generator.Namespace)
+
+	// The name of the referenced resource can be expressed as a template
+	referencedName, err := instantiateSection(templateName, []byte(generator.Name), data, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	var referencedResource client.Object
+	if kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
+		referencedResource, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(referencedName)})
+	} else {
+		referencedResource, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(referencedName)})
+	}
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("%s %s/%s does not exist yet",
+				kind, namespace, referencedName))
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	instantiatedName, err := instantiateSection(templateName, []byte(generator.InstantiatedResourceNameFormat), data, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate %q: %v", generator.InstantiatedResourceNameFormat, err))
+		return nil, err
+	}
+
+	info, err := instantiateReferencedPolicy(ctx, referencedResource, templateName, string(instantiatedName), data, labels, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return info, nil
 }
