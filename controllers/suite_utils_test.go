@@ -245,7 +245,7 @@ func prepareCluster(version string) *clusterv1.Cluster {
 			Name:      "sveltos-agent-version",
 		},
 		Data: map[string]string{
-			"sveltos-agent-version": version,
+			"version": version,
 		},
 	}
 	Expect(testEnv.Client.Create(context.TODO(), cm)).To(Succeed())
