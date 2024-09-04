@@ -81,6 +81,7 @@ type EventTriggerReconciler struct {
 	Deployer             deployer.DeployerInterface
 	EventReportMode      ReportMode
 	ShardKey             string
+	Version              string
 	Logger               logr.Logger
 
 	// use a Mutex to update Map as MaxConcurrentReconciles is higher than one
@@ -341,7 +342,8 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 	*/
 
 	if r.EventReportMode == CollectFromManagementCluster {
-		go collectEventReports(mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(), r.ShardKey, mgr.GetLogger())
+		go collectEventReports(mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(), r.ShardKey,
+			r.Version, mgr.GetLogger())
 	}
 
 	return c, nil

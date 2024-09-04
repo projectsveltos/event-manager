@@ -36,6 +36,7 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
+	"github.com/projectsveltos/libsveltos/lib/sveltos_upgrade"
 	libsveltostemplate "github.com/projectsveltos/libsveltos/lib/template"
 )
 
@@ -175,7 +176,9 @@ func buildEventTriggersForClusterMap(eventTriggers *v1beta1.EventTriggerList,
 }
 
 // Periodically collects EventReports from each CAPI cluster.
-func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme, shardKey string, logger logr.Logger) {
+func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme,
+	shardKey, version string, logger logr.Logger) {
+
 	interval := 10 * time.Second
 	if shardKey != "" {
 		// Make sharded controllers more aggressive in fetching
@@ -220,7 +223,8 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 				continue
 			}
 
-			err = collectAndProcessEventReportsFromCluster(ctx, c, cluster, eventSourceMap, eventTriggerMap, logger)
+			err = collectAndProcessEventReportsFromCluster(ctx, c, cluster, eventSourceMap, eventTriggerMap,
+				version, logger)
 			if err != nil {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventReports from cluster: %s/%s %v",
 					cluster.Namespace, cluster.Name, err))
@@ -233,7 +237,7 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 
 func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
 	eventSourceMap map[string][]*v1beta1.EventTrigger, eventTriggerMap map[string]libsveltosset.Set,
-	logger logr.Logger) error {
+	version string, logger logr.Logger) error {
 
 	logger = logger.WithValues("cluster", fmt.Sprintf("%s/%s", cluster.Namespace, cluster.Name))
 	clusterRef := &corev1.ObjectReference{
@@ -257,6 +261,12 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 		"", "", clusterproxy.GetClusterType(clusterRef), logger)
 	if err != nil {
 		return err
+	}
+
+	if !sveltos_upgrade.IsVersionCompatible(ctx, remoteClient, version) {
+		msg := "compatibility checks failed"
+		logger.V(logs.LogDebug).Info(msg)
+		return errors.New(msg)
 	}
 
 	logger.V(logs.LogDebug).Info("collecting EventReports from cluster")
