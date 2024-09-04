@@ -263,7 +263,7 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 		return err
 	}
 
-	if !sveltos_upgrade.IsVersionCompatible(ctx, remoteClient, version) {
+	if !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctx, remoteClient, version) {
 		msg := "compatibility checks failed"
 		logger.V(logs.LogDebug).Info(msg)
 		return errors.New(msg)
