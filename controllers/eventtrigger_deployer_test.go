@@ -1257,9 +1257,23 @@ var _ = Describe("EventTrigger deployer", func() {
 		Expect(remoteSet).ToNot(BeNil())
 		Expect(remoteSet.Len()).To(Equal(1))
 
+		expectedLabels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventTrigger.Name,
+			eventReport, libsveltosv1beta1.ClusterTypeCapi)
+
 		listOptions := []client.ListOption{
 			client.InNamespace(controllers.ReportNamespace),
+			client.MatchingLabels(expectedLabels),
 		}
+
+		Eventually(func() bool {
+			configMaps := &corev1.ConfigMapList{}
+			err := testEnv.List(context.TODO(), configMaps, listOptions...)
+			if err != nil {
+				return false
+			}
+
+			return len(configMaps.Items) == 1
+		}, timeout, pollingInterval).Should(BeTrue())
 
 		configMaps := &corev1.ConfigMapList{}
 		Expect(testEnv.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
