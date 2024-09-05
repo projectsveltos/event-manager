@@ -291,7 +291,8 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 		return nil, err
 	}
 
-	config := render.AsCode(e.Spec)
+	config := getVersion()
+	config += render.AsCode(e.Spec)
 	config += render.AsCode(e.Labels)
 
 	for i := range resources {

@@ -128,6 +128,8 @@ func main() {
 		libsveltosv1beta1.ComponentEventManager, ctrl.Log.WithName("log-setter"),
 		ctrl.GetConfigOrDie())
 
+	controllers.SetVersion(version)
+
 	d := deployer.GetClient(ctx, ctrl.Log.WithName("deployer"), mgr.GetClient(), workers)
 	controllers.RegisterFeatures(d, setupLog)
 
@@ -311,7 +313,6 @@ func getEventTriggerReconciler(mgr manager.Manager) *controllers.EventTriggerRec
 		Scheme:               mgr.GetScheme(),
 		ConcurrentReconciles: concurrentReconciles,
 		ShardKey:             shardKey,
-		Version:              version,
 		Mux:                  sync.Mutex{},
 		Logger:               ctrl.Log.WithName("eventTriggerReconciler"),
 		ClusterMap:           make(map[corev1.ObjectReference]*libsveltosset.Set),
