@@ -29,6 +29,10 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
+var (
+	version string
+)
+
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=debuggingconfigurations,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch
 
@@ -103,4 +107,12 @@ func getPolicyRef(o client.Object) *libsveltosv1beta1.PolicyRef {
 	}
 
 	return policyRef
+}
+
+func SetVersion(v string) {
+	version = v
+}
+
+func getVersion() string {
+	return version
 }
