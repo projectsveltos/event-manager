@@ -77,8 +77,18 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	if err := s.AddConversionFunc((*apiv1alpha1.HelmChart)(nil), (*apiv1beta1.HelmChart)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_HelmChart_To_v1beta1_HelmChart(a.(*apiv1alpha1.HelmChart), b.(*apiv1beta1.HelmChart), scope)
+	}); err != nil {
+		return err
+	}
 	if err := s.AddConversionFunc((*v1beta1.EventTriggerSpec)(nil), (*EventTriggerSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1beta1_EventTriggerSpec_To_v1alpha1_EventTriggerSpec(a.(*v1beta1.EventTriggerSpec), b.(*EventTriggerSpec), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddConversionFunc((*apiv1beta1.HelmChart)(nil), (*apiv1alpha1.HelmChart)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_HelmChart_To_v1alpha1_HelmChart(a.(*apiv1beta1.HelmChart), b.(*apiv1alpha1.HelmChart), scope)
 	}); err != nil {
 		return err
 	}
@@ -173,7 +183,17 @@ func autoConvert_v1alpha1_EventTriggerSpec_To_v1beta1_EventTriggerSpec(in *Event
 	out.Reloader = in.Reloader
 	out.TemplateResourceRefs = *(*[]apiv1beta1.TemplateResourceRef)(unsafe.Pointer(&in.TemplateResourceRefs))
 	out.PolicyRefs = *(*[]apiv1beta1.PolicyRef)(unsafe.Pointer(&in.PolicyRefs))
-	out.HelmCharts = *(*[]apiv1beta1.HelmChart)(unsafe.Pointer(&in.HelmCharts))
+	if in.HelmCharts != nil {
+		in, out := &in.HelmCharts, &out.HelmCharts
+		*out = make([]apiv1beta1.HelmChart, len(*in))
+		for i := range *in {
+			if err := Convert_v1alpha1_HelmChart_To_v1beta1_HelmChart(&(*in)[i], &(*out)[i], s); err != nil {
+				return err
+			}
+		}
+	} else {
+		out.HelmCharts = nil
+	}
 	out.KustomizationRefs = *(*[]apiv1beta1.KustomizationRef)(unsafe.Pointer(&in.KustomizationRefs))
 	out.ValidateHealths = *(*[]apiv1beta1.ValidateHealth)(unsafe.Pointer(&in.ValidateHealths))
 	out.ExtraLabels = *(*map[string]string)(unsafe.Pointer(&in.ExtraLabels))
@@ -197,7 +217,17 @@ func autoConvert_v1beta1_EventTriggerSpec_To_v1alpha1_EventTriggerSpec(in *v1bet
 	out.Reloader = in.Reloader
 	out.TemplateResourceRefs = *(*[]apiv1alpha1.TemplateResourceRef)(unsafe.Pointer(&in.TemplateResourceRefs))
 	out.PolicyRefs = *(*[]apiv1alpha1.PolicyRef)(unsafe.Pointer(&in.PolicyRefs))
-	out.HelmCharts = *(*[]apiv1alpha1.HelmChart)(unsafe.Pointer(&in.HelmCharts))
+	if in.HelmCharts != nil {
+		in, out := &in.HelmCharts, &out.HelmCharts
+		*out = make([]apiv1alpha1.HelmChart, len(*in))
+		for i := range *in {
+			if err := Convert_v1beta1_HelmChart_To_v1alpha1_HelmChart(&(*in)[i], &(*out)[i], s); err != nil {
+				return err
+			}
+		}
+	} else {
+		out.HelmCharts = nil
+	}
 	out.KustomizationRefs = *(*[]apiv1alpha1.KustomizationRef)(unsafe.Pointer(&in.KustomizationRefs))
 	out.ValidateHealths = *(*[]apiv1alpha1.ValidateHealth)(unsafe.Pointer(&in.ValidateHealths))
 	// WARNING: in.Patches requires manual conversion: does not exist in peer-type
