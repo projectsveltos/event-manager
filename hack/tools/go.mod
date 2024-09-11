@@ -1,6 +1,6 @@
 module github.com/projectsveltos/classifier/hack/tools
 
-go 1.22.5
+go 1.22.7
 
 require (
 	github.com/a8m/envsubst v1.4.2
