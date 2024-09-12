@@ -291,7 +291,8 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 		return nil, err
 	}
 
-	config := render.AsCode(e.Spec)
+	config := getVersion()
+	config += render.AsCode(e.Spec)
 	config += render.AsCode(e.Labels)
 
 	for i := range resources {
@@ -1533,17 +1534,23 @@ func instantiateReferencedPolicy(ctx context.Context, ref client.Object,
 	}
 	content = instantiatedContent
 
+	// Referenced resource labels are to be added. Make a copy
+	tmpLabels := make(map[string]string)
+	for k := range labels {
+		tmpLabels[k] = labels[k]
+	}
+
 	// Resource name must depend on reference resource name as well. So add those labels.
 	// If an EventTrigger is referencing N configMaps/Secrets, N equivalent referenced
 	// resources must be created
-	labels[referencedResourceNamespaceLabel] = ref.GetNamespace()
-	labels[referencedResourceNameLabel] = ref.GetName()
+	tmpLabels[referencedResourceNamespaceLabel] = ref.GetNamespace()
+	tmpLabels[referencedResourceNameLabel] = ref.GetName()
 
 	var instantiatedObject client.Object
 	if ref.GetObjectKind().GroupVersionKind().Kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
-		instantiatedObject = generateConfigMap(ref, name, labels, content)
+		instantiatedObject = generateConfigMap(ref, name, tmpLabels, content)
 	} else {
-		instantiatedObject = generateSecret(ref, name, labels, content)
+		instantiatedObject = generateSecret(ref, name, tmpLabels, content)
 	}
 	addTypeInformationToObject(mgmtClusterSchema, instantiatedObject)
 

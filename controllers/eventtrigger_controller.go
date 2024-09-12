@@ -341,7 +341,8 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 	*/
 
 	if r.EventReportMode == CollectFromManagementCluster {
-		go collectEventReports(mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(), r.ShardKey, mgr.GetLogger())
+		go collectEventReports(mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(), r.ShardKey,
+			getVersion(), mgr.GetLogger())
 	}
 
 	return c, nil

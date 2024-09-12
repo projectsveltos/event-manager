@@ -180,7 +180,7 @@ func getEventTriggerReconciler(c client.Client) *controllers.EventTriggerReconci
 	}
 }
 
-func prepareCluster() *clusterv1.Cluster {
+func prepareCluster(version string) *clusterv1.Cluster {
 	namespace := randomString()
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -237,6 +237,19 @@ func prepareCluster() *clusterv1.Cluster {
 	}
 	Expect(testEnv.Client.Create(context.TODO(), secret)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv.Client, secret)).To(Succeed())
+
+	By("Create the ConfigMap with sveltos-agent version")
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: controllers.ReportNamespace,
+			Name:      "sveltos-agent-version",
+		},
+		Data: map[string]string{
+			"version": version,
+		},
+	}
+	Expect(testEnv.Client.Create(context.TODO(), cm)).To(Succeed())
+	Expect(waitForObject(context.TODO(), testEnv.Client, cm)).To(Succeed())
 
 	Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
 

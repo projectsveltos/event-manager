@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	sveltosmanagercontrollers "github.com/projectsveltos/addon-controller/controllers"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
@@ -167,9 +166,9 @@ func getClusterSummary(ctx context.Context,
 	listOptions := []client.ListOption{
 		client.InNamespace(clusterNamespace),
 		client.MatchingLabels{
-			sveltosmanagercontrollers.ClusterProfileLabelName: clusterProfileName,
-			configv1beta1.ClusterNameLabel:                    clusterName,
-			configv1beta1.ClusterTypeLabel:                    string(libsveltosv1beta1.ClusterTypeCapi),
+			"projectsveltos.io/cluster-profile-name": clusterProfileName,
+			configv1beta1.ClusterNameLabel:           clusterName,
+			configv1beta1.ClusterTypeLabel:           string(libsveltosv1beta1.ClusterTypeCapi),
 		},
 	}
 

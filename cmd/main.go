@@ -62,6 +62,7 @@ import (
 var (
 	setupLog             = ctrl.Log.WithName("setup")
 	shardKey             string
+	version              string
 	diagnosticsAddress   string
 	insecureDiagnostics  bool
 	workers              int
@@ -127,6 +128,8 @@ func main() {
 		libsveltosv1beta1.ComponentEventManager, ctrl.Log.WithName("log-setter"),
 		ctrl.GetConfigOrDie())
 
+	controllers.SetVersion(version)
+
 	d := deployer.GetClient(ctx, ctrl.Log.WithName("deployer"), mgr.GetClient(), workers)
 	controllers.RegisterFeatures(d, setupLog)
 
@@ -178,10 +181,10 @@ func initFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&insecureDiagnostics, "insecure-diagnostics", false,
 		"Enable insecure diagnostics serving. For more details see the description of --diagnostics-address.")
 
-	fs.StringVar(&shardKey,
-		"shard-key",
-		"",
+	fs.StringVar(&shardKey, "shard-key", "",
 		"If set this deployment will reconcile only clusters matching this shard")
+
+	fs.StringVar(&version, "version", "", "current sveltos version")
 
 	fs.IntVar(&workers, "worker-number", defaultWorkers,
 		"Number of worker. Workers are used to verify health checks in managed clusters")

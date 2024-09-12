@@ -43,8 +43,10 @@ import (
 var _ = Describe("EventSource Deployer", func() {
 	var eventSource *libsveltosv1beta1.EventSource
 	var logger logr.Logger
+	var version string
 
 	BeforeEach(func() {
+		version = randomString()
 		eventSource = getEventSourceInstance(randomString())
 		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 	})
@@ -143,11 +145,11 @@ var _ = Describe("EventSource Deployer", func() {
 	})
 
 	It("collectEventReports collects EventReports from clusters", func() {
-		cluster := prepareCluster()
+		cluster := prepareCluster(version)
 
 		// In managed cluster this is the namespace where EventReports
 		// are created
-		const eventReportNamespace = "projectsveltos"
+		const eventReportNamespace = controllers.ReportNamespace
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: eventReportNamespace,
@@ -174,7 +176,7 @@ var _ = Describe("EventSource Deployer", func() {
 		eventTriggerMap := map[string]libsveltosset.Set{}
 
 		Expect(controllers.CollectAndProcessEventReportsFromCluster(context.TODO(), testEnv.Client, getClusterRef(cluster),
-			eventSourceMap, eventTriggerMap, logger)).To(Succeed())
+			eventSourceMap, eventTriggerMap, version, logger)).To(Succeed())
 
 		clusterType := libsveltosv1beta1.ClusterTypeCapi
 
@@ -182,7 +184,7 @@ var _ = Describe("EventSource Deployer", func() {
 
 		// Update EventReports and validate again
 		Expect(controllers.CollectAndProcessEventReportsFromCluster(context.TODO(), testEnv.Client, getClusterRef(cluster),
-			eventSourceMap, eventTriggerMap, logger)).To(Succeed())
+			eventSourceMap, eventTriggerMap, version, logger)).To(Succeed())
 
 		validateEventReports(eventSourceName, cluster, &clusterType)
 	})
