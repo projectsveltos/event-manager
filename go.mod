@@ -10,16 +10,16 @@ require (
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.2
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/addon-controller v0.38.1-0.20240919155721-3d3847585023
-	github.com/projectsveltos/libsveltos v0.38.1-0.20240911140937-72f68c9b58ea
+	github.com/projectsveltos/addon-controller v0.38.1-0.20240925102153-29d37c8a90fe
+	github.com/projectsveltos/libsveltos v0.38.1-0.20240925083455-d6efc2076342
 	github.com/prometheus/client_golang v1.20.4
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/text v0.18.0
-	k8s.io/api v0.31.0
-	k8s.io/apiextensions-apiserver v0.31.0
-	k8s.io/apimachinery v0.31.0
-	k8s.io/client-go v0.31.0
-	k8s.io/component-base v0.31.0
+	k8s.io/api v0.31.1
+	k8s.io/apiextensions-apiserver v0.31.1
+	k8s.io/apimachinery v0.31.1
+	k8s.io/client-go v0.31.1
+	k8s.io/component-base v0.31.1
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20240902221715-702e33fdd3c3
 	sigs.k8s.io/cluster-api v1.8.3
@@ -79,7 +79,7 @@ require (
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.54.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.55.0 // indirect
 	go.opentelemetry.io/otel v1.30.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.30.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.30.0 // indirect
@@ -105,10 +105,10 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiserver v0.31.0 // indirect
-	k8s.io/cluster-bootstrap v0.31.0 // indirect
+	k8s.io/apiserver v0.31.1 // indirect
+	k8s.io/cluster-bootstrap v0.31.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20240903163716-9e1beecbcb38 // indirect
-	k8s.io/kubectl v0.31.0 // indirect
+	k8s.io/kubectl v0.31.1 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.30.3 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
