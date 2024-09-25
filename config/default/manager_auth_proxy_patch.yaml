@@ -14,4 +14,4 @@ spec:
         - "--diagnostics-address=:8443"
         - "--shard-key="
         - "--v=5"
-        - "--version=v0.38.2"
+        - "--version=v0.38.3"
