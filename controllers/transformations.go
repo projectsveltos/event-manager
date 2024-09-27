@@ -65,6 +65,38 @@ func (r *EventTriggerReconciler) requeueEventTriggerForEventReport(
 	return requests
 }
 
+func (r *EventTriggerReconciler) requeueEventTriggerForEventSource(
+	ctx context.Context, o client.Object,
+) []reconcile.Request {
+
+	eventSource := o.(*libsveltosv1beta1.EventSource)
+	logger := r.Logger.WithValues("eventSource", eventSource.GetName())
+
+	logger.V(logs.LogDebug).Info("reacting to eventSource change")
+
+	r.Mux.Lock()
+	defer r.Mux.Unlock()
+
+	eventSourceInfo := corev1.ObjectReference{APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		Kind: libsveltosv1beta1.EventSourceKind, Name: eventSource.Name}
+
+	// Get all EventTriggers referencing this EventSource
+	requests := make([]ctrl.Request, getConsumersForEntry(r.EventSourceMap, &eventSourceInfo).Len())
+	consumers := getConsumersForEntry(r.EventSourceMap, &eventSourceInfo).Items()
+
+	for i := range consumers {
+		l := logger.WithValues("eventTrigger", consumers[i].Name)
+		l.V(logs.LogDebug).Info("queuing EventTrigger")
+		requests[i] = ctrl.Request{
+			NamespacedName: client.ObjectKey{
+				Name: consumers[i].Name,
+			},
+		}
+	}
+
+	return requests
+}
+
 func (r *EventTriggerReconciler) requeueEventTriggerForSveltosCluster(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {

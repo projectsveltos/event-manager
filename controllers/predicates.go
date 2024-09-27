@@ -316,6 +316,62 @@ func EventReportPredicates(logger logr.Logger) predicate.Funcs {
 	}
 }
 
+// EventSourcePredicates predicates for EventSource. EventTriggerReconciler watches sveltos
+// EventSource and react to those by reconciling itself based on following predicates
+func EventSourcePredicates(logger logr.Logger) predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			newES := e.ObjectNew.(*libsveltosv1beta1.EventSource)
+			oldES := e.ObjectOld.(*libsveltosv1beta1.EventSource)
+			log := logger.WithValues("predicate", "updateEvent",
+				"eventSource", newES.Name,
+			)
+
+			if oldES == nil {
+				log.V(logs.LogVerbose).Info("Old EventSource is nil. Reconcile EventTrigger")
+				return true
+			}
+
+			// return true if EventSource Spec has changed
+			if !reflect.DeepEqual(oldES.Spec, newES.Spec) {
+				log.V(logs.LogVerbose).Info(
+					"EventSource changed. Will attempt to reconcile associated EventTriggers.")
+				return true
+			}
+
+			// otherwise, return false
+			log.V(logs.LogVerbose).Info(
+				"EventSource did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
+			return false
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			log := logger.WithValues("predicate", "createEvent",
+				"eventSource", e.Object.GetName(),
+			)
+
+			log.V(logs.LogVerbose).Info(
+				"EventSource did match expected conditions.  Will attempt to reconcile associated EventTriggers.")
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			log := logger.WithValues("predicate", "deleteEvent",
+				"eventSource", e.Object.GetName(),
+			)
+			log.V(logs.LogVerbose).Info(
+				"EventSource deleted.  Will attempt to reconcile associated EventTriggers.")
+			return true
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			log := logger.WithValues("predicate", "genericEvent",
+				"eventSource", e.Object.GetName(),
+			)
+			log.V(logs.LogVerbose).Info(
+				"EventSource did not match expected conditions.  Will not attempt to reconcile associated EventTriggers.")
+			return false
+		},
+	}
+}
+
 // ClusterSetPredicates predicates for ClusterSet. EventTriggerReconciler watches ClusterSet events
 // and react to those by reconciling itself based on following predicates
 func ClusterSetPredicates(logger logr.Logger) predicate.Funcs {
