@@ -323,6 +323,12 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 				EventReportPredicates(mgr.GetLogger().WithValues("predicate", "eventreportpredicate")),
 			),
 		).
+		Watches(&libsveltosv1beta1.EventSource{},
+			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForEventSource),
+			builder.WithPredicates(
+				EventSourcePredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
+			),
+		).
 		Build(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating controller")

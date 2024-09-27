@@ -487,3 +487,97 @@ var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 		Expect(result).To(BeFalse())
 	})
 })
+
+var _ = Describe("EventTrigger Predicates: EventSourcePredicates", func() {
+	var logger logr.Logger
+	var eventSource *libsveltosv1beta1.EventSource
+
+	const upstreamClusterNamePrefix = "eventsource-predicates-"
+
+	BeforeEach(func() {
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+		eventSource = &libsveltosv1beta1.EventSource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      upstreamClusterNamePrefix + randomString(),
+				Namespace: predicates + randomString(),
+			},
+		}
+	})
+
+	It("Create will reprocesses", func() {
+		esPredicate := controllers.EventSourcePredicates(logger)
+
+		e := event.CreateEvent{
+			Object: eventSource,
+		}
+
+		result := esPredicate.Create(e)
+		Expect(result).To(BeTrue())
+	})
+	It("Delete does reprocess ", func() {
+		esPredicate := controllers.EventSourcePredicates(logger)
+
+		e := event.DeleteEvent{
+			Object: eventSource,
+		}
+
+		result := esPredicate.Delete(e)
+		Expect(result).To(BeTrue())
+	})
+	It("Update reprocesses when eventSource spec changes", func() {
+		esPredicate := controllers.EventSourcePredicates(logger)
+
+		eventSource.Spec = libsveltosv1beta1.EventSourceSpec{
+			ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
+				{
+					Group:     randomString(),
+					Kind:      randomString(),
+					Namespace: randomString(),
+				},
+			},
+		}
+
+		oldEventSource := &libsveltosv1beta1.EventSource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: eventSource.Name,
+			},
+		}
+
+		e := event.UpdateEvent{
+			ObjectNew: eventSource,
+			ObjectOld: oldEventSource,
+		}
+
+		result := esPredicate.Update(e)
+		Expect(result).To(BeTrue())
+	})
+
+	It("Update does not reprocesses EventSource spec has not changed", func() {
+		esPredicate := controllers.EventSourcePredicates(logger)
+
+		eventSource.Spec = libsveltosv1beta1.EventSourceSpec{
+			ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
+				{
+					Group:     randomString(),
+					Kind:      randomString(),
+					Namespace: randomString(),
+				},
+			},
+		}
+
+		oldEventSource := &libsveltosv1beta1.EventSource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: eventSource.Name,
+			},
+			Spec: eventSource.Spec,
+		}
+
+		e := event.UpdateEvent{
+			ObjectNew: eventSource,
+			ObjectOld: oldEventSource,
+		}
+
+		result := esPredicate.Update(e)
+		Expect(result).To(BeFalse())
+	})
+})
