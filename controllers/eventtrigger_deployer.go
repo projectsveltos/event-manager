@@ -1340,7 +1340,7 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, valuesFrom []co
 				msg := fmt.Sprintf("failed to instantiate content for ValuesFrom: %s/%s",
 					resource.GetNamespace(), resource.GetName())
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("%s. Error: %v", msg, err))
-				return errors.Wrapf(err, msg)
+				return errors.Wrapf(err, "%s", msg)
 			}
 		}
 
