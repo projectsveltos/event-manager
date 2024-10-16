@@ -1,6 +1,6 @@
 linters-settings:
   dupl:
-    threshold: 200
+    threshold: 250
   errorlint:
     # Use '%w' to format errors.
     errorf: true

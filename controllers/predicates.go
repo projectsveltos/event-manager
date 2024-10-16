@@ -17,9 +17,11 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -425,3 +427,138 @@ func ClusterSetPredicates(logger logr.Logger) predicate.Funcs {
 		},
 	}
 }
+
+// ConfigMapPredicates predicates for ConfigMaps. ClusterSummaryReconciler watches ConfigMap events
+// and react to those by reconciling itself based on following predicates
+func ConfigMapPredicates(logger logr.Logger) predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			newConfigMap := e.ObjectNew.(*corev1.ConfigMap)
+			oldConfigMap := e.ObjectOld.(*corev1.ConfigMap)
+			log := logger.WithValues("predicate", "updateEvent",
+				"configmap", newConfigMap.Name,
+			)
+
+			if oldConfigMap == nil {
+				log.V(logs.LogVerbose).Info("Old ConfigMap is nil. Reconcile EvenTriggers.")
+				return true
+			}
+
+			if !reflect.DeepEqual(oldConfigMap.Data, newConfigMap.Data) {
+				log.V(logs.LogVerbose).Info(
+					"ConfigMap Data changed. Will attempt to reconcile associated EvenTriggers.",
+				)
+				return true
+			}
+
+			if !reflect.DeepEqual(oldConfigMap.Annotations, newConfigMap.Annotations) {
+				log.V(logs.LogVerbose).Info(
+					"ConfigMap Annotation changed. Will attempt to reconcile associated EvenTriggers.",
+				)
+				return true
+			}
+
+			if !reflect.DeepEqual(oldConfigMap.BinaryData, newConfigMap.BinaryData) {
+				log.V(logs.LogVerbose).Info(
+					"ConfigMap BinaryData changed. Will attempt to reconcile associated EvenTriggers.",
+				)
+				return true
+			}
+
+			// otherwise, return false
+			log.V(logs.LogVerbose).Info(
+				"ConfigMap did not match expected conditions.  Will not attempt to reconcile associated EvenTriggers.")
+			return false
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			return CreateFuncTrue(e, logger)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return DeleteFuncTrue(e, logger)
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return GenericFuncFalse(e, logger)
+		},
+	}
+}
+
+// SecretPredicates predicates for Secrets. ClusterSummaryReconciler watches Secret events
+// and react to those by reconciling itself based on following predicates
+func SecretPredicates(logger logr.Logger) predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			newSecret := e.ObjectNew.(*corev1.Secret)
+			oldSecret := e.ObjectOld.(*corev1.Secret)
+			log := logger.WithValues("predicate", "updateEvent",
+				"secret", newSecret.Name,
+			)
+
+			if oldSecret == nil {
+				log.V(logs.LogVerbose).Info("Old Secret is nil. Reconcile EventTriggers.")
+				return true
+			}
+
+			if !reflect.DeepEqual(oldSecret.Data, newSecret.Data) {
+				log.V(logs.LogVerbose).Info(
+					"Secret Data changed. Will attempt to reconcile associated EvenTriggers.",
+				)
+				return true
+			}
+
+			if !reflect.DeepEqual(oldSecret.Annotations, newSecret.Annotations) {
+				log.V(logs.LogVerbose).Info(
+					"Secret Annotation changed. Will attempt to reconcile associated EvenTriggers.",
+				)
+				return true
+			}
+
+			// otherwise, return false
+			log.V(logs.LogVerbose).Info(
+				"Secret did not match expected conditions.  Will not attempt to reconcile associated EvenTriggers.")
+			return false
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			return CreateFuncTrue(e, logger)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return DeleteFuncTrue(e, logger)
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return GenericFuncFalse(e, logger)
+		},
+	}
+}
+
+var (
+	CreateFuncTrue = func(e event.CreateEvent, logger logr.Logger) bool {
+		log := logger.WithValues("predicate", "createEvent",
+			e.Object.GetObjectKind(), e.Object.GetName(),
+		)
+
+		log.V(logs.LogVerbose).Info(fmt.Sprintf(
+			"%s did match expected conditions.  Will attempt to reconcile associated EvenTriggers.",
+			e.Object.GetObjectKind()))
+		return true
+	}
+
+	DeleteFuncTrue = func(e event.DeleteEvent, logger logr.Logger) bool {
+		log := logger.WithValues("predicate", "deleteEvent",
+			e.Object.GetObjectKind(), e.Object.GetName(),
+		)
+
+		log.V(logs.LogVerbose).Info(fmt.Sprintf(
+			"%s did match expected conditions.  Will attempt to reconcile associated EvenTriggers.",
+			e.Object.GetObjectKind()))
+		return true
+	}
+
+	GenericFuncFalse = func(e event.GenericEvent, logger logr.Logger) bool {
+		log := logger.WithValues("predicate", "genericEvent",
+			e.Object.GetObjectKind(), e.Object.GetName(),
+		)
+		log.V(logs.LogVerbose).Info(fmt.Sprintf(
+			"%s did not match expected conditions.  Will not attempt to reconcile associated EvenTriggers.",
+			e.Object.GetObjectKind()))
+		return false
+	}
+)
