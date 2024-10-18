@@ -33,6 +33,11 @@ const (
 	EventTriggerKind = "EventTrigger"
 
 	FeatureEventTrigger = "EventTrigger"
+
+	// InstantiateAnnotation is the annotation that must be set on a referenced
+	// ConfigMap/Secret when the content is a template and needs variable substitution
+	// using event/cluster data
+	InstantiateAnnotation = "projectsveltos.io/instantiate"
 )
 
 type GeneratorReference struct {

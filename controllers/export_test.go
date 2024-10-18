@@ -78,6 +78,13 @@ var (
 	IsEventTriggerMatchingTheCluster    = isEventTriggerMatchingTheCluster
 )
 
+var (
+	GetTrackerInstance       = getTrackerInstance
+	StopTrackingConsumer     = (*tracker).stopTrackingConsumer
+	TrackResourceForConsumer = (*tracker).trackResourceForConsumer
+	GetConsumersForResource  = (*tracker).getConsumersForResource
+)
+
 const (
 	ReferencedResourceNamespaceLabel = referencedResourceNamespaceLabel
 	ReferencedResourceNameLabel      = referencedResourceNameLabel

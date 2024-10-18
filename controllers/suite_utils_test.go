@@ -174,8 +174,6 @@ func getEventTriggerReconciler(c client.Client) *controllers.EventTriggerReconci
 		EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
 		ClusterLabels:    make(map[corev1.ObjectReference]map[string]string),
-		EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-		ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		Mux:              sync.Mutex{},
 	}
 }

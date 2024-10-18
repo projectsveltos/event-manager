@@ -267,3 +267,65 @@ func (r *EventTriggerReconciler) requeueEventTriggerForClusterSet(
 
 	return requests
 }
+
+func (r *EventTriggerReconciler) requeueEventTriggerForReference(
+	ctx context.Context, o client.Object,
+) []reconcile.Request {
+
+	logger := r.Logger.WithValues(
+		"objectMapper",
+		"requeueEventTriggerForReference",
+		"reference",
+		o.GetName(),
+	)
+
+	logger.V(logs.LogDebug).Info("reacting to configMap/secret change")
+
+	// Following is needed as o.GetObjectKind().GroupVersionKind().Kind is not set
+	var key corev1.ObjectReference
+	switch o.(type) {
+	case *corev1.ConfigMap:
+		key = corev1.ObjectReference{
+			APIVersion: corev1.SchemeGroupVersion.String(),
+			Kind:       string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+			Namespace:  o.GetNamespace(),
+			Name:       o.GetName(),
+		}
+	case *corev1.Secret:
+		key = corev1.ObjectReference{
+			APIVersion: corev1.SchemeGroupVersion.String(),
+			Kind:       string(libsveltosv1beta1.SecretReferencedResourceKind),
+			Namespace:  o.GetNamespace(),
+			Name:       o.GetName(),
+		}
+	default:
+		key = corev1.ObjectReference{
+			APIVersion: o.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+			Kind:       o.GetObjectKind().GroupVersionKind().Kind,
+			Namespace:  o.GetNamespace(),
+			Name:       o.GetName(),
+		}
+	}
+
+	logger.V(logs.LogDebug).Info(fmt.Sprintf("referenced key: %s", key))
+
+	resourceTracker := getTrackerInstance()
+	consumers := resourceTracker.getConsumersForResource(&key)
+	if consumers == nil {
+		return nil
+	}
+
+	requests := make([]ctrl.Request, consumers.Len())
+	items := consumers.Items()
+	for i := range items {
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("requeue consumer: %s", items[i]))
+		requests[i] = ctrl.Request{
+			NamespacedName: client.ObjectKey{
+				Name:      items[i].Name,
+				Namespace: items[i].Namespace,
+			},
+		}
+	}
+
+	return requests
+}

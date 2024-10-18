@@ -137,11 +137,6 @@ type EventTriggerReconciler struct {
 
 	// Key: EventTrigger: value: set of EventSource referenced
 	ToEventSourceMap map[types.NamespacedName]*libsveltosset.Set
-
-	// key: Referenced object; value: set of all EventTriggers referencing the resource
-	ReferenceMap map[corev1.ObjectReference]*libsveltosset.Set
-	// key: EventTriggers name; value: set of referenced resources
-	EventTriggerMap map[types.NamespacedName]*libsveltosset.Set
 }
 
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventtriggers,verbs=get;list;watch;create;update;patch;delete
@@ -329,6 +324,18 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 				EventSourcePredicates(mgr.GetLogger().WithValues("predicate", "eventsourcepredicate")),
 			),
 		).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForReference),
+			builder.WithPredicates(
+				ConfigMapPredicates(mgr.GetLogger().WithValues("predicate", "configmappredicate")),
+			),
+		).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.requeueEventTriggerForReference),
+			builder.WithPredicates(
+				SecretPredicates(mgr.GetLogger().WithValues("predicate", "secretpredicate")),
+			),
+		).
 		Build(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating controller")
@@ -451,12 +458,8 @@ func (r *EventTriggerReconciler) cleanMaps(eventTriggerScope *scope.EventTrigger
 
 	delete(r.EventTriggers, *eventTriggerInfo)
 
-	delete(r.EventTriggerMap, types.NamespacedName{Name: eventTriggerScope.Name()})
-
-	for i := range r.ReferenceMap {
-		eventTriggerSet := r.ReferenceMap[i]
-		eventTriggerSet.Erase(eventTriggerInfo)
-	}
+	resourceTracker := getTrackerInstance()
+	resourceTracker.stopTrackingConsumer(eventTriggerInfo)
 }
 
 func (r *EventTriggerReconciler) updateMaps(eventTriggerScope *scope.EventTriggerScope, logger logr.Logger) error {
@@ -465,6 +468,11 @@ func (r *EventTriggerReconciler) updateMaps(eventTriggerScope *scope.EventTrigge
 	r.updateEventSourceMaps(eventTriggerScope)
 
 	r.updateClusterSetMap(eventTriggerScope)
+
+	// Reference ConfigMap/Secret instances are not tracked here.
+	// ConfigMap/Secret namespace can be left empty and match cluster namespace
+	// ConfigMap/Secret name can be expressed as a template.
+	// Those are tracked at deployment time
 
 	eventTriggerInfo := getKeyFromObject(r.Scheme, eventTriggerScope.EventTrigger)
 

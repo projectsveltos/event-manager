@@ -24,11 +24,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gdexlab/go-render/render"
-	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/gdexlab/go-render/render"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -157,8 +157,6 @@ var _ = Describe("EventTrigger deployer", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		eScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
@@ -257,8 +255,6 @@ var _ = Describe("EventTrigger deployer", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		// Verify eventTrigger has been created
@@ -1158,7 +1154,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					controllers.InstantiateAnnotation: "ok",
+					v1beta1.InstantiateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{
@@ -1173,7 +1169,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					controllers.InstantiateAnnotation: "ok",
+					v1beta1.InstantiateAnnotation: "ok",
 				},
 			},
 			Type: libsveltosv1beta1.ClusterProfileSecretType,
@@ -1250,7 +1246,7 @@ var _ = Describe("EventTrigger deployer", func() {
 			eventReport, libsveltosv1beta1.ClusterTypeCapi)
 
 		localSet, remoteSet, err := controllers.InstantiateReferencedPolicyRefs(context.TODO(), testEnv.Client,
-			randomString(), eventTrigger, clusterRef, object, labels, logger)
+			eventTrigger, randomString(), eventTrigger, clusterRef, object, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(localSet).ToNot(BeNil())
 		Expect(localSet.Len()).To(Equal(1))
@@ -1326,7 +1322,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					controllers.InstantiateAnnotation: "ok",
+					v1beta1.InstantiateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{
@@ -1437,7 +1433,7 @@ spec:
 			eventReport, libsveltosv1beta1.ClusterTypeCapi)
 
 		localSet, remoteSet, err := controllers.InstantiateReferencedPolicyRefs(context.TODO(), testEnv,
-			randomString(), eventTrigger, clusterRef, objects, labels, logger)
+			eventTrigger, randomString(), eventTrigger, clusterRef, objects, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(localSet).ToNot(BeNil())
 		Expect(localSet.Len()).To(Equal(0))
