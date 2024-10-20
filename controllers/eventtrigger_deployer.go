@@ -310,6 +310,35 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 		}
 	}
 
+	clusterType := clusterproxy.GetClusterType(cluster)
+	clusterObj, err := fecthClusterObjects(ctx, c, cluster.Namespace, cluster.Name, clusterType, logger)
+	if err == nil {
+		objects := currentObjects{
+			Cluster: clusterObj,
+		}
+
+		templateName := getTemplateName(cluster.Namespace, cluster.Name, e.Name)
+		local, remote, _ := fetchPolicyRefs(ctx, c, e, cluster, objects, templateName, logger)
+		for i := range local {
+			config += render.AsCode(local[i])
+		}
+		for i := range remote {
+			config += render.AsCode(remote[i])
+		}
+
+		for i := range e.Spec.HelmCharts {
+			valuesFromHash := getValuesFromHash(ctx, c, e.Spec.HelmCharts[i].ValuesFrom, cluster.Namespace,
+				templateName, objects, logger)
+			config += render.AsCode(valuesFromHash)
+		}
+
+		for i := range e.Spec.KustomizationRefs {
+			valuesFromHash := getValuesFromHash(ctx, c, e.Spec.KustomizationRefs[i].ValuesFrom, cluster.Namespace,
+				templateName, objects, logger)
+			config += render.AsCode(valuesFromHash)
+		}
+	}
+
 	h := sha256.New()
 	h.Write([]byte(config))
 	return h.Sum(nil), nil
@@ -993,15 +1022,15 @@ func instantiateClusterProfileSpecForResource(ctx context.Context, c client.Clie
 
 	setClusterSelector(&clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger)
 
-	instantiateHelmChartsWithResource, err := instantiateHelmChartsWithResource(ctx, c, clusterNamespace, templateName,
-		eventTrigger.Spec.HelmCharts, object, labels, logger)
+	instantiateHelmChartsWithResource, err := instantiateHelmChartsWithResource(ctx, c, eventTrigger,
+		clusterNamespace, templateName, eventTrigger.Spec.HelmCharts, object, labels, logger)
 	if err != nil {
 		return nil, err
 	}
 	clusterProfileSpec.HelmCharts = instantiateHelmChartsWithResource
 
-	instantiateKustomizeRefsWithResource, err := instantiateKustomizationRefsWithResource(ctx, c, clusterNamespace,
-		templateName, eventTrigger.Spec.KustomizationRefs, object, labels, logger)
+	instantiateKustomizeRefsWithResource, err := instantiateKustomizationRefsWithResource(ctx, c, eventTrigger,
+		clusterNamespace, templateName, eventTrigger.Spec.KustomizationRefs, object, labels, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1080,15 +1109,15 @@ func instantiateClusterProfileSpecPerAllResource(ctx context.Context, c client.C
 
 	setClusterSelector(&clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger)
 
-	instantiateHelmChartsWithResources, err := instantiateHelmChartsWithAllResources(ctx, c, clusterNamespace, templateName,
-		eventTrigger.Spec.HelmCharts, objects, labels, logger)
+	instantiateHelmChartsWithResources, err := instantiateHelmChartsWithAllResources(ctx, c, eventTrigger,
+		clusterNamespace, templateName, eventTrigger.Spec.HelmCharts, objects, labels, logger)
 	if err != nil {
 		return nil, err
 	}
 	clusterProfileSpec.HelmCharts = instantiateHelmChartsWithResources
 
-	instantiateKustomizeRefsWithResource, err := instantiateKustomizationRefsWithAllResources(ctx, c, clusterNamespace,
-		templateName, eventTrigger.Spec.KustomizationRefs, objects, labels, logger)
+	instantiateKustomizeRefsWithResource, err := instantiateKustomizationRefsWithAllResources(ctx, c, eventTrigger,
+		clusterNamespace, templateName, eventTrigger.Spec.KustomizationRefs, objects, labels, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1123,8 +1152,8 @@ func setPolicyRefs(ctx context.Context, c client.Client, clusterProfileSpec *con
 	data any, eventTrigger *v1beta1.EventTrigger, labels map[string]string, logger logr.Logger) error {
 
 	clusterRef := getClusterRef(clusterNamespace, clusterName, clusterType)
-	localPolicyRef, remotePolicyRef, err := instantiateReferencedPolicyRefs(ctx, c, templateName,
-		eventTrigger, clusterRef, data, labels, logger)
+	localPolicyRef, remotePolicyRef, err := instantiateReferencedPolicyRefs(ctx, c, eventTrigger,
+		templateName, eventTrigger, clusterRef, data, labels, logger)
 	if err != nil {
 		return err
 	}
@@ -1225,9 +1254,9 @@ func instantiateSection(templateName string, toBeInstantiated []byte, data any,
 	return buffer.Bytes(), nil
 }
 
-func instantiateHelmCharts(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	helmCharts []configv1beta1.HelmChart, data any, labels map[string]string, logger logr.Logger,
-) ([]configv1beta1.HelmChart, error) {
+func instantiateHelmCharts(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	clusterNamespace, templateName string, helmCharts []configv1beta1.HelmChart, data any,
+	labels map[string]string, logger logr.Logger) ([]configv1beta1.HelmChart, error) {
 
 	helmChartJson, err := json.Marshal(helmCharts)
 	if err != nil {
@@ -1249,8 +1278,8 @@ func instantiateHelmCharts(ctx context.Context, c client.Client, clusterNamespac
 	}
 
 	for i := range instantiatedHelmCharts {
-		err = instantiateValuesFrom(ctx, c, instantiatedHelmCharts[i].ValuesFrom, clusterNamespace, templateName,
-			data, labels, logger)
+		err = instantiateValuesFrom(ctx, c, e, instantiatedHelmCharts[i].ValuesFrom, clusterNamespace,
+			templateName, data, labels, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -1259,9 +1288,9 @@ func instantiateHelmCharts(ctx context.Context, c client.Client, clusterNamespac
 	return instantiatedHelmCharts, nil
 }
 
-func instantiateKustomizationRefs(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	kustomizationRefs []configv1beta1.KustomizationRef, data any, labels map[string]string, logger logr.Logger,
-) ([]configv1beta1.KustomizationRef, error) {
+func instantiateKustomizationRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	clusterNamespace, templateName string, kustomizationRefs []configv1beta1.KustomizationRef,
+	data any, labels map[string]string, logger logr.Logger) ([]configv1beta1.KustomizationRef, error) {
 
 	kustomizationRefsJson, err := json.Marshal(kustomizationRefs)
 	if err != nil {
@@ -1283,7 +1312,7 @@ func instantiateKustomizationRefs(ctx context.Context, c client.Client, clusterN
 	}
 
 	for i := range instantiatedKustomizationRefs {
-		err = instantiateValuesFrom(ctx, c, instantiatedKustomizationRefs[i].ValuesFrom, clusterNamespace,
+		err = instantiateValuesFrom(ctx, c, e, instantiatedKustomizationRefs[i].ValuesFrom, clusterNamespace,
 			templateName, data, labels, logger)
 		if err != nil {
 			return nil, err
@@ -1293,20 +1322,26 @@ func instantiateKustomizationRefs(ctx context.Context, c client.Client, clusterN
 	return instantiatedKustomizationRefs, nil
 }
 
-func instantiateValuesFrom(ctx context.Context, c client.Client, valuesFrom []configv1beta1.ValueFrom,
-	clusterNamespace, templateName string, data any, labels map[string]string, logger logr.Logger) error {
+func instantiateValuesFrom(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	valuesFrom []configv1beta1.ValueFrom, clusterNamespace, templateName string, data any,
+	labels map[string]string, logger logr.Logger) error {
 
 	for i := range valuesFrom {
 		ref := &valuesFrom[i]
 
 		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, ref.Namespace)
 
-		var err error
+		name, err := instantiateSection(templateName, []byte(ref.Name), data, logger)
+		if err != nil {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate name: %v", err))
+			return err
+		}
+
 		var resource client.Object
 		if ref.Kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
-			resource, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: ref.Name})
+			resource, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(name)})
 		} else {
-			resource, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: ref.Name})
+			resource, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(name)})
 		}
 
 		if err != nil {
@@ -1320,7 +1355,7 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, valuesFrom []co
 		}
 
 		var info *types.NamespacedName
-		if _, ok := resource.GetAnnotations()[InstantiateAnnotation]; !ok {
+		if _, ok := resource.GetAnnotations()[v1beta1.InstantiateAnnotation]; !ok {
 			// referenced ConfigMap/Secret is not a template. So there is no
 			// need to instantiate a new one. Generated ClusterProfile can directly
 			// reference this one
@@ -1335,7 +1370,7 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, valuesFrom []co
 			// information from the resources in the managed cluster that generated the event.
 			// Generate then a new ConfigMap/Secret. The autocreated ClusterProfile will reference
 			// this new resource.
-			info, err = instantiateReferencedPolicy(ctx, resource, templateName, name, data, labels, logger)
+			info, err = instantiateReferencedPolicy(ctx, e, resource, templateName, name, data, labels, logger)
 			if err != nil {
 				msg := fmt.Sprintf("failed to instantiate content for ValuesFrom: %s/%s",
 					resource.GetNamespace(), resource.GetName())
@@ -1416,44 +1451,45 @@ func instantiateTemplateResourceRefs(templateName string, clusterContent map[str
 
 // instantiateHelmChartsWithResource instantiate eventTrigger.Spec.HelmCharts using information from passed in object
 // which represents one of the resource matching referenced EventSource in the managed cluster.
-func instantiateHelmChartsWithResource(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	helmCharts []configv1beta1.HelmChart, data any, labels map[string]string, logger logr.Logger,
-) ([]configv1beta1.HelmChart, error) {
+func instantiateHelmChartsWithResource(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	clusterNamespace, templateName string, helmCharts []configv1beta1.HelmChart, data any,
+	labels map[string]string, logger logr.Logger) ([]configv1beta1.HelmChart, error) {
 
-	return instantiateHelmCharts(ctx, c, clusterNamespace, templateName, helmCharts, data, labels, logger)
+	return instantiateHelmCharts(ctx, c, e, clusterNamespace, templateName, helmCharts, data, labels, logger)
 }
 
 // instantiateHelmChartsWithAllResources instantiate eventTrigger.Spec.HelmCharts using information from passed in objects
 // which represent all of the resources matching referenced EventSource in the managed cluster.
-func instantiateHelmChartsWithAllResources(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	helmCharts []configv1beta1.HelmChart, data any, labels map[string]string, logger logr.Logger,
-) ([]configv1beta1.HelmChart, error) {
+func instantiateHelmChartsWithAllResources(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	clusterNamespace, templateName string, helmCharts []configv1beta1.HelmChart, data any,
+	labels map[string]string, logger logr.Logger) ([]configv1beta1.HelmChart, error) {
 
-	return instantiateHelmCharts(ctx, c, clusterNamespace, templateName, helmCharts, data, labels, logger)
+	return instantiateHelmCharts(ctx, c, e, clusterNamespace, templateName, helmCharts, data, labels, logger)
 }
 
 // instantiateKustomizationRefsWithResource instantiate eventTrigger.Spec.KustomizationRefs using information from passed
 // in object which represents one of the resource matching referenced EventSource in the managed cluster.
-func instantiateKustomizationRefsWithResource(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	kustomizationRefs []configv1beta1.KustomizationRef, data any, labels map[string]string, logger logr.Logger,
+func instantiateKustomizationRefsWithResource(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	clusterNamespace, templateName string, kustomizationRefs []configv1beta1.KustomizationRef, data any,
+	labels map[string]string, logger logr.Logger,
 ) ([]configv1beta1.KustomizationRef, error) {
 
-	return instantiateKustomizationRefs(ctx, c, clusterNamespace, templateName, kustomizationRefs, data, labels, logger)
+	return instantiateKustomizationRefs(ctx, c, e, clusterNamespace, templateName, kustomizationRefs, data, labels, logger)
 }
 
 // instantiateKustomizationRefsWithAllResources instantiate eventTrigger.Spec.KustomizationRefs using information from passed
 // in objects which represent all of the resources matching referenced EventSource in the managed cluster.
-func instantiateKustomizationRefsWithAllResources(ctx context.Context, c client.Client, clusterNamespace, templateName string,
-	kustomizationRefs []configv1beta1.KustomizationRef, data any, labels map[string]string, logger logr.Logger,
-) ([]configv1beta1.KustomizationRef, error) {
+func instantiateKustomizationRefsWithAllResources(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	clusterNamespace, templateName string, kustomizationRefs []configv1beta1.KustomizationRef, data any,
+	labels map[string]string, logger logr.Logger) ([]configv1beta1.KustomizationRef, error) {
 
-	return instantiateKustomizationRefs(ctx, c, clusterNamespace, templateName, kustomizationRefs, data, labels, logger)
+	return instantiateKustomizationRefs(ctx, c, e, clusterNamespace, templateName, kustomizationRefs, data, labels, logger)
 }
 
 // instantiateReferencedPolicies instantiate eventTrigger.Spec.PolicyRefs using information from passed in objects
 // which represent all of the resources matching referenced EventSource in the managed cluster.
-func instantiateReferencedPolicyRefs(ctx context.Context, c client.Client, templateName string,
-	eventTrigger *v1beta1.EventTrigger, cluster *corev1.ObjectReference, objects any,
+func instantiateReferencedPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	templateName string, eventTrigger *v1beta1.EventTrigger, cluster *corev1.ObjectReference, objects any,
 	labels map[string]string, logger logr.Logger) (localSet, remoteSet *libsveltosset.Set, err error) {
 
 	// fetches all referenced ConfigMaps/Secrets
@@ -1464,11 +1500,11 @@ func instantiateReferencedPolicyRefs(ctx context.Context, c client.Client, templ
 		return nil, nil, err
 	}
 
-	localSet, err = instantiateResources(ctx, c, templateName, local, objects, labels, logger)
+	localSet, err = instantiateResources(ctx, c, e, templateName, local, objects, labels, logger)
 	if err != nil {
 		return nil, nil, err
 	}
-	remoteSet, err = instantiateResources(ctx, c, templateName, remote, objects, labels, logger)
+	remoteSet, err = instantiateResources(ctx, c, e, templateName, remote, objects, labels, logger)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1476,8 +1512,9 @@ func instantiateReferencedPolicyRefs(ctx context.Context, c client.Client, templ
 	return
 }
 
-func instantiateResources(ctx context.Context, c client.Client, templateName string, resources []client.Object,
-	objects any, labels map[string]string, logger logr.Logger) (*libsveltosset.Set, error) {
+func instantiateResources(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	templateName string, resources []client.Object, objects any, labels map[string]string,
+	logger logr.Logger) (*libsveltosset.Set, error) {
 
 	result := libsveltosset.Set{}
 
@@ -1490,7 +1527,7 @@ func instantiateResources(ctx context.Context, c client.Client, templateName str
 		l.V(logs.LogDebug).Info("process referenced resource")
 		var info *types.NamespacedName
 
-		if _, ok := ref.GetAnnotations()[InstantiateAnnotation]; !ok {
+		if _, ok := ref.GetAnnotations()[v1beta1.InstantiateAnnotation]; !ok {
 			// referenced ConfigMap/Secret is not a template. So there is no
 			// need to instantiate a new one. Generated ClusterProfile can directly
 			// reference this one
@@ -1505,7 +1542,7 @@ func instantiateResources(ctx context.Context, c client.Client, templateName str
 			// information from the resources in the managed cluster that generated the event.
 			// Generate then a new ConfigMap/Secret. The autocreated ClusterProfile will reference
 			// this new resource.
-			info, err = instantiateReferencedPolicy(ctx, ref, templateName, name, objects, labels, logger)
+			info, err = instantiateReferencedPolicy(ctx, e, ref, templateName, name, objects, labels, logger)
 			if err != nil {
 				return nil, err
 			}
@@ -1518,7 +1555,7 @@ func instantiateResources(ctx context.Context, c client.Client, templateName str
 	return &result, nil
 }
 
-func instantiateReferencedPolicy(ctx context.Context, ref client.Object,
+func instantiateReferencedPolicy(ctx context.Context, e *v1beta1.EventTrigger, ref client.Object,
 	templateName, name string, objects any, labels map[string]string, logger logr.Logger,
 ) (*types.NamespacedName, error) {
 
@@ -1570,6 +1607,15 @@ func instantiateReferencedPolicy(ctx context.Context, ref client.Object,
 			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName(), err))
 		return nil, err
 	}
+
+	// Keep track of all Secret/ConfigMap instances with "projectsveltos.io/instantiate" annotation
+	// referenced by an EventTrigger. When those changes, EventTrigger will be reconciled.
+	resourceTracker := getTrackerInstance()
+	resourceTracker.trackResourceForConsumer(
+		&corev1.ObjectReference{Kind: ref.GetObjectKind().GroupVersionKind().Kind, Namespace: ref.GetNamespace(),
+			Name: ref.GetName(), APIVersion: "v1"},
+		&corev1.ObjectReference{Kind: v1beta1.EventTriggerKind, Name: e.GetName(), APIVersion: v1beta1.GroupVersion.String()},
+	)
 
 	return &types.NamespacedName{Namespace: ReportNamespace, Name: name}, nil
 }
@@ -2224,8 +2270,8 @@ func instantiateSecrets(ctx context.Context, c client.Client, e *v1beta1.EventTr
 
 	for i := range e.Spec.SecretGenerator {
 		generator := &e.Spec.SecretGenerator[i]
-		info, err := instantiateResourceFromGenerator(ctx, c, generator, templateName, clusterNamespace, string(libsveltosv1beta1.SecretReferencedResourceKind),
-			data, labels, logger)
+		info, err := instantiateResourceFromGenerator(ctx, c, generator, e, templateName, clusterNamespace,
+			string(libsveltosv1beta1.SecretReferencedResourceKind), data, labels, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -2250,8 +2296,8 @@ func instantiateConfigMaps(ctx context.Context, c client.Client, e *v1beta1.Even
 
 	for i := range e.Spec.ConfigMapGenerator {
 		generator := &e.Spec.ConfigMapGenerator[i]
-		info, err := instantiateResourceFromGenerator(ctx, c, generator, templateName, clusterNamespace, string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
-			data, labels, logger)
+		info, err := instantiateResourceFromGenerator(ctx, c, generator, e, templateName, clusterNamespace,
+			string(libsveltosv1beta1.ConfigMapReferencedResourceKind), data, labels, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -2268,8 +2314,9 @@ func instantiateConfigMaps(ctx context.Context, c client.Client, e *v1beta1.Even
 }
 
 // instantiateResourceFromGenerator creates a resource from generator and patch it to the management cluster
-func instantiateResourceFromGenerator(ctx context.Context, c client.Client, generator *v1beta1.GeneratorReference, templateName, clusterNamespace, kind string,
-	data any, labels map[string]string, logger logr.Logger) (*types.NamespacedName, error) {
+func instantiateResourceFromGenerator(ctx context.Context, c client.Client, generator *v1beta1.GeneratorReference,
+	e *v1beta1.EventTrigger, templateName, clusterNamespace, kind string, data any, labels map[string]string,
+	logger logr.Logger) (*types.NamespacedName, error) {
 
 	namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, generator.Namespace)
 
@@ -2300,10 +2347,42 @@ func instantiateResourceFromGenerator(ctx context.Context, c client.Client, gene
 		return nil, err
 	}
 
-	info, err := instantiateReferencedPolicy(ctx, referencedResource, templateName, string(instantiatedName), data, labels, logger)
+	info, err := instantiateReferencedPolicy(ctx, e, referencedResource, templateName, string(instantiatedName), data, labels, logger)
 	if err != nil {
 		return nil, err
 	}
 
 	return info, nil
+}
+
+func getValuesFromHash(ctx context.Context, c client.Client, valuesFrom []configv1beta1.ValueFrom,
+	clusterNamespace, templateName string, data any, logger logr.Logger) []byte {
+
+	hash := ""
+	for i := range valuesFrom {
+		ref := &valuesFrom[i]
+
+		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, ref.Namespace)
+
+		name, err := instantiateSection(templateName, []byte(ref.Name), data, logger)
+		if err != nil {
+			continue
+		}
+
+		var resource client.Object
+		if ref.Kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
+			resource, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(name)})
+		} else {
+			resource, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(name)})
+		}
+		if err != nil {
+			continue
+		}
+
+		hash += render.AsCode(resource)
+	}
+
+	h := sha256.New()
+	h.Write([]byte(hash))
+	return h.Sum(nil)
 }

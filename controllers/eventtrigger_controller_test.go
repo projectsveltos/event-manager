@@ -92,8 +92,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ClusterSetMap:    make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 		resourceName := client.ObjectKey{
@@ -173,8 +171,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ClusterSetMap:    make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
@@ -246,8 +242,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ClusterSetMap:    make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
@@ -290,8 +284,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ClusterSetMap:    make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 		resourceScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
@@ -307,10 +299,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		clusterInfo := &corev1.ObjectReference{Namespace: randomString(), Name: randomString(),
 			Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
 		controllers.GetConsumersForEntry(reconciler.ClusterMap, clusterInfo).Insert(resourceRef)
-
-		eventSourceInfo := &corev1.ObjectReference{Name: randomString(),
-			Kind: libsveltosv1beta1.EventSourceKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
-		controllers.GetConsumersForEntry(reconciler.ReferenceMap, eventSourceInfo).Insert(resourceRef)
 
 		clusterSetInfo := &corev1.ObjectReference{Name: randomString(),
 			Kind: libsveltosv1beta1.ClusterSetKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
@@ -365,8 +353,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ClusterSetMap:    make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 		resourceScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
@@ -445,8 +431,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		clusters, err := controllers.GetClustersFromClusterSets(reconciler, context.TODO(),
