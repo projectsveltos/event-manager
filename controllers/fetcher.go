@@ -151,7 +151,8 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 			if apierrors.IsNotFound(err) {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("%s %s/%s does not exist yet",
 					policyRef.Kind, namespace, referencedName))
-				continue
+				return nil, nil, fmt.Errorf("referenced %s %s/%s does not exist",
+					policyRef.Kind, namespace, string(referencedName))
 			}
 			return nil, nil, err
 		}
