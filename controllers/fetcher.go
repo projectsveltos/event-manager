@@ -37,6 +37,8 @@ import (
 // fetchReferencedResources fetches resources referenced by EventTrigger.
 // This includes:
 // - EventSource and corresponding EventReports (from the passed in cluster only);
+// - ConfigMaps referenced in the ConfigMapGenerator section, in the PolicyRefs section and ValuesFrom
+// - Secrets referenced in the SecretGenerator section, in the PolicyRefs section and ValuesFrom
 func fetchReferencedResources(ctx context.Context, c client.Client,
 	e *v1beta1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]client.Object, error) {
 
@@ -66,18 +68,106 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 	if err != nil {
 		return nil, err
 	}
+
 	for i := range eventReports.Items {
 		result = append(result, &eventReports.Items[i])
 	}
 
-	// Resources references in PolicyRefs and/or ValuesFrom are not
-	// considered. Those resource namespace/name info can be expressed
-	// as template and so for different clusters/events different resources
-	// might be used.
-	// Also, EventTrigger should deploy ClusterProfile based on the state
-	// in the cluster when the event happened.
+	clusterType := clusterproxy.GetClusterType(cluster)
+	clusterObj, err := fecthClusterObjects(ctx, c, cluster.Namespace, cluster.Name, clusterType, logger)
+	if err == nil {
+		objects := currentObjects{
+			Cluster: clusterObj,
+		}
+
+		templateName := getTemplateName(cluster.Namespace, cluster.Name, e.Name)
+
+		referencedResources, err := collectResourcesFromConfigMapGenerators(ctx, c, objects, e,
+			cluster.Namespace, templateName, logger)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, referencedResources...)
+
+		referencedResources, err = collectResourcesFromSecretGenerators(ctx, c, objects, e,
+			cluster.Namespace, templateName, logger)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, referencedResources...)
+
+		local, remote, _ := fetchPolicyRefs(ctx, c, e, cluster, objects, templateName, logger)
+		result = append(result, local...)
+		result = append(result, remote...)
+
+		for i := range e.Spec.HelmCharts {
+			valuesFrom := getValuesFrom(ctx, c, e.Spec.HelmCharts[i].ValuesFrom, cluster.Namespace,
+				templateName, objects, logger)
+			result = append(result, valuesFrom...)
+		}
+
+		for i := range e.Spec.KustomizationRefs {
+			valuesFrom := getValuesFrom(ctx, c, e.Spec.KustomizationRefs[i].ValuesFrom, cluster.Namespace,
+				templateName, objects, logger)
+			result = append(result, valuesFrom...)
+		}
+	}
 
 	return result, nil
+}
+
+func collectResourcesFromConfigMapGenerators(ctx context.Context, c client.Client, objects any,
+	e *v1beta1.EventTrigger, templateName, clusterNamespace string, logger logr.Logger) ([]client.Object, error) {
+
+	results := make([]client.Object, len(e.Spec.ConfigMapGenerator))
+
+	for i := range e.Spec.ConfigMapGenerator {
+		generator := &e.Spec.ConfigMapGenerator[i]
+		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, generator.Namespace)
+
+		// The name of the referenced resource can be expressed as a template
+		referencedName, err := instantiateSection(templateName, []byte(generator.Name), objects, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		var referencedResource client.Object
+		referencedResource, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(referencedName)})
+		if err != nil {
+			return nil, err
+		}
+
+		results[i] = referencedResource
+	}
+
+	return results, nil
+}
+
+func collectResourcesFromSecretGenerators(ctx context.Context, c client.Client, objects any,
+	e *v1beta1.EventTrigger, templateName, clusterNamespace string, logger logr.Logger) ([]client.Object, error) {
+
+	results := make([]client.Object, len(e.Spec.SecretGenerator))
+
+	for i := range e.Spec.SecretGenerator {
+		generator := &e.Spec.SecretGenerator[i]
+		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, generator.Namespace)
+
+		// The name of the referenced resource can be expressed as a template
+		referencedName, err := instantiateSection(templateName, []byte(generator.Name), objects, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		var referencedResource client.Object
+		referencedResource, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(referencedName)})
+		if err != nil {
+			return nil, err
+		}
+
+		results[i] = referencedResource
+	}
+
+	return results, nil
 }
 
 // fetchEventSource fetches referenced EventSource

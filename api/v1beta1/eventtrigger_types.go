@@ -42,7 +42,7 @@ const (
 
 type GeneratorReference struct {
 	// Namespace of the referenced resource.
-	// Nnamespace can be left empty. In such a case, namespace will
+	// Namespace can be left empty. In such a case, namespace will
 	// be implicit set to cluster's namespace.
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
