@@ -358,6 +358,7 @@ var _ = Describe("Fetcher", func() {
 
 		initObjects := []client.Object{
 			secret,
+			cluster,
 			configMap,
 			e,
 			eventSource,
@@ -370,6 +371,6 @@ var _ = Describe("Fetcher", func() {
 
 		result, err := controllers.FetchReferencedResources(context.TODO(), c, e, getClusterRef(cluster), logger)
 		Expect(err).To(BeNil())
-		Expect(len(result)).To(Equal(2)) // EventSource + EventReport (no referenced resources)
+		Expect(len(result)).To(Equal(4)) // EventSource + EventReport + Referenced Resources
 	})
 })

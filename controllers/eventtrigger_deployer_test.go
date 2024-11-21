@@ -343,8 +343,9 @@ var _ = Describe("EventTrigger deployer", func() {
 
 		initObjects := []client.Object{
 			secret,
-			configMap,
+			cluster,
 			e,
+			configMap,
 			eventSource,
 			eventReport,
 		}
@@ -353,7 +354,8 @@ var _ = Describe("EventTrigger deployer", func() {
 		config += render.AsCode(e.Labels)
 		config += render.AsCode(eventSource.Spec)
 		config += render.AsCode(eventReport.Spec)
-		// Content of referenced resources in PolicyRef/ValuesFrom is not included
+		config += render.AsCode(configMap.Data)
+		config += render.AsCode(secret.Data)
 		h := sha256.New()
 		h.Write([]byte(config))
 		expectedHash := h.Sum(nil)
