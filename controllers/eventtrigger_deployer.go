@@ -310,35 +310,6 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 		}
 	}
 
-	clusterType := clusterproxy.GetClusterType(cluster)
-	clusterObj, err := fecthClusterObjects(ctx, c, cluster.Namespace, cluster.Name, clusterType, logger)
-	if err == nil {
-		objects := currentObjects{
-			Cluster: clusterObj,
-		}
-
-		templateName := getTemplateName(cluster.Namespace, cluster.Name, e.Name)
-		local, remote, _ := fetchPolicyRefs(ctx, c, e, cluster, objects, templateName, logger)
-		for i := range local {
-			config += render.AsCode(local[i])
-		}
-		for i := range remote {
-			config += render.AsCode(remote[i])
-		}
-
-		for i := range e.Spec.HelmCharts {
-			valuesFromHash := getValuesFromHash(ctx, c, e.Spec.HelmCharts[i].ValuesFrom, cluster.Namespace,
-				templateName, objects, logger)
-			config += render.AsCode(valuesFromHash)
-		}
-
-		for i := range e.Spec.KustomizationRefs {
-			valuesFromHash := getValuesFromHash(ctx, c, e.Spec.KustomizationRefs[i].ValuesFrom, cluster.Namespace,
-				templateName, objects, logger)
-			config += render.AsCode(valuesFromHash)
-		}
-	}
-
 	h := sha256.New()
 	h.Write([]byte(config))
 	return h.Sum(nil), nil
@@ -2336,10 +2307,19 @@ func instantiateResourceFromGenerator(ctx context.Context, c client.Client, gene
 		if apierrors.IsNotFound(err) {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("%s %s/%s does not exist yet",
 				kind, namespace, referencedName))
-			return nil, nil
+			return nil, fmt.Errorf("referenced resource %s %s/%s does not exist yet",
+				kind, namespace, referencedName)
 		}
 		return nil, err
 	}
+
+	// Keep track of all referenced Generators. When those changes, EventTrigger will be reconciled.
+	resourceTracker := getTrackerInstance()
+	resourceTracker.trackResourceForConsumer(
+		&corev1.ObjectReference{Kind: referencedResource.GetObjectKind().GroupVersionKind().Kind,
+			Namespace: referencedResource.GetNamespace(), Name: referencedResource.GetName(), APIVersion: "v1"},
+		&corev1.ObjectReference{Kind: v1beta1.EventTriggerKind, Name: e.GetName(), APIVersion: v1beta1.GroupVersion.String()},
+	)
 
 	instantiatedName, err := instantiateSection(templateName, []byte(generator.InstantiatedResourceNameFormat), data, logger)
 	if err != nil {
@@ -2355,10 +2335,10 @@ func instantiateResourceFromGenerator(ctx context.Context, c client.Client, gene
 	return info, nil
 }
 
-func getValuesFromHash(ctx context.Context, c client.Client, valuesFrom []configv1beta1.ValueFrom,
-	clusterNamespace, templateName string, data any, logger logr.Logger) []byte {
+func getValuesFrom(ctx context.Context, c client.Client, valuesFrom []configv1beta1.ValueFrom,
+	clusterNamespace, templateName string, data any, logger logr.Logger) []client.Object {
 
-	hash := ""
+	result := make([]client.Object, 0, len(valuesFrom))
 	for i := range valuesFrom {
 		ref := &valuesFrom[i]
 
@@ -2379,10 +2359,7 @@ func getValuesFromHash(ctx context.Context, c client.Client, valuesFrom []config
 			continue
 		}
 
-		hash += render.AsCode(resource)
+		result = append(result, resource)
 	}
-
-	h := sha256.New()
-	h.Write([]byte(hash))
-	return h.Sum(nil)
+	return result
 }
