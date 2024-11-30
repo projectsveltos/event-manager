@@ -52,11 +52,11 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	"github.com/projectsveltos/libsveltos/lib/funcmap"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	"github.com/projectsveltos/libsveltos/lib/sharding"
 	libsveltostemplate "github.com/projectsveltos/libsveltos/lib/template"
-	libsveltosutils "github.com/projectsveltos/libsveltos/lib/utils"
 )
 
 const (
@@ -685,7 +685,7 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 		currentEventSource.Annotations = map[string]string{
 			libsveltosv1beta1.DeployedBySveltosAnnotation: "true",
 		}
-		deployer.AddOwnerReference(currentEventSource, resource)
+		k8s_utils.AddOwnerReference(currentEventSource, resource)
 		return remoteClient.Update(ctx, currentEventSource)
 	}
 
@@ -697,7 +697,7 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 	currentEventSource.Annotations = map[string]string{
 		libsveltosv1beta1.DeployedBySveltosAnnotation: "true",
 	}
-	deployer.AddOwnerReference(currentEventSource, resource)
+	k8s_utils.AddOwnerReference(currentEventSource, resource)
 
 	logger.V(logs.LogDebug).Info("creating eventSource")
 	return remoteClient.Create(ctx, currentEventSource)
@@ -796,7 +796,7 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 		}
 
 		l.V(logs.LogDebug).Info("removing OwnerReference")
-		deployer.RemoveOwnerReference(es, resource)
+		k8s_utils.RemoveOwnerReference(es, resource)
 
 		if len(es.GetOwnerReferences()) != 0 {
 			l.V(logs.LogDebug).Info("updating")
@@ -968,7 +968,7 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 
 	addTypeInformationToObject(mgmtClusterSchema, clusterProfile)
 
-	dr, err := libsveltosutils.GetDynamicResourceInterface(mgmtClusterConfig,
+	dr, err := k8s_utils.GetDynamicResourceInterface(mgmtClusterConfig,
 		clusterProfile.GetObjectKind().GroupVersionKind(), clusterProfile.GetNamespace())
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get dynamic client: %v", err))
@@ -1057,7 +1057,7 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 
 	addTypeInformationToObject(mgmtClusterSchema, clusterProfile)
 
-	dr, err := libsveltosutils.GetDynamicResourceInterface(mgmtClusterConfig, clusterProfile.GetObjectKind().GroupVersionKind(), clusterProfile.GetNamespace())
+	dr, err := k8s_utils.GetDynamicResourceInterface(mgmtClusterConfig, clusterProfile.GetObjectKind().GroupVersionKind(), clusterProfile.GetNamespace())
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get dynamic client: %v", err))
 		return nil, err
@@ -1194,7 +1194,7 @@ func getResources(eventReport *libsveltosv1beta1.EventReport, logger logr.Logger
 
 		var err error
 		var policy *unstructured.Unstructured
-		policy, err = libsveltosutils.GetUnstructured([]byte(elements[i]))
+		policy, err = k8s_utils.GetUnstructured([]byte(elements[i]))
 		if err != nil {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get policy from Data %.100s", elements[i]))
 			return nil, err
@@ -1562,7 +1562,7 @@ func instantiateReferencedPolicy(ctx context.Context, e *v1beta1.EventTrigger, r
 	}
 	addTypeInformationToObject(mgmtClusterSchema, instantiatedObject)
 
-	dr, err := libsveltosutils.GetDynamicResourceInterface(mgmtClusterConfig,
+	dr, err := k8s_utils.GetDynamicResourceInterface(mgmtClusterConfig,
 		instantiatedObject.GetObjectKind().GroupVersionKind(), instantiatedObject.GetNamespace())
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get dynamic client: %v", err))

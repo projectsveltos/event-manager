@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/projectsveltos/event-manager/api/v1beta1"
-	"github.com/projectsveltos/libsveltos/lib/utils"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 )
 
 const (
@@ -163,7 +163,7 @@ data:
 
 		// This is the Secret that gets copied over to managed cluster
 		By("Create regcred Secret")
-		regcred, err := utils.GetUnstructured([]byte(regcredSecret))
+		regcred, err := k8s_utils.GetUnstructured([]byte(regcredSecret))
 		Expect(err).To(BeNil())
 		err = k8sClient.Create(context.TODO(), regcred)
 		if err != nil {
@@ -179,7 +179,7 @@ data:
 		objects, err := customSplit(configuration)
 		Expect(err).To(BeNil())
 		for i := range objects {
-			o, err := utils.GetUnstructured([]byte(objects[i]))
+			o, err := k8s_utils.GetUnstructured([]byte(objects[i]))
 			Expect(err).To(BeNil())
 			err = k8sClient.Create(context.TODO(), o)
 			if err != nil {
@@ -219,7 +219,7 @@ data:
 		Expect(k8sClient.Get(context.TODO(),
 			types.NamespacedName{Namespace: "default", Name: configMapGeneratorName},
 			currentConfigMap)).To(Succeed())
-		newConfigMap, err := utils.GetUnstructured([]byte(fmt.Sprintf(newConfigMapString, configMapGeneratorName)))
+		newConfigMap, err := k8s_utils.GetUnstructured([]byte(fmt.Sprintf(newConfigMapString, configMapGeneratorName)))
 		Expect(err).To(BeNil())
 		newConfigMap.SetResourceVersion(currentConfigMap.ResourceVersion)
 		Expect(k8sClient.Update(context.TODO(), newConfigMap))
