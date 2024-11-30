@@ -31,7 +31,7 @@ import (
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
-	libsveltosutils "github.com/projectsveltos/libsveltos/lib/utils"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 )
 
 var (
@@ -104,7 +104,7 @@ var _ = Describe("Generators", func() {
 		}
 		Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
-		u, err := libsveltosutils.GetUnstructured([]byte(toDeployConfigMap))
+		u, err := k8s_utils.GetUnstructured([]byte(toDeployConfigMap))
 		Expect(err).To(BeNil())
 
 		Byf("Creating a ConfigMap %s/%s to be referenced in PolicyRefs section", u.GetNamespace(), u.GetName())
@@ -124,7 +124,7 @@ var _ = Describe("Generators", func() {
 			map[string]string{key: value}, []configv1beta1.PolicyRef{policyRef})
 		eventTrigger.Spec.OneForEvent = true
 
-		u, err = libsveltosutils.GetUnstructured([]byte(tokenConfigMap))
+		u, err = k8s_utils.GetUnstructured([]byte(tokenConfigMap))
 		Expect(err).To(BeNil())
 		err = k8sClient.Create(context.TODO(), u)
 		if err != nil {
@@ -347,7 +347,7 @@ func createNamespaceAndSecret(c client.Client, secretNamespace string) {
 }
 
 func deleteConfigMap(cm string) {
-	u, err := libsveltosutils.GetUnstructured([]byte(cm))
+	u, err := k8s_utils.GetUnstructured([]byte(cm))
 	Expect(err).To(BeNil())
 
 	currentConfigMap := &corev1.ConfigMap{}

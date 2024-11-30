@@ -36,7 +36,7 @@ import (
 	"github.com/projectsveltos/event-manager/controllers"
 	"github.com/projectsveltos/event-manager/internal/test/helpers"
 	libsveltoscrd "github.com/projectsveltos/libsveltos/lib/crd"
-	"github.com/projectsveltos/libsveltos/lib/utils"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 )
 
 var (
@@ -84,25 +84,25 @@ var _ = BeforeSuite(func() {
 	}()
 
 	var sveltosCRD *unstructured.Unstructured
-	sveltosCRD, err = utils.GetUnstructured(libsveltoscrd.GetSveltosClusterCRDYAML())
+	sveltosCRD, err = k8s_utils.GetUnstructured(libsveltoscrd.GetSveltosClusterCRDYAML())
 	Expect(err).To(BeNil())
 	Expect(testEnv.Create(context.TODO(), sveltosCRD)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv, sveltosCRD)).To(Succeed())
 
 	var eventSourceCRD *unstructured.Unstructured
-	eventSourceCRD, err = utils.GetUnstructured(libsveltoscrd.GetEventSourceCRDYAML())
+	eventSourceCRD, err = k8s_utils.GetUnstructured(libsveltoscrd.GetEventSourceCRDYAML())
 	Expect(err).To(BeNil())
 	Expect(testEnv.Create(context.TODO(), eventSourceCRD)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv, eventSourceCRD)).To(Succeed())
 
 	var eventReportCRD *unstructured.Unstructured
-	eventReportCRD, err = utils.GetUnstructured(libsveltoscrd.GetEventReportCRDYAML())
+	eventReportCRD, err = k8s_utils.GetUnstructured(libsveltoscrd.GetEventReportCRDYAML())
 	Expect(err).To(BeNil())
 	Expect(testEnv.Create(context.TODO(), eventReportCRD)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv, eventReportCRD)).To(Succeed())
 
 	var dcCRD *unstructured.Unstructured
-	dcCRD, err = utils.GetUnstructured(libsveltoscrd.GetDebuggingConfigurationCRDYAML())
+	dcCRD, err = k8s_utils.GetUnstructured(libsveltoscrd.GetDebuggingConfigurationCRDYAML())
 	Expect(err).To(BeNil())
 	Expect(testEnv.Create(context.TODO(), dcCRD)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv, dcCRD)).To(Succeed())

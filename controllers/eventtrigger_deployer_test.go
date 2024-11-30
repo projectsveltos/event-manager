@@ -50,9 +50,8 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	fakedeployer "github.com/projectsveltos/libsveltos/lib/deployer/fake"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
-	"github.com/projectsveltos/libsveltos/lib/utils"
-	libsveltosutils "github.com/projectsveltos/libsveltos/lib/utils"
 )
 
 const (
@@ -542,7 +541,7 @@ var _ = Describe("EventTrigger deployer", func() {
 
 		// Add EventTrigger as owner of EventSource. This indicates previously EventSource was
 		// deployed because of this EventTrigger instance
-		deployer.AddOwnerReference(eventSource, resource)
+		k8s_utils.AddOwnerReference(eventSource, resource)
 		Expect(testEnv.Client.Update(context.TODO(), eventSource)).To(Succeed())
 
 		// Wait for cache to sync
@@ -762,7 +761,7 @@ var _ = Describe("EventTrigger deployer", func() {
 		Expect(waitForObject(context.TODO(), testEnv.Client, staleEventSource)).To(Succeed())
 
 		// Add EventTrigger as OwnerReference of the staleEventSource
-		deployer.AddOwnerReference(staleEventSource, resource)
+		k8s_utils.AddOwnerReference(staleEventSource, resource)
 		Expect(testEnv.Update(context.TODO(), staleEventSource)).To(Succeed())
 
 		eventSource := &libsveltosv1beta1.EventSource{
@@ -812,7 +811,7 @@ var _ = Describe("EventTrigger deployer", func() {
 		nginxName := nginxDeploymentName
 		nginxNamespace := randomString()
 
-		u, err := libsveltosutils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace)))
+		u, err := k8s_utils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace)))
 		Expect(err).To(BeNil())
 
 		collectedResources := []unstructured.Unstructured{*u}
@@ -917,11 +916,11 @@ var _ = Describe("EventTrigger deployer", func() {
 		nginxNamespace1 := randomString()
 		nginxNamespace2 := randomString()
 
-		u1, err := libsveltosutils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace1)))
+		u1, err := k8s_utils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace1)))
 		Expect(err).To(BeNil())
 
 		var u2 *unstructured.Unstructured
-		u2, err = libsveltosutils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace2)))
+		u2, err = k8s_utils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace2)))
 		Expect(err).To(BeNil())
 
 		collectedResources := []unstructured.Unstructured{*u1, *u2}
@@ -1417,11 +1416,11 @@ spec:
       port: 8443
       targetPort: 9379`
 
-		u1, err := libsveltosutils.GetUnstructured([]byte(httpsService1))
+		u1, err := k8s_utils.GetUnstructured([]byte(httpsService1))
 		Expect(err).To(BeNil())
 
 		var u2 *unstructured.Unstructured
-		u2, err = libsveltosutils.GetUnstructured([]byte(httpsService2))
+		u2, err = k8s_utils.GetUnstructured([]byte(httpsService2))
 		Expect(err).To(BeNil())
 
 		objects := &controllers.CurrentObjects{
@@ -1626,7 +1625,7 @@ spec:
       port: 80
       targetPort: 9376`
 
-		u, err := libsveltosutils.GetUnstructured([]byte(service))
+		u, err := k8s_utils.GetUnstructured([]byte(service))
 		Expect(err).To(BeNil())
 		Expect(u).ToNot(BeNil())
 
@@ -1656,7 +1655,7 @@ spec:
 				if elements[i] == "" {
 					continue
 				}
-				policy, err := utils.GetUnstructured([]byte(elements[i]))
+				policy, err := k8s_utils.GetUnstructured([]byte(elements[i]))
 				Expect(err).To(BeNil())
 				Expect(policy).ToNot(BeNil())
 
