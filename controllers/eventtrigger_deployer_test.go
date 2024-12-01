@@ -24,11 +24,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gdexlab/go-render/render"
-	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/gdexlab/go-render/render"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -50,9 +50,8 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	fakedeployer "github.com/projectsveltos/libsveltos/lib/deployer/fake"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
-	"github.com/projectsveltos/libsveltos/lib/utils"
-	libsveltosutils "github.com/projectsveltos/libsveltos/lib/utils"
 )
 
 const (
@@ -157,8 +156,6 @@ var _ = Describe("EventTrigger deployer", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		eScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
@@ -257,8 +254,6 @@ var _ = Describe("EventTrigger deployer", func() {
 			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
 			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggerMap:  make(map[types.NamespacedName]*libsveltosset.Set),
-			ReferenceMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		// Verify eventTrigger has been created
@@ -347,8 +342,9 @@ var _ = Describe("EventTrigger deployer", func() {
 
 		initObjects := []client.Object{
 			secret,
-			configMap,
+			cluster,
 			e,
+			configMap,
 			eventSource,
 			eventReport,
 		}
@@ -357,7 +353,8 @@ var _ = Describe("EventTrigger deployer", func() {
 		config += render.AsCode(e.Labels)
 		config += render.AsCode(eventSource.Spec)
 		config += render.AsCode(eventReport.Spec)
-		// Content of referenced resources in PolicyRef/ValuesFrom is not included
+		config += render.AsCode(configMap.Data)
+		config += render.AsCode(secret.Data)
 		h := sha256.New()
 		h.Write([]byte(config))
 		expectedHash := h.Sum(nil)
@@ -544,7 +541,7 @@ var _ = Describe("EventTrigger deployer", func() {
 
 		// Add EventTrigger as owner of EventSource. This indicates previously EventSource was
 		// deployed because of this EventTrigger instance
-		deployer.AddOwnerReference(eventSource, resource)
+		k8s_utils.AddOwnerReference(eventSource, resource)
 		Expect(testEnv.Client.Update(context.TODO(), eventSource)).To(Succeed())
 
 		// Wait for cache to sync
@@ -764,7 +761,7 @@ var _ = Describe("EventTrigger deployer", func() {
 		Expect(waitForObject(context.TODO(), testEnv.Client, staleEventSource)).To(Succeed())
 
 		// Add EventTrigger as OwnerReference of the staleEventSource
-		deployer.AddOwnerReference(staleEventSource, resource)
+		k8s_utils.AddOwnerReference(staleEventSource, resource)
 		Expect(testEnv.Update(context.TODO(), staleEventSource)).To(Succeed())
 
 		eventSource := &libsveltosv1beta1.EventSource{
@@ -814,7 +811,7 @@ var _ = Describe("EventTrigger deployer", func() {
 		nginxName := nginxDeploymentName
 		nginxNamespace := randomString()
 
-		u, err := libsveltosutils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace)))
+		u, err := k8s_utils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace)))
 		Expect(err).To(BeNil())
 
 		collectedResources := []unstructured.Unstructured{*u}
@@ -919,11 +916,11 @@ var _ = Describe("EventTrigger deployer", func() {
 		nginxNamespace1 := randomString()
 		nginxNamespace2 := randomString()
 
-		u1, err := libsveltosutils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace1)))
+		u1, err := k8s_utils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace1)))
 		Expect(err).To(BeNil())
 
 		var u2 *unstructured.Unstructured
-		u2, err = libsveltosutils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace2)))
+		u2, err = k8s_utils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, nginxName, nginxNamespace2)))
 		Expect(err).To(BeNil())
 
 		collectedResources := []unstructured.Unstructured{*u1, *u2}
@@ -1158,7 +1155,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					controllers.InstantiateAnnotation: "ok",
+					v1beta1.InstantiateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{
@@ -1173,7 +1170,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					controllers.InstantiateAnnotation: "ok",
+					v1beta1.InstantiateAnnotation: "ok",
 				},
 			},
 			Type: libsveltosv1beta1.ClusterProfileSecretType,
@@ -1250,7 +1247,7 @@ var _ = Describe("EventTrigger deployer", func() {
 			eventReport, libsveltosv1beta1.ClusterTypeCapi)
 
 		localSet, remoteSet, err := controllers.InstantiateReferencedPolicyRefs(context.TODO(), testEnv.Client,
-			randomString(), eventTrigger, clusterRef, object, labels, logger)
+			eventTrigger, randomString(), eventTrigger, clusterRef, object, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(localSet).ToNot(BeNil())
 		Expect(localSet.Len()).To(Equal(1))
@@ -1326,7 +1323,7 @@ var _ = Describe("EventTrigger deployer", func() {
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					controllers.InstantiateAnnotation: "ok",
+					v1beta1.InstantiateAnnotation: "ok",
 				},
 			},
 			Data: map[string]string{
@@ -1419,11 +1416,11 @@ spec:
       port: 8443
       targetPort: 9379`
 
-		u1, err := libsveltosutils.GetUnstructured([]byte(httpsService1))
+		u1, err := k8s_utils.GetUnstructured([]byte(httpsService1))
 		Expect(err).To(BeNil())
 
 		var u2 *unstructured.Unstructured
-		u2, err = libsveltosutils.GetUnstructured([]byte(httpsService2))
+		u2, err = k8s_utils.GetUnstructured([]byte(httpsService2))
 		Expect(err).To(BeNil())
 
 		objects := &controllers.CurrentObjects{
@@ -1437,7 +1434,7 @@ spec:
 			eventReport, libsveltosv1beta1.ClusterTypeCapi)
 
 		localSet, remoteSet, err := controllers.InstantiateReferencedPolicyRefs(context.TODO(), testEnv,
-			randomString(), eventTrigger, clusterRef, objects, labels, logger)
+			eventTrigger, randomString(), eventTrigger, clusterRef, objects, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(localSet).ToNot(BeNil())
 		Expect(localSet.Len()).To(Equal(0))
@@ -1628,7 +1625,7 @@ spec:
       port: 80
       targetPort: 9376`
 
-		u, err := libsveltosutils.GetUnstructured([]byte(service))
+		u, err := k8s_utils.GetUnstructured([]byte(service))
 		Expect(err).To(BeNil())
 		Expect(u).ToNot(BeNil())
 
@@ -1658,7 +1655,7 @@ spec:
 				if elements[i] == "" {
 					continue
 				}
-				policy, err := utils.GetUnstructured([]byte(elements[i]))
+				policy, err := k8s_utils.GetUnstructured([]byte(elements[i]))
 				Expect(err).To(BeNil())
 				Expect(policy).ToNot(BeNil())
 

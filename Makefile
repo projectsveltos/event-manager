@@ -51,8 +51,8 @@ KIND := $(TOOLS_BIN_DIR)/kind
 KUBECTL := $(TOOLS_BIN_DIR)/kubectl
 CLUSTERCTL := $(TOOLS_BIN_DIR)/clusterctl
 
-GOLANGCI_LINT_VERSION := "v1.59.0"
-CLUSTERCTL_VERSION := "v1.8.3"
+GOLANGCI_LINT_VERSION := "v1.61.0"
+CLUSTERCTL_VERSION := "v1.8.5"
 
 KUSTOMIZE_VER := v5.3.0
 KUSTOMIZE_BIN := kustomize
@@ -194,7 +194,7 @@ endif
 # K8S_VERSION for the Kind cluster can be set as environment variable. If not defined,
 # this default value is used
 ifndef K8S_VERSION
-K8S_VERSION := v1.31.0
+K8S_VERSION := v1.31.2
 endif
 
 KIND_CONFIG ?= kind-cluster.yaml
@@ -258,7 +258,7 @@ create-cluster: $(KIND) $(CLUSTERCTL) $(KUBECTL) $(ENVSUBST) ## Create a new kin
 	$(KIND) get kubeconfig --name $(WORKLOAD_CLUSTER_NAME) > test/fv/workload_kubeconfig
 
 	@echo "install calico on workload cluster"
-	$(KUBECTL) --kubeconfig=./test/fv/workload_kubeconfig apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.0/manifests/calico.yaml
+	$(KUBECTL) --kubeconfig=./test/fv/workload_kubeconfig apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/calico.yaml
 
 	@echo wait for calico pod
 	$(KUBECTL) --kubeconfig=./test/fv/workload_kubeconfig wait --for=condition=Available deployment/calico-kube-controllers -n kube-system --timeout=$(TIMEOUT)

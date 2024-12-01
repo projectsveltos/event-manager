@@ -33,11 +33,16 @@ const (
 	EventTriggerKind = "EventTrigger"
 
 	FeatureEventTrigger = "EventTrigger"
+
+	// InstantiateAnnotation is the annotation that must be set on a referenced
+	// ConfigMap/Secret when the content is a template and needs variable substitution
+	// using event/cluster data
+	InstantiateAnnotation = "projectsveltos.io/instantiate"
 )
 
 type GeneratorReference struct {
 	// Namespace of the referenced resource.
-	// Nnamespace can be left empty. In such a case, namespace will
+	// Namespace can be left empty. In such a case, namespace will
 	// be implicit set to cluster's namespace.
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
