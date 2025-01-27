@@ -19,11 +19,13 @@ package controllers_test
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 
+	"github.com/cloudevents/sdk-go/v2/event"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -1795,6 +1797,220 @@ data:
 			clusterNamespace, clusterName, clusterType, logger)
 		Expect(err).To(BeNil())
 		Expect(len(instantiatedSecrets)).To(Equal(1))
+	})
+
+	It("getCloudEvents processes collected CloudEvents", func() {
+		//nolint: lll // line with cloudEvent
+		ce1String := `{"specversion":"1.0","id":"10001","source":"my.source","type":"my.type","subject":"mgianluc","datacontenttype":"application/json","data":{"message":"Hello message 1!"}}`
+		ce1JsonData := []byte(ce1String)
+
+		//nolint: lll // line with cloudEvent
+		ce2String := `{"specversion":"1.0","id":"10002","source":"my.source","type":"my.type","subject":"mgianluc","datacontenttype":"application/json","data":{"message":"Hello message 2!"}}`
+		ce2JsonData := []byte(ce2String)
+
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+			},
+			Spec: libsveltosv1beta1.EventReportSpec{
+				CloudEvents: [][]byte{ce1JsonData, ce2JsonData},
+			},
+		}
+
+		result, err := controllers.GetCloudEvents(eventReport, logger)
+		Expect(err).To(BeNil())
+		Expect(len(result)).To(Equal(2))
+		Expect(result[0]["specversion"]).To(Equal("1.0"))
+		Expect(result[0]["id"]).To(Equal("10001"))
+		Expect(result[1]["id"]).To(Equal("10002"))
+	})
+
+	It("appendCloudEventClusterProfiles appens all clusterProfiles created because of CloudEvents", func() {
+		eventTriggerName := randomString()
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeSveltos
+
+		eventSourceName := randomString()
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
+				},
+			},
+		}
+
+		lbls := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
+			eventReport, clusterType)
+		lbls["eventtrigger.lib.projectsveltos.io/cesource"] = randomString()
+		lbls["eventtrigger.lib.projectsveltos.io/cesubject"] = randomString()
+
+		// ClusterProfile created because of CloudEvents have eventtrigger.lib.projectsveltos.io/cesource label
+		clusterProfile := &configv1beta1.ClusterProfile{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   randomString(),
+				Labels: lbls,
+			},
+		}
+
+		// This clusterProfile does not have cloudevent labels
+		clusterProfile2 := &configv1beta1.ClusterProfile{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
+					eventReport, clusterType),
+			},
+		}
+
+		Expect(testEnv.Create(context.TODO(), clusterProfile)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, clusterProfile)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), clusterProfile2)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, clusterProfile2)).To(Succeed())
+
+		clusterProfiles := []*configv1beta1.ClusterProfile{}
+		clusterProfiles, err := controllers.AppendCloudEventClusterProfiles(context.TODO(), testEnv.Client,
+			clusterNamespace, clusterName, eventTriggerName, clusterType, eventReport, clusterProfiles)
+		Expect(err).To(BeNil())
+		Expect(len(clusterProfiles)).To(Equal(1))
+		Expect(clusterProfiles[0].Name).To(Equal(clusterProfile.Name))
+	})
+
+	It("deleteInstantiatedFromGenerators removes ConfigMap and Secret instances created due to Generators", func() {
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+		}
+
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeSveltos
+
+		eventSourceName := randomString()
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
+				},
+			},
+		}
+
+		lbls := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
+			eventReport, clusterType)
+
+		ce := event.New()
+		ce.SetSubject(randomString())
+		ce.SetSource(randomString())
+
+		//nolint: lll // line with cloudEvent
+		ceString := fmt.Sprintf(`{"specversion":"1.0","id":"10001","source":%q,"type":"my.type","subject":%q,"datacontenttype":"application/json","data":{"message":"Hello message 1!"}}`,
+			ce.Context.GetSource(), ce.Context.GetSubject())
+		ceJsonData := []byte(ceString)
+
+		var ceMap map[string]interface{}
+		Expect(json.Unmarshal(ceJsonData, &ceMap)).To(Succeed())
+
+		lbls["eventtrigger.lib.projectsveltos.io/cesource"] = ce.Context.GetSource()
+		lbls["eventtrigger.lib.projectsveltos.io/cesubject"] = ce.Context.GetSubject()
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: clusterNamespace,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+		// Secret not created because of generators, generators label missing
+		secret1 := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: clusterNamespace,
+				Labels:    lbls,
+			},
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
+		}
+
+		// ConfigMap not created because of generators, generators label missing
+		configMap1 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: clusterNamespace,
+				Labels:    lbls,
+			},
+		}
+
+		lbls["eventtrigger.lib.projectsveltos.io/fromgenerator"] = "ok"
+		// Secret created because of generators, generators label present
+		secret2 := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: clusterNamespace,
+				Labels:    lbls,
+			},
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
+		}
+
+		// ConfigMap created because of generators, generators label present
+		configMap2 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: clusterNamespace,
+				Labels:    lbls,
+			},
+		}
+
+		Expect(testEnv.Create(context.TODO(), secret1)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, secret1)).To(Succeed())
+
+		Expect(testEnv.Create(context.TODO(), configMap1)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, configMap1)).To(Succeed())
+
+		Expect(testEnv.Create(context.TODO(), secret2)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, secret2)).To(Succeed())
+
+		Expect(testEnv.Create(context.TODO(), configMap2)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, configMap2)).To(Succeed())
+
+		Expect(controllers.DeleteInstantiatedFromGenerators(context.TODO(), testEnv.Client, clusterNamespace,
+			clusterName, clusterType, eventTrigger, eventReport, ceMap, logger)).To(Succeed())
+
+		// Secret1 must be deleted
+		Eventually(func() bool {
+			currentSecret := &corev1.Secret{}
+			err := testEnv.Client.Get(context.TODO(),
+				types.NamespacedName{Namespace: secret1.Namespace, Name: secret1.Name}, currentSecret)
+			if err == nil {
+				return currentSecret.DeletionTimestamp.IsZero()
+			}
+			return apierrors.IsNotFound(err)
+		}, timeout, pollingInterval).Should(BeTrue())
+
+		// ConfigMap1 must be deleted
+		Eventually(func() bool {
+			currentConfigMap := &corev1.ConfigMap{}
+			err := testEnv.Client.Get(context.TODO(),
+				types.NamespacedName{Namespace: configMap1.Namespace, Name: configMap1.Name}, currentConfigMap)
+			if err == nil {
+				return currentConfigMap.DeletionTimestamp.IsZero()
+			}
+			return apierrors.IsNotFound(err)
+		}, timeout, pollingInterval).Should(BeTrue())
+
+		// Secret2 must exist
+		currentSecret := &corev1.Secret{}
+		err := testEnv.Client.Get(context.TODO(),
+			types.NamespacedName{Namespace: secret2.Namespace, Name: secret2.Name}, currentSecret)
+		Expect(err).To(BeNil())
+
+		// ConfigMap2 must exist
+		currentConfigMap := &corev1.ConfigMap{}
+		err = testEnv.Client.Get(context.TODO(),
+			types.NamespacedName{Namespace: configMap2.Namespace, Name: configMap2.Name}, currentConfigMap)
+		Expect(err).To(BeNil())
 	})
 })
 

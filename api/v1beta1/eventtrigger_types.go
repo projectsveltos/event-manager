@@ -40,6 +40,18 @@ const (
 	InstantiateAnnotation = "projectsveltos.io/instantiate"
 )
 
+type CloudEventAction string
+
+const (
+	// CloudEventActionCreate indicates that eventTrigger should create profiles (and
+	// so kubernetes resources) in response to the CloudEvent.
+	CloudEventActionCreate = CloudEventAction("Create")
+
+	// CloudEventActionDelete indicates that eventTrigger should  should delete profiles
+	// (and so Kubernetes resources) in response to the CloudEvent.
+	CloudEventActionDelete = CloudEventAction("Delete")
+)
+
 type GeneratorReference struct {
 	// Namespace of the referenced resource.
 	// Namespace can be left empty. In such a case, namespace will
@@ -244,6 +256,14 @@ type EventTriggerSpec struct {
 	// generated in response to events.
 	// +optional
 	DriftExclusions []configv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
+
+	// CloudEventAction determines the action to take based on the received CloudEvent.
+	// CloudEvents with the same source and subject are considered related and represent
+	// different states of the same entity. This field specifies whether to create or
+	// delete the associated Kubernetes resources.
+	// +kubebuilder:default:=Create
+	// +optional
+	CloudEventAction CloudEventAction `json:"cloudEventAction,omitempty"`
 
 	// ExtraLabels: These labels will be added by Sveltos to all Kubernetes resources deployed in
 	// a managed cluster based on this ClusterProfile/Profile instance.

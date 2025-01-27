@@ -42,6 +42,8 @@ var (
 	GetKeyFromObject      = getKeyFromObject
 	GetHandlersForFeature = getHandlersForFeature
 	GetConsumersForEntry  = getConsumersForEntry
+
+	GetCloudEvents = getCloudEvents
 )
 
 type (
@@ -50,17 +52,19 @@ type (
 )
 
 var (
-	RemoveClusterInfoEntry  = removeClusterInfoEntry
-	EventTriggerHash        = eventTriggerHash
-	RemoveStaleEventSources = removeStaleEventSources
-	RemoveStaleEventReports = removeStaleEventReports
-	DeployEventSource       = deployEventSource
+	RemoveClusterInfoEntry          = removeClusterInfoEntry
+	EventTriggerHash                = eventTriggerHash
+	RemoveStaleEventSources         = removeStaleEventSources
+	RemoveStaleEventReports         = removeStaleEventReports
+	DeployEventSource               = deployEventSource
+	AppendCloudEventClusterProfiles = appendCloudEventClusterProfiles
 
 	InstantiateOneClusterProfilePerAllResource = instantiateOneClusterProfilePerAllResource
 	InstantiateOneClusterProfilePerResource    = instantiateOneClusterProfilePerResource
 	RemoveClusterProfiles                      = removeClusterProfiles
 
 	InstantiateFromGeneratorsPerResource = instantiateFromGeneratorsPerResource
+	DeleteInstantiatedFromGenerators     = deleteInstantiatedFromGenerators
 
 	GetInstantiatedObjectLabels = getInstantiatedObjectLabels
 	GetClusterProfileName       = getClusterProfileName
