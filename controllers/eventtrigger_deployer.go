@@ -68,6 +68,9 @@ const (
 	clusterNamespaceLabel            = "eventtrigger.lib.projectsveltos.io/clusterNamespace"
 	clusterNameLabel                 = "eventtrigger.lib.projectsveltos.io/clustername"
 	clusterTypeLabel                 = "eventtrigger.lib.projectsveltos.io/clustertype"
+	cloudEventSourceLabel            = "eventtrigger.lib.projectsveltos.io/cesource"
+	cloudEventSubjectLabel           = "eventtrigger.lib.projectsveltos.io/cesubject"
+	generatorLabel                   = "eventtrigger.lib.projectsveltos.io/fromgenerator"
 	referencedResourceNamespaceLabel = "eventtrigger.lib.projectsveltos.io/refnamespace"
 	referencedResourceNameLabel      = "eventtrigger.lib.projectsveltos.io/refname"
 )
@@ -828,20 +831,27 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 }
 
 // When instantiating one ClusterProfile for all resources those values are available.
-// MatchingResources is always available. Resources is available only if EventSource.Spec.CollectResource is
-// set to true (otherwise resources matching an EventSource won't be sent to management cluster)
+// Resources contains matching Kubernetes resources (this one only
+// if EventSource.Spec.CollectResource is set to true).
+// MatchingResources is always available if Kubernetes resources were a match.
+// CloudEvents represent matching CloudEvents.
 type currentObjects struct {
 	MatchingResources []corev1.ObjectReference
 	Resources         []map[string]interface{}
+	CloudEvents       []map[string]interface{}
 	Cluster           map[string]interface{}
 }
 
 // When instantiating one ClusterProfile per resource those values are available.
-// MatchingResource is always available. Resource is available only if EventSource.Spec.CollectResource is
-// set to true (otherwise resources matching an EventSource won't be sent to management cluster)
+// Resource contains matching Kubernetes resource (this one only
+// if EventSource.Spec.CollectResource is set to true).
+// MatchingResource is always available if Kubernetes resources were a match.
+// CloudEvent represent a match CloudEvent.
+// For every object, either MatchingResource/Resource is available or CloudEvent
 type currentObject struct {
 	MatchingResource corev1.ObjectReference
 	Resource         map[string]interface{}
+	CloudEvent       map[string]interface{}
 	Cluster          map[string]interface{}
 }
 
@@ -855,15 +865,28 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, er *libsveltosv1beta1.EventReport,
 	logger logr.Logger) error {
 
+	var err error
 	// If no resource is currently matching, clear all
-	if !er.DeletionTimestamp.IsZero() || len(er.Spec.MatchingResources) == 0 {
+	if !er.DeletionTimestamp.IsZero() || !hasMatchingResources(er) {
+		// ClusterProfiles created because of CloudEvents are removed when CloudEventAction is set to Delete.
+		// Fetch all ClusterProfiles created because of CloudEvents by this eventTrigger and append to list
+		// of ClusterProfiles that are not stale
+		clusterProfiles := []*configv1beta1.ClusterProfile{}
+		clusterProfiles, err = appendCloudEventClusterProfiles(ctx, c, clusterNamespace, clusterName, eventTrigger.Name,
+			clusterType, er, clusterProfiles)
+		if err != nil {
+			return err
+		}
 		return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType,
-			eventTrigger, er, nil, nil, logger)
+			eventTrigger, er, clusterProfiles, nil, logger)
 	}
 
-	var err error
 	var clusterProfiles []*configv1beta1.ClusterProfile
 	var fromGenerators []libsveltosv1beta1.PolicyRef
+
+	// Resources (ClusterProfiles, ConfigMaps and Secrets) created because of CloudEvent contains the
+	// cloudEventSubjectLabel and cloudEventSourceLabel. This means a CloudEvent is uniquely identified
+	// by Sveltos by looking at just Subject and Source.
 
 	if eventTrigger.Spec.OneForEvent {
 		clusterProfiles, err = instantiateOneClusterProfilePerResource(ctx, c, clusterNamespace, clusterName,
@@ -896,18 +919,28 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 		}
 	}
 
+	// ClusterProfiles created because of CloudEvents are removed when CloudEventAction is set to Delete.
+	// Fetch all ClusterProfiles created because of CloudEvents by this eventTrigger and append to list
+	// of ClusterProfiles that are not stale
+	clusterProfiles, err = appendCloudEventClusterProfiles(ctx, c, clusterNamespace, clusterName, eventTrigger.Name,
+		clusterType, er, clusterProfiles)
+	if err != nil {
+		return err
+	}
+
 	// Remove stale ClusterProfiles/ConfigMaps/Secrets, i.e, resources previously created by this EventTrigger
 	// instance for this cluster but currently not needed anymore
 	return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger, er,
 		clusterProfiles, fromGenerators, logger)
 }
 
-// instantiateOneClusterProfilePerResource instantiate a ClusterProfile for each resource currently matching the referenced
-// EventSource (result is taken from EventReport).
+// instantiateOneClusterProfilePerResource instantiate a ClusterProfile for each resource/cloudEvent currently matching
+// the referenced EventSource (result is taken from EventReport).
 // When instantiating:
 // - "MatchingResource" references a corev1.ObjectReference representing the resource (always available)
 // - "Resource" references an unstructured.Unstructured referencing the resource (available only if EventSource.Spec.CollectResources
 // is set to true)
+// - "CloudEvent" references a cloudEvent
 func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger,
 	eventReport *libsveltosv1beta1.EventReport, logger logr.Logger) ([]*configv1beta1.ClusterProfile, error) {
@@ -927,7 +960,9 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 		if err != nil {
 			return nil, err
 		}
-		clusterProfiles = append(clusterProfiles, clusterProfile)
+		if clusterProfile != nil {
+			clusterProfiles = append(clusterProfiles, clusterProfile)
+		}
 	}
 
 	return clusterProfiles, nil
@@ -947,8 +982,13 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
 		er, clusterType)
-	labels = appendInstantiatedObjectLabelsForResource(labels,
-		object.MatchingResource.Namespace, object.MatchingResource.Name)
+	if object.CloudEvent != nil {
+		labels = appendInstantiatedObjectLabelsForCloudEvent(labels, getCESource(object.CloudEvent),
+			getCESubject(object.CloudEvent))
+	} else {
+		labels = appendInstantiatedObjectLabelsForResource(labels,
+			object.MatchingResource.Namespace, object.MatchingResource.Name)
+	}
 	labels = appendServiceAccountLabels(eventTrigger, labels)
 
 	clusterProfileName, err := getClusterProfileName(ctx, c, labels)
@@ -958,6 +998,11 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	}
 
 	clusterProfile := getNonInstantiatedClusterProfile(eventTrigger, clusterProfileName, labels)
+	if object.CloudEvent != nil && eventTrigger.Spec.CloudEventAction == v1beta1.CloudEventActionDelete {
+		// Resources created because of a cloudEvent are ONLY removed when same (same subject/source) cloudEvent
+		// is received and EventTrigger.Spec.CloudEventAction is set to delete.
+		return nil, deleteClusterProfile(ctx, c, clusterProfile, logger)
+	}
 
 	clusterProfileSpec, err := instantiateClusterProfileSpecForResource(ctx, c, clusterNamespace, clusterName,
 		clusterType, eventTrigger, labels, object, logger)
@@ -1201,6 +1246,23 @@ func getResources(eventReport *libsveltosv1beta1.EventReport, logger logr.Logger
 		}
 
 		result = append(result, *policy)
+	}
+
+	return result, nil
+}
+
+// getCloudEvents returns a slice of map[string]interface{}
+func getCloudEvents(eventReport *libsveltosv1beta1.EventReport, logger logr.Logger) ([]map[string]interface{}, error) {
+	result := make([]map[string]interface{}, 0)
+	for i := range eventReport.Spec.CloudEvents {
+		var data map[string]interface{}
+		err := json.Unmarshal(eventReport.Spec.CloudEvents[i], &data)
+		if err != nil {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse cloudEvent %v", err))
+			return nil, err
+		}
+
+		result = append(result, data)
 	}
 
 	return result, nil
@@ -1680,11 +1742,15 @@ func getClusterProfileName(ctx context.Context, c client.Client, labels map[stri
 		objects[i] = &clusterProfileList.Items[i]
 	}
 
-	return getInstantiatedObjectName(objects)
+	return getInstantiatedObjectName(ctx, c, objects)
 }
 
 func getResourceName(ctx context.Context, c client.Client, ref client.Object,
 	labels map[string]string) (name string, err error) {
+
+	// Always append the labels identifying the referenced resource
+	labels[referencedResourceNamespaceLabel] = ref.GetNamespace()
+	labels[referencedResourceNameLabel] = ref.GetName()
 
 	switch ref.(type) {
 	case *corev1.ConfigMap:
@@ -1713,12 +1779,12 @@ func getConfigMapName(ctx context.Context, c client.Client, labels map[string]st
 		return
 	}
 
-	objects := make([]client.Object, len(configMapList.Items))
+	objects := make([]client.Object, 0)
 	for i := range configMapList.Items {
-		objects[i] = &configMapList.Items[i]
+		objects = append(objects, &configMapList.Items[i])
 	}
 
-	return getInstantiatedObjectName(objects)
+	return getInstantiatedObjectName(ctx, c, objects)
 }
 
 // getSecretName returns the name for a given Secret given the labels such Secret
@@ -1737,15 +1803,17 @@ func getSecretName(ctx context.Context, c client.Client, labels map[string]strin
 		return
 	}
 
-	objects := make([]client.Object, len(secretList.Items))
+	objects := make([]client.Object, 0)
 	for i := range secretList.Items {
-		objects[i] = &secretList.Items[i]
+		objects = append(objects, &secretList.Items[i])
 	}
 
-	return getInstantiatedObjectName(objects)
+	return getInstantiatedObjectName(ctx, c, objects)
 }
 
-func getInstantiatedObjectName(objects []client.Object) (name string, err error) {
+func getInstantiatedObjectName(ctx context.Context, c client.Client, objects []client.Object,
+) (name string, err error) {
+
 	prefix := "sveltos-"
 	switch len(objects) {
 	case 0:
@@ -1760,7 +1828,16 @@ func getInstantiatedObjectName(objects []client.Object) (name string, err error)
 		name = objects[0].GetName()
 		err = nil
 	default:
-		err = fmt.Errorf("more than one resource")
+		err = fmt.Errorf("more than one resource of gvk %s found",
+			objects[0].GetObjectKind().GroupVersionKind().String())
+
+		// Leave first object, remove all others
+		for i := range objects[1:] {
+			// Ignore eventual error, since we are returning an error anyway
+			_ = c.Delete(ctx, objects[i])
+		}
+
+		return name, err
 	}
 	return name, err
 }
@@ -1794,6 +1871,72 @@ func appendInstantiatedObjectLabelsForResource(labels map[string]string, resourc
 	}
 
 	return labels
+}
+
+// appendInstantiatedObjectLabelsForCloudEvent appends labels specific to a specific cloudEvent
+func appendInstantiatedObjectLabelsForCloudEvent(labels map[string]string, csSource, ceSubject string) map[string]string {
+	labels[cloudEventSourceLabel] = csSource
+	labels[cloudEventSubjectLabel] = ceSubject
+
+	return labels
+}
+
+func isGeneratedFromCloudEvent(resource client.Object) bool {
+	lbls := resource.GetLabels()
+	if lbls == nil {
+		return false
+	}
+	if _, ok := lbls[cloudEventSourceLabel]; ok {
+		return true
+	}
+	return false
+}
+
+func isFromGenerators(resource client.Object) bool {
+	lbls := resource.GetLabels()
+	if lbls == nil {
+		return false
+	}
+	if _, ok := lbls[generatorLabel]; ok {
+		return true
+	}
+	return false
+}
+
+func isResourceExist(resource client.Object) bool {
+	if reflect.ValueOf(resource).IsNil() {
+		return false
+	}
+
+	return resource.GetDeletionTimestamp().IsZero()
+}
+
+func getCESource(cloudEvent map[string]interface{}) string {
+	v, ok := cloudEvent["source"]
+	if !ok {
+		return ""
+	}
+
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+
+	return s
+}
+
+func getCESubject(cloudEvent map[string]interface{}) string {
+	v, ok := cloudEvent["subject"]
+	if !ok {
+		return ""
+	}
+
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+
+	return s
 }
 
 func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
@@ -1898,6 +2041,14 @@ func removeConfigMaps(ctx context.Context, c client.Client, clusterNamespace, cl
 
 	for i := range configMaps.Items {
 		cm := &configMaps.Items[i]
+		// For existing EventTrigger and EventReport
+		if isResourceExist(eventTrigger) && isResourceExist(er) &&
+			isGeneratedFromCloudEvent(cm) && isFromGenerators(cm) {
+			// ConfigMaps generated for CloudEvents out of Generators are removed
+			// when CloudEventAction is set to Delete
+			continue
+		}
+
 		if _, ok := policyRefs[*getPolicyRef(cm)]; !ok {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("deleting configMap %s", cm.Name))
 			err = c.Delete(ctx, cm)
@@ -1935,6 +2086,13 @@ func removeSecrets(ctx context.Context, c client.Client, clusterNamespace, clust
 
 	for i := range secrets.Items {
 		secret := &secrets.Items[i]
+		// For existing EventTrigger and EventReport
+		if isResourceExist(eventTrigger) && isResourceExist(er) &&
+			isGeneratedFromCloudEvent(secret) && isFromGenerators(secret) {
+			// ConfigMaps generated for CloudEvents out of Generators are removed
+			// when CloudEventAction is set to Delete
+			continue
+		}
 		if _, ok := policyRefs[*getPolicyRef(secret)]; !ok {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("deleting secret %s", secret.Name))
 			err = c.Delete(ctx, secret)
@@ -2058,9 +2216,15 @@ func prepareCurrentObjects(ctx context.Context, c client.Client, clusterNamespac
 		return nil, err
 	}
 
-	values := make([]map[string]interface{}, len(resources))
+	cloudEvents, err := getCloudEvents(eventReport, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching cloudEvents %v", err))
+		return nil, err
+	}
+
+	resourceValues := make([]map[string]interface{}, len(resources)+len(cloudEvents))
 	for i := range resources {
-		values[i] = resources[i].UnstructuredContent()
+		resourceValues[i] = resources[i].UnstructuredContent()
 	}
 	cluster, err := fecthClusterObjects(ctx, c, clusterNamespace, clusterName, clusterType, logger)
 	if err != nil {
@@ -2070,7 +2234,8 @@ func prepareCurrentObjects(ctx context.Context, c client.Client, clusterNamespac
 
 	return &currentObjects{
 		MatchingResources: eventReport.Spec.MatchingResources,
-		Resources:         values,
+		Resources:         resourceValues,
+		CloudEvents:       cloudEvents,
 		Cluster:           cluster,
 	}, nil
 }
@@ -2114,6 +2279,18 @@ func prepareCurrentObjectList(ctx context.Context, c client.Client, clusterNames
 				Cluster:          cluster,
 			})
 		}
+	}
+
+	cloudEvents, err := getCloudEvents(eventReport, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching cloudEvents %v", err))
+		return nil, err
+	}
+	for i := range cloudEvents {
+		objects = append(objects, currentObject{
+			CloudEvent: cloudEvents[i],
+			Cluster:    cluster,
+		})
 	}
 
 	return objects, nil
@@ -2161,6 +2338,11 @@ func appendServiceAccountLabels(eventTrigger *v1beta1.EventTrigger, labels map[s
 	return labels
 }
 
+func appendGeneratorLabel(labels map[string]string) map[string]string {
+	labels[generatorLabel] = "ok"
+	return labels
+}
+
 // instantiateFromGenerators instantiates ConfigMaps from ConfigMapGenerator and Secrets from SecretGenerator
 func instantiateFromGeneratorsPerResource(ctx context.Context, c client.Client, eventTrigger *v1beta1.EventTrigger,
 	er *libsveltosv1beta1.EventReport, clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
@@ -2178,7 +2360,19 @@ func instantiateFromGeneratorsPerResource(ctx context.Context, c client.Client, 
 	for i := range objects {
 		labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
 			er, clusterType)
+		if objects[i].CloudEvent != nil {
+			labels = appendInstantiatedObjectLabelsForCloudEvent(labels, getCESource(objects[i].CloudEvent),
+				getCESubject(objects[i].CloudEvent))
+		}
+		labels = appendGeneratorLabel(labels)
 		labels = appendServiceAccountLabels(eventTrigger, labels)
+
+		if objects[i].CloudEvent != nil && eventTrigger.Spec.CloudEventAction == v1beta1.CloudEventActionDelete {
+			// Resources created because of a cloudEvent are ONLY removed when same (same subject/source) cloudEvent
+			// is received and EventTrigger.Spec.CloudEventAction is set to delete.
+			return nil, deleteInstantiatedFromGenerators(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
+				er, objects[i].CloudEvent, logger)
+		}
 
 		secretInfo, err := instantiateSecrets(ctx, c, eventTrigger, objects[i], templateName, clusterNamespace,
 			labels, logger)
@@ -2213,6 +2407,7 @@ func instantiateFromGeneratorsPerAllResource(ctx context.Context, c client.Clien
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
 		er, clusterType)
+	labels = appendGeneratorLabel(labels)
 	labels = appendServiceAccountLabels(eventTrigger, labels)
 
 	result, err := instantiateSecrets(ctx, c, eventTrigger, objects, templateName, clusterNamespace,
@@ -2362,4 +2557,102 @@ func getValuesFrom(ctx context.Context, c client.Client, valuesFrom []configv1be
 		result = append(result, resource)
 	}
 	return result
+}
+
+func hasMatchingResources(er *libsveltosv1beta1.EventReport) bool {
+	return len(er.Spec.CloudEvents) != 0 || len(er.Spec.MatchingResources) != 0
+}
+
+func appendCloudEventClusterProfiles(ctx context.Context, c client.Client,
+	clusterNamespace, clusterName, eventTriggerName string, clusterType libsveltosv1beta1.ClusterType,
+	eventReport *libsveltosv1beta1.EventReport, clusterProfiles []*configv1beta1.ClusterProfile,
+) ([]*configv1beta1.ClusterProfile, error) {
+
+	currentClusterProfiles := &configv1beta1.ClusterProfileList{}
+	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
+		eventReport, clusterType)
+	listOptions := []client.ListOption{
+		client.MatchingLabels(labels),
+	}
+	err := c.List(ctx, currentClusterProfiles, listOptions...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Include only the one generated because of cloudEvents
+	for i := range currentClusterProfiles.Items {
+		cp := &currentClusterProfiles.Items[i]
+		if isGeneratedFromCloudEvent(cp) {
+			clusterProfiles = append(clusterProfiles, cp)
+		}
+	}
+
+	return clusterProfiles, nil
+}
+
+func deleteClusterProfile(ctx context.Context, c client.Client, clusterProfile *configv1beta1.ClusterProfile,
+	logger logr.Logger) error {
+
+	currentClusterProfile := &configv1beta1.ClusterProfile{}
+	err := c.Get(ctx, types.NamespacedName{Name: clusterProfile.Name}, currentClusterProfile)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	logger.V(logs.LogInfo).Info(fmt.Sprintf("delete ClusterProfile %s", clusterProfile.Name))
+
+	return c.Delete(ctx, currentClusterProfile)
+}
+
+func deleteInstantiatedFromGenerators(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, er *libsveltosv1beta1.EventReport,
+	cloudEvent map[string]interface{}, logger logr.Logger) error {
+
+	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
+		er, clusterType)
+	labels = appendGeneratorLabel(labels)
+	labels = appendInstantiatedObjectLabelsForCloudEvent(labels, getCESource(cloudEvent),
+		getCESubject(cloudEvent))
+
+	listOptions := []client.ListOption{
+		client.MatchingLabels(labels),
+		client.InNamespace(ReportNamespace),
+	}
+
+	configMaps := &corev1.ConfigMapList{}
+	err := c.List(ctx, configMaps, listOptions...)
+	if err != nil {
+		return err
+	}
+
+	for i := range configMaps.Items {
+		cm := &configMaps.Items[i]
+		// For existing EventTrigger and EventReport
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("deleting configMap %s/%s", cm.Namespace, cm.Name))
+		err = c.Delete(ctx, cm)
+		if err != nil {
+			return err
+		}
+	}
+
+	secrets := &corev1.SecretList{}
+	err = c.List(ctx, secrets, listOptions...)
+	if err != nil {
+		return err
+	}
+
+	for i := range secrets.Items {
+		secret := &secrets.Items[i]
+		// For existing EventTrigger and EventReport
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("deleting secret %s/%s", secret.Namespace, secret.Name))
+		err = c.Delete(ctx, secret)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

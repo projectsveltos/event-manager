@@ -193,7 +193,7 @@ data:
 		Expect(workloadClient).ToNot(BeNil())
 
 		namespace := namePrefix + randomString()
-		By("Create a namespace %s with proper label")
+		Byf("Create a namespace %s with proper label", namespace)
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,

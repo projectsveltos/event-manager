@@ -280,7 +280,6 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 		return err
 	}
 
-	currentEventReports := make(map[string]bool)
 	for i := range eventReportList.Items {
 		er := &eventReportList.Items[i]
 
@@ -304,22 +303,32 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update EventReport in management cluster. Err: %v", err))
 				continue
 			}
-			// Name in the management cluster is different than name in the managed cluster
-			eventSourceName := er.Labels[libsveltosv1beta1.EventSourceNameLabel]
-			clusterType := clusterproxy.GetClusterType(cluster)
-			eventReportName := libsveltosv1beta1.GetEventReportName(eventSourceName, cluster.Name, &clusterType)
-			currentEventReports[eventReportName] = true
 		}
 
-		updateAllClusterProfiles(ctx, c, cluster, er, eventSourceMap, eventTriggerMap, logger)
-
-		logger.V(logs.LogDebug).Info("updating EventReport in the managed cluster")
-		// Update EventReport Status in managed cluster
-		phase := libsveltosv1beta1.ReportProcessed
-		er.Status.Phase = &phase
-		err = remoteClient.Status().Update(ctx, er)
-		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update EventReport in managed cluster. Err: %v", err))
+		err = updateAllClusterProfiles(ctx, c, cluster, er, eventSourceMap, eventTriggerMap, logger)
+		if err == nil {
+			logger.V(logs.LogDebug).Info("updating EventReport in the managed cluster")
+			// Update EventReport Status in managed cluster
+			if er.Spec.CloudEvents != nil {
+				// Once a cloudEvent is processed, forget about it. This means CloudEvent is never stored in the
+				// management cluster and it is removed from the EventReport in the managed cluster. In other words
+				// CloudEvents are stored in the EventReport instances in the managed clusters till those are successfully
+				// process in the management cluster.
+				er.Spec.CloudEvents = nil
+				err = remoteClient.Update(ctx, er)
+				if err != nil {
+					// This can fail because for instance a new CloudEvent was received while we were processing it in the mgmt cluster.
+					// That's OK though. CloudEvent source/subject are added as labels to profiles, so no new profile will be created
+					// when reprocessing it
+					logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to reset EventReport's CloudEvents in managed cluster. Err: %v", err))
+				}
+			}
+			phase := libsveltosv1beta1.ReportProcessed
+			er.Status.Phase = &phase
+			err = remoteClient.Status().Update(ctx, er)
+			if err != nil {
+				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update EventReport in managed cluster. Err: %v", err))
+			}
 		}
 	}
 
@@ -360,7 +369,7 @@ func isEventTriggerMatchingTheCluster(et *v1beta1.EventTrigger, cluster *corev1.
 
 func updateAllClusterProfiles(ctx context.Context, mgmtClient client.Client, cluster *corev1.ObjectReference,
 	er *libsveltosv1beta1.EventReport, eventSourceMap map[string][]*v1beta1.EventTrigger,
-	eventTriggerMap map[string]libsveltosset.Set, logger logr.Logger) {
+	eventTriggerMap map[string]libsveltosset.Set, logger logr.Logger) error {
 
 	clusterType := clusterproxy.GetClusterType(cluster)
 
@@ -387,8 +396,11 @@ func updateAllClusterProfiles(ctx context.Context, mgmtClient client.Client, clu
 		if err != nil {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update ClusterProfile for EventTrigger %s: %v",
 				eventTriggers[i].GetName(), err))
+			return err
 		}
 	}
+
+	return nil
 }
 
 func deleteEventReport(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
@@ -460,6 +472,7 @@ func updateEventReport(ctx context.Context, c client.Client, cluster *corev1.Obj
 			currentEventReport.Labels = libsveltosv1beta1.GetEventReportLabels(
 				eventSourceName, cluster.Name, &clusterType)
 			currentEventReport.Spec = eventReport.Spec
+			currentEventReport.Spec.CloudEvents = nil // cloudEvents do not need to be stored in the mgmt cluster
 			currentEventReport.Spec.ClusterNamespace = cluster.Namespace
 			currentEventReport.Spec.ClusterName = cluster.Name
 			currentEventReport.Spec.ClusterType = clusterType
@@ -470,6 +483,7 @@ func updateEventReport(ctx context.Context, c client.Client, cluster *corev1.Obj
 
 	logger.V(logs.LogDebug).Info("update EventReport in management cluster")
 	currentEventReport.Spec = eventReport.Spec
+	currentEventReport.Spec.CloudEvents = nil // cloudEvents do not need to be stored in the mgmt cluster
 	currentEventReport.Spec.ClusterNamespace = cluster.Namespace
 	currentEventReport.Spec.ClusterName = cluster.Name
 	currentEventReport.Spec.ClusterType = clusterType

@@ -956,6 +956,14 @@ spec:
           spec:
             description: EventTriggerSpec defines the desired state of EventTrigger
             properties:
+              cloudEventAction:
+                default: Create
+                description: |-
+                  CloudEventAction determines the action to take based on the received CloudEvent.
+                  CloudEvents with the same source and subject are considered related and represent
+                  different states of the same entity. This field specifies whether to create or
+                  delete the associated Kubernetes resources.
+                type: string
               clusterSetRefs:
                 description: SetRefs identifies referenced ClusterSets. Name of the
                   referenced ClusterSets.
