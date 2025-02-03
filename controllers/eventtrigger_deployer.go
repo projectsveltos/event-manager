@@ -977,8 +977,7 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 // - labels are added to ClusterProfile to easily fetch all ClusterProfiles created by a given EventTrigger
 func instantiateClusterProfileForResource(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, er *libsveltosv1beta1.EventReport,
-	object *currentObject, logger logr.Logger,
-) (*configv1beta1.ClusterProfile, error) {
+	object *currentObject, logger logr.Logger) (*configv1beta1.ClusterProfile, error) {
 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
 		er, clusterType)
@@ -998,10 +997,18 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	}
 
 	clusterProfile := getNonInstantiatedClusterProfile(eventTrigger, clusterProfileName, labels)
-	if object.CloudEvent != nil && eventTrigger.Spec.CloudEventAction == v1beta1.CloudEventActionDelete {
-		// Resources created because of a cloudEvent are ONLY removed when same (same subject/source) cloudEvent
-		// is received and EventTrigger.Spec.CloudEventAction is set to delete.
-		return nil, deleteClusterProfile(ctx, c, clusterProfile, logger)
+	if object.CloudEvent != nil {
+		instantiatedCloudEventAction, err := instantiateCloudEventAction(clusterNamespace, clusterName, eventTrigger,
+			object, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		if *instantiatedCloudEventAction == v1beta1.CloudEventActionDelete {
+			// Resources created because of a cloudEvent are ONLY removed when same (same subject/source) cloudEvent
+			// is received and EventTrigger.Spec.CloudEventAction is set to delete.
+			return nil, deleteClusterProfile(ctx, c, clusterProfile, logger)
+		}
 	}
 
 	clusterProfileSpec, err := instantiateClusterProfileSpecForResource(ctx, c, clusterNamespace, clusterName,
@@ -1028,7 +1035,7 @@ func instantiateClusterProfileSpecForResource(ctx context.Context, c client.Clie
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, labels map[string]string,
 	object *currentObject, logger logr.Logger) (*configv1beta1.Spec, error) {
 
-	clusterProfileSpec := configv1beta1.Spec{}
+	clusterProfileSpec := *getClusterProfileSpec(eventTrigger)
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
 	err := setTemplateResourceRefs(&clusterProfileSpec, templateName, object.Cluster, object, eventTrigger, logger)
@@ -1051,8 +1058,6 @@ func instantiateClusterProfileSpecForResource(ctx context.Context, c client.Clie
 		return nil, err
 	}
 	clusterProfileSpec.KustomizationRefs = instantiateKustomizeRefsWithResource
-
-	clusterProfileSpec.DriftExclusions = eventTrigger.Spec.DriftExclusions
 
 	err = setPolicyRefs(ctx, c, &clusterProfileSpec, templateName, clusterNamespace, clusterName, clusterType,
 		object, eventTrigger, labels, logger)
@@ -1875,8 +1880,8 @@ func appendInstantiatedObjectLabelsForResource(labels map[string]string, resourc
 
 // appendInstantiatedObjectLabelsForCloudEvent appends labels specific to a specific cloudEvent
 func appendInstantiatedObjectLabelsForCloudEvent(labels map[string]string, csSource, ceSubject string) map[string]string {
-	labels[cloudEventSourceLabel] = csSource
-	labels[cloudEventSubjectLabel] = ceSubject
+	labels[cloudEventSourceLabel] = strings.ReplaceAll(csSource, "/", "-")
+	labels[cloudEventSubjectLabel] = strings.ReplaceAll(ceSubject, "/", "-")
 
 	return labels
 }
@@ -2190,19 +2195,7 @@ func getNonInstantiatedClusterProfile(eventTrigger *v1beta1.EventTrigger,
 			Name:   clusterProfileName,
 			Labels: labels,
 		},
-		Spec: configv1beta1.Spec{
-			StopMatchingBehavior: eventTrigger.Spec.StopMatchingBehavior,
-			SyncMode:             eventTrigger.Spec.SyncMode,
-			Tier:                 eventTrigger.Spec.Tier,
-			ContinueOnConflict:   eventTrigger.Spec.ContinueOnConflict,
-			Reloader:             eventTrigger.Spec.Reloader,
-			MaxUpdate:            eventTrigger.Spec.MaxUpdate,
-			TemplateResourceRefs: nil, // this needs to be instantiated
-			ValidateHealths:      eventTrigger.Spec.ValidateHealths,
-			Patches:              eventTrigger.Spec.Patches,
-			ExtraLabels:          eventTrigger.Spec.ExtraLabels,
-			ExtraAnnotations:     eventTrigger.Spec.ExtraAnnotations,
-		},
+		Spec: *getClusterProfileSpec(eventTrigger),
 	}
 }
 
@@ -2367,11 +2360,19 @@ func instantiateFromGeneratorsPerResource(ctx context.Context, c client.Client, 
 		labels = appendGeneratorLabel(labels)
 		labels = appendServiceAccountLabels(eventTrigger, labels)
 
-		if objects[i].CloudEvent != nil && eventTrigger.Spec.CloudEventAction == v1beta1.CloudEventActionDelete {
-			// Resources created because of a cloudEvent are ONLY removed when same (same subject/source) cloudEvent
-			// is received and EventTrigger.Spec.CloudEventAction is set to delete.
-			return nil, deleteInstantiatedFromGenerators(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
-				er, objects[i].CloudEvent, logger)
+		if objects[i].CloudEvent != nil {
+			instantiatedCloudEventAction, err := instantiateCloudEventAction(clusterNamespace, clusterName, eventTrigger,
+				objects[i], logger)
+			if err != nil {
+				return nil, err
+			}
+
+			if *instantiatedCloudEventAction == v1beta1.CloudEventActionDelete {
+				// Resources created because of a cloudEvent are ONLY removed when same (same subject/source) cloudEvent
+				// is received and EventTrigger.Spec.CloudEventAction is set to delete.
+				return nil, deleteInstantiatedFromGenerators(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
+					er, objects[i].CloudEvent, logger)
+			}
 		}
 
 		secretInfo, err := instantiateSecrets(ctx, c, eventTrigger, objects[i], templateName, clusterNamespace,
@@ -2655,4 +2656,45 @@ func deleteInstantiatedFromGenerators(ctx context.Context, c client.Client, clus
 	}
 
 	return nil
+}
+
+func instantiateCloudEventAction(clusterNamespace, clusterName string, eventTrigger *v1beta1.EventTrigger,
+	data any, logger logr.Logger) (*v1beta1.CloudEventAction, error) {
+
+	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
+
+	instantiatedData, err := instantiateSection(templateName, []byte(eventTrigger.Spec.CloudEventAction), data, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate CloudEventAction template: %v", err))
+		return nil, err
+	}
+
+	instantiatedCloudEventAction := v1beta1.CloudEventAction(string(instantiatedData))
+
+	if instantiatedCloudEventAction != v1beta1.CloudEventActionCreate &&
+		instantiatedCloudEventAction != v1beta1.CloudEventActionDelete {
+
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to unmarshal CloudEventAction. Possible actions %s %s",
+			v1beta1.CloudEventActionCreate, v1beta1.CloudEventActionDelete))
+		return nil, err
+	}
+
+	return &instantiatedCloudEventAction, nil
+}
+
+func getClusterProfileSpec(eventTrigger *v1beta1.EventTrigger) *configv1beta1.Spec {
+	return &configv1beta1.Spec{
+		StopMatchingBehavior: eventTrigger.Spec.StopMatchingBehavior,
+		SyncMode:             eventTrigger.Spec.SyncMode,
+		Tier:                 eventTrigger.Spec.Tier,
+		ContinueOnConflict:   eventTrigger.Spec.ContinueOnConflict,
+		Reloader:             eventTrigger.Spec.Reloader,
+		MaxUpdate:            eventTrigger.Spec.MaxUpdate,
+		TemplateResourceRefs: nil, // this needs to be instantiated
+		ValidateHealths:      eventTrigger.Spec.ValidateHealths,
+		Patches:              eventTrigger.Spec.Patches,
+		ExtraLabels:          eventTrigger.Spec.ExtraLabels,
+		ExtraAnnotations:     eventTrigger.Spec.ExtraAnnotations,
+		DriftExclusions:      eventTrigger.Spec.DriftExclusions,
+	}
 }
