@@ -261,6 +261,7 @@ type EventTriggerSpec struct {
 	// CloudEvents with the same source and subject are considered related and represent
 	// different states of the same entity. This field specifies whether to create or
 	// delete the associated Kubernetes resources.
+	// This can be expressed as a template and instantiated at run time using CloudEvent
 	// +kubebuilder:default:=Create
 	// +optional
 	CloudEventAction CloudEventAction `json:"cloudEventAction,omitempty"`
