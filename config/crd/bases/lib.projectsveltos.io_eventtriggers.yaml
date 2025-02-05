@@ -1638,6 +1638,9 @@ spec:
                   resource (OneForEvent = false) or one per resource (OneForEvent = true)
                   needs to be creted.
                 type: boolean
+                x-kubernetes-validations:
+                - message: Value is immutable
+                  rule: self == oldSelf
               patches:
                 description: |-
                   Define additional Kustomize inline Patches applied for all resources on this profile

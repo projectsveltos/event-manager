@@ -91,6 +91,7 @@ type EventTriggerSpec struct {
 	// EventSource. OneForEvent indicates whether a ClusterProfile for all
 	// resource (OneForEvent = false) or one per resource (OneForEvent = true)
 	// needs to be creted.
+	//+kubebuilder:validation:XValidation:rule="self == oldSelf",message="Value is immutable"
 	// +optional
 	OneForEvent bool `json:"oneForEvent,omitempty"`
 
