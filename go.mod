@@ -12,7 +12,7 @@ require (
 	github.com/onsi/gomega v1.36.2
 	github.com/pkg/errors v0.9.1
 	github.com/projectsveltos/addon-controller v0.46.1
-	github.com/projectsveltos/libsveltos v0.46.1
+	github.com/projectsveltos/libsveltos v0.46.2-0.20250206075732-1af724f2ac3b
 	github.com/prometheus/client_golang v1.20.5
 	github.com/spf13/pflag v1.0.6
 	golang.org/x/text v0.21.0

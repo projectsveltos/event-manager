@@ -263,10 +263,7 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 		return err
 	}
 
-	const ten = 10
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, ten*time.Second)
-	defer cancel()
-	if !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctxWithTimeout, remoteClient, version) {
+	if !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctx, remoteClient, version, logger) {
 		msg := "compatibility checks failed"
 		logger.V(logs.LogDebug).Info(msg)
 		return errors.New(msg)
