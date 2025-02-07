@@ -27,6 +27,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/gdexlab/go-render/render"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -1277,7 +1278,7 @@ func instantiateSection(templateName string, toBeInstantiated []byte, data any,
 	logger logr.Logger) ([]byte, error) {
 
 	tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-		funcmap.SveltosFuncMap()).Parse(string(toBeInstantiated))
+		funcmap.SveltosFuncMap()).Funcs(sprig.TxtFuncMap()).Parse(string(toBeInstantiated))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse template: %v", err))
 		return nil, err
@@ -1434,7 +1435,7 @@ func instantiateDataSection(templateName string, content map[string]string, data
 	}
 
 	tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-		funcmap.SveltosFuncMap()).Parse(string(contentJson))
+		funcmap.SveltosFuncMap()).Funcs(sprig.TxtFuncMap()).Parse(string(contentJson))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse content: %v", err))
 		return nil, err
@@ -1468,7 +1469,7 @@ func instantiateTemplateResourceRefs(templateName string, clusterContent map[str
 			templateResourceRefs[i].Resource.Namespace)
 
 		tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-			funcmap.SveltosFuncMap()).Parse(templateResourceRefs[i].Resource.Name)
+			funcmap.SveltosFuncMap()).Funcs(sprig.TxtFuncMap()).Parse(templateResourceRefs[i].Resource.Name)
 		if err != nil {
 			return nil, err
 		}
