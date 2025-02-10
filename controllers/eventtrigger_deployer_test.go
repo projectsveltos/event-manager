@@ -1636,7 +1636,7 @@ spec:
 		}
 
 		var instantiatedContent map[string]string
-		instantiatedContent, err = controllers.InstantiateDataSection(randomString(), content, object, logger)
+		instantiatedContent, err = controllers.InstantiateDataSection(randomString(), content, object, false, logger)
 		Expect(err).To(BeNil())
 		Expect(instantiatedContent).ToNot(BeEmpty())
 

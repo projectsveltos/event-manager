@@ -30,6 +30,7 @@ import (
 	v1beta1 "github.com/projectsveltos/event-manager/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
+	"github.com/projectsveltos/libsveltos/lib/funcmap"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltostemplate "github.com/projectsveltos/libsveltos/lib/template"
 )
@@ -102,13 +103,13 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 
 		for i := range e.Spec.HelmCharts {
 			valuesFrom := getValuesFrom(ctx, c, e.Spec.HelmCharts[i].ValuesFrom, cluster.Namespace,
-				templateName, objects, logger)
+				templateName, objects, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 			result = append(result, valuesFrom...)
 		}
 
 		for i := range e.Spec.KustomizationRefs {
 			valuesFrom := getValuesFrom(ctx, c, e.Spec.KustomizationRefs[i].ValuesFrom, cluster.Namespace,
-				templateName, objects, logger)
+				templateName, objects, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 			result = append(result, valuesFrom...)
 		}
 	}
@@ -126,7 +127,8 @@ func collectResourcesFromConfigMapGenerators(ctx context.Context, c client.Clien
 		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, generator.Namespace)
 
 		// The name of the referenced resource can be expressed as a template
-		referencedName, err := instantiateSection(templateName, []byte(generator.Name), objects, logger)
+		referencedName, err := instantiateSection(templateName, []byte(generator.Name), objects,
+			funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 		if err != nil {
 			return nil, err
 		}
@@ -153,7 +155,8 @@ func collectResourcesFromSecretGenerators(ctx context.Context, c client.Client, 
 		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, generator.Namespace)
 
 		// The name of the referenced resource can be expressed as a template
-		referencedName, err := instantiateSection(templateName, []byte(generator.Name), objects, logger)
+		referencedName, err := instantiateSection(templateName, []byte(generator.Name), objects,
+			funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 		if err != nil {
 			return nil, err
 		}
@@ -227,7 +230,8 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 
 		namespace := libsveltostemplate.GetReferenceResourceNamespace(cluster.Namespace, policyRef.Namespace)
 
-		referencedName, err := instantiateSection(templateName, []byte(policyRef.Name), objects, logger)
+		referencedName, err := instantiateSection(templateName, []byte(policyRef.Name), objects,
+			funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 		if err != nil {
 			return nil, nil, err
 		}
