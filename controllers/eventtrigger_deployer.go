@@ -1159,7 +1159,7 @@ func setTemplateResourceRefs(clusterProfileSpec *configv1beta1.Spec, templateNam
 	data any, eventTrigger *v1beta1.EventTrigger, logger logr.Logger) error {
 
 	templateResourceRefs, err := instantiateTemplateResourceRefs(templateName, clusterContent, data,
-		eventTrigger.Spec.TemplateResourceRefs)
+		eventTrigger.Spec.TemplateResourceRefs, funcmap.HasTextTemplateAnnotation(eventTrigger.Annotations))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate TemplateResourceRefs: %v", err))
 		return err
@@ -1274,10 +1274,10 @@ func getCloudEvents(eventReport *libsveltosv1beta1.EventReport, logger logr.Logg
 }
 
 func instantiateSection(templateName string, toBeInstantiated []byte, data any,
-	logger logr.Logger) ([]byte, error) {
+	useTxtFuncMap bool, logger logr.Logger) ([]byte, error) {
 
 	tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-		funcmap.SveltosFuncMap()).Parse(string(toBeInstantiated))
+		funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(string(toBeInstantiated))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse template: %v", err))
 		return nil, err
@@ -1302,7 +1302,8 @@ func instantiateHelmCharts(ctx context.Context, c client.Client, e *v1beta1.Even
 		return nil, err
 	}
 
-	instantiatedData, err := instantiateSection(templateName, helmChartJson, data, logger)
+	instantiatedData, err := instantiateSection(templateName, helmChartJson, data,
+		funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute template: %v", err))
 		return nil, err
@@ -1336,7 +1337,8 @@ func instantiateKustomizationRefs(ctx context.Context, c client.Client, e *v1bet
 		return nil, err
 	}
 
-	instantiatedData, err := instantiateSection(templateName, kustomizationRefsJson, data, logger)
+	instantiatedData, err := instantiateSection(templateName, kustomizationRefsJson, data,
+		funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute template: %v", err))
 		return nil, err
@@ -1369,7 +1371,8 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, e *v1beta1.Even
 
 		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, ref.Namespace)
 
-		name, err := instantiateSection(templateName, []byte(ref.Name), data, logger)
+		name, err := instantiateSection(templateName, []byte(ref.Name), data,
+			funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 		if err != nil {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate name: %v", err))
 			return err
@@ -1425,7 +1428,7 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, e *v1beta1.Even
 }
 
 func instantiateDataSection(templateName string, content map[string]string, data any,
-	logger logr.Logger) (map[string]string, error) {
+	useTxtFuncMap bool, logger logr.Logger) (map[string]string, error) {
 
 	contentJson, err := json.Marshal(content)
 	if err != nil {
@@ -1434,7 +1437,7 @@ func instantiateDataSection(templateName string, content map[string]string, data
 	}
 
 	tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-		funcmap.SveltosFuncMap()).Parse(string(contentJson))
+		funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(string(contentJson))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse content: %v", err))
 		return nil, err
@@ -1457,7 +1460,7 @@ func instantiateDataSection(templateName string, content map[string]string, data
 }
 
 func instantiateTemplateResourceRefs(templateName string, clusterContent map[string]interface{}, data any,
-	templateResourceRefs []configv1beta1.TemplateResourceRef) ([]configv1beta1.TemplateResourceRef, error) {
+	templateResourceRefs []configv1beta1.TemplateResourceRef, useTxtFuncMap bool) ([]configv1beta1.TemplateResourceRef, error) {
 
 	var uCluster unstructured.Unstructured
 	uCluster.SetUnstructuredContent(clusterContent)
@@ -1468,7 +1471,7 @@ func instantiateTemplateResourceRefs(templateName string, clusterContent map[str
 			templateResourceRefs[i].Resource.Namespace)
 
 		tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-			funcmap.SveltosFuncMap()).Parse(templateResourceRefs[i].Resource.Name)
+			funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(templateResourceRefs[i].Resource.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -1602,7 +1605,8 @@ func instantiateReferencedPolicy(ctx context.Context, e *v1beta1.EventTrigger, r
 
 	content := getDataSection(ref)
 
-	instantiatedContent, err := instantiateDataSection(templateName, content, objects, l)
+	instantiatedContent, err := instantiateDataSection(templateName, content, objects,
+		funcmap.HasTextTemplateAnnotation(e.Annotations), l)
 	if err != nil {
 		l.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiated referenced resource content: %v", err))
 		return nil, err
@@ -2488,7 +2492,8 @@ func instantiateResourceFromGenerator(ctx context.Context, c client.Client, gene
 	namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, generator.Namespace)
 
 	// The name of the referenced resource can be expressed as a template
-	referencedName, err := instantiateSection(templateName, []byte(generator.Name), data, logger)
+	referencedName, err := instantiateSection(templateName, []byte(generator.Name), data,
+		funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 	if err != nil {
 		return nil, err
 	}
@@ -2517,7 +2522,8 @@ func instantiateResourceFromGenerator(ctx context.Context, c client.Client, gene
 		&corev1.ObjectReference{Kind: v1beta1.EventTriggerKind, Name: e.GetName(), APIVersion: v1beta1.GroupVersion.String()},
 	)
 
-	instantiatedName, err := instantiateSection(templateName, []byte(generator.InstantiatedResourceNameFormat), data, logger)
+	instantiatedName, err := instantiateSection(templateName, []byte(generator.InstantiatedResourceNameFormat), data,
+		funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate %q: %v", generator.InstantiatedResourceNameFormat, err))
 		return nil, err
@@ -2532,7 +2538,7 @@ func instantiateResourceFromGenerator(ctx context.Context, c client.Client, gene
 }
 
 func getValuesFrom(ctx context.Context, c client.Client, valuesFrom []configv1beta1.ValueFrom,
-	clusterNamespace, templateName string, data any, logger logr.Logger) []client.Object {
+	clusterNamespace, templateName string, data any, useTxtFuncMap bool, logger logr.Logger) []client.Object {
 
 	result := make([]client.Object, 0, len(valuesFrom))
 	for i := range valuesFrom {
@@ -2540,7 +2546,7 @@ func getValuesFrom(ctx context.Context, c client.Client, valuesFrom []configv1be
 
 		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, ref.Namespace)
 
-		name, err := instantiateSection(templateName, []byte(ref.Name), data, logger)
+		name, err := instantiateSection(templateName, []byte(ref.Name), data, useTxtFuncMap, logger)
 		if err != nil {
 			continue
 		}
@@ -2663,7 +2669,8 @@ func instantiateCloudEventAction(clusterNamespace, clusterName string, eventTrig
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
 
-	instantiatedData, err := instantiateSection(templateName, []byte(eventTrigger.Spec.CloudEventAction), data, logger)
+	instantiatedData, err := instantiateSection(templateName, []byte(eventTrigger.Spec.CloudEventAction), data,
+		funcmap.HasTextTemplateAnnotation(eventTrigger.Annotations), logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate CloudEventAction template: %v", err))
 		return nil, err
