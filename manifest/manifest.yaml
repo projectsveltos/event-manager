@@ -2464,10 +2464,10 @@ spec:
         - --diagnostics-address=:8443
         - --shard-key=
         - --v=5
-        - --version=v0.47.0
+        - --version=main
         command:
         - /manager
-        image: docker.io/projectsveltos/event-manager:v0.47.0
+        image: docker.io/projectsveltos/event-manager:main
         livenessProbe:
           failureThreshold: 3
           httpGet:
