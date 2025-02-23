@@ -60,18 +60,19 @@ import (
 )
 
 var (
-	setupLog             = ctrl.Log.WithName("setup")
-	shardKey             string
-	version              string
-	diagnosticsAddress   string
-	insecureDiagnostics  bool
-	workers              int
-	concurrentReconciles int
-	restConfigQPS        float32
-	restConfigBurst      int
-	webhookPort          int
-	syncPeriod           time.Duration
-	healthAddr           string
+	setupLog              = ctrl.Log.WithName("setup")
+	shardKey              string
+	version               string
+	diagnosticsAddress    string
+	insecureDiagnostics   bool
+	workers               int
+	concurrentReconciles  int
+	restConfigQPS         float32
+	restConfigBurst       int
+	webhookPort           int
+	syncPeriod            time.Duration
+	healthAddr            string
+	capiOnboardAnnotation string
 )
 
 const (
@@ -183,6 +184,9 @@ func initFlags(fs *pflag.FlagSet) {
 
 	fs.StringVar(&shardKey, "shard-key", "",
 		"If set this deployment will reconcile only clusters matching this shard")
+
+	fs.StringVar(&capiOnboardAnnotation, "capi-onboard-annotation", "",
+		"If provided, Sveltos will only manage CAPI clusters that have this exact annotation.")
 
 	fs.StringVar(&version, "version", "", "current sveltos version")
 
@@ -309,18 +313,19 @@ func getDiagnosticsOptions() metricsserver.Options {
 
 func getEventTriggerReconciler(mgr manager.Manager) *controllers.EventTriggerReconciler {
 	return &controllers.EventTriggerReconciler{
-		Client:               mgr.GetClient(),
-		Scheme:               mgr.GetScheme(),
-		ConcurrentReconciles: concurrentReconciles,
-		ShardKey:             shardKey,
-		Mux:                  sync.Mutex{},
-		Logger:               ctrl.Log.WithName("eventTriggerReconciler"),
-		ClusterMap:           make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ToClusterMap:         make(map[types.NamespacedName]*libsveltosset.Set),
-		EventTriggers:        make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
-		ClusterLabels:        make(map[corev1.ObjectReference]map[string]string),
-		EventSourceMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ToEventSourceMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-		ClusterSetMap:        make(map[corev1.ObjectReference]*libsveltosset.Set),
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		ConcurrentReconciles:  concurrentReconciles,
+		ShardKey:              shardKey,
+		CapiOnboardAnnotation: capiOnboardAnnotation,
+		Mux:                   sync.Mutex{},
+		Logger:                ctrl.Log.WithName("eventTriggerReconciler"),
+		ClusterMap:            make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ToClusterMap:          make(map[types.NamespacedName]*libsveltosset.Set),
+		EventTriggers:         make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
+		ClusterLabels:         make(map[corev1.ObjectReference]map[string]string),
+		EventSourceMap:        make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ToEventSourceMap:      make(map[types.NamespacedName]*libsveltosset.Set),
+		ClusterSetMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
 	}
 }

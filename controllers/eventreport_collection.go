@@ -177,7 +177,7 @@ func buildEventTriggersForClusterMap(eventTriggers *v1beta1.EventTriggerList,
 
 // Periodically collects EventReports from each CAPI cluster.
 func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme,
-	shardKey, version string, logger logr.Logger) {
+	shardKey, capiOnboardAnnotation, version string, logger logr.Logger) {
 
 	interval := 10 * time.Second
 	if shardKey != "" {
@@ -204,7 +204,8 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 		eventTriggerMap := buildEventTriggersForClusterMap(eventTriggers)
 
 		logger.V(logs.LogDebug).Info("collecting managed clusters")
-		clusterList, err := clusterproxy.GetListOfClustersForShardKey(ctx, c, "", shardKey, logger)
+		clusterList, err := clusterproxy.GetListOfClustersForShardKey(ctx, c, "", capiOnboardAnnotation,
+			shardKey, logger)
 		if err != nil {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get clusters: %v", err))
 			time.Sleep(interval)
