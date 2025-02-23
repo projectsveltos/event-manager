@@ -76,12 +76,13 @@ const (
 // EventTriggerReconciler reconciles a EventTrigger object
 type EventTriggerReconciler struct {
 	client.Client
-	Scheme               *runtime.Scheme
-	ConcurrentReconciles int
-	Deployer             deployer.DeployerInterface
-	EventReportMode      ReportMode
-	ShardKey             string
-	Logger               logr.Logger
+	Scheme                *runtime.Scheme
+	ConcurrentReconciles  int
+	Deployer              deployer.DeployerInterface
+	EventReportMode       ReportMode
+	ShardKey              string
+	CapiOnboardAnnotation string // when set, only capi clusters with this annotation are considered
+	Logger                logr.Logger
 
 	// use a Mutex to update Map as MaxConcurrentReconciles is higher than one
 	Mux sync.Mutex
@@ -248,7 +249,7 @@ func (r *EventTriggerReconciler) reconcileNormal(
 	}
 
 	matchingCluster, err := clusterproxy.GetMatchingClusters(ctx, r.Client, eventTriggerScope.GetSelector(), "",
-		eventTriggerScope.Logger)
+		r.CapiOnboardAnnotation, eventTriggerScope.Logger)
 	if err != nil {
 		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
@@ -355,7 +356,7 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 
 	if r.EventReportMode == CollectFromManagementCluster {
 		go collectEventReports(mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(), r.ShardKey,
-			getVersion(), mgr.GetLogger())
+			r.CapiOnboardAnnotation, getVersion(), mgr.GetLogger())
 	}
 
 	return c, nil
