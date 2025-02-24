@@ -39,11 +39,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	configv1alpha1 "github.com/projectsveltos/addon-controller/api/v1alpha1"
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	"github.com/projectsveltos/event-manager/api/v1alpha1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
@@ -96,11 +93,8 @@ var _ = BeforeSuite(func() {
 	Expect(clientgoscheme.AddToScheme(scheme)).To(Succeed())
 	Expect(clusterv1.AddToScheme(scheme)).To(Succeed())
 	Expect(v1beta1.AddToScheme(scheme)).To(Succeed())
-	Expect(v1alpha1.AddToScheme(scheme)).To(Succeed())
 	Expect(configv1beta1.AddToScheme(scheme)).To(Succeed())
-	Expect(configv1alpha1.AddToScheme(scheme)).To(Succeed())
 	Expect(libsveltosv1beta1.AddToScheme(scheme)).To(Succeed())
-	Expect(libsveltosv1alpha1.AddToScheme(scheme)).To(Succeed())
 	Expect(networkingv1.AddToScheme(scheme)).To(Succeed())
 
 	var err error
