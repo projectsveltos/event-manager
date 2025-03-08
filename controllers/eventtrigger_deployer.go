@@ -1467,24 +1467,36 @@ func instantiateTemplateResourceRefs(templateName string, clusterContent map[str
 
 	instantiated := make([]configv1beta1.TemplateResourceRef, len(templateResourceRefs))
 	for i := range templateResourceRefs {
-		namespace := libsveltostemplate.GetReferenceResourceNamespace(uCluster.GetNamespace(),
-			templateResourceRefs[i].Resource.Namespace)
-
 		tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
 			funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(templateResourceRefs[i].Resource.Name)
 		if err != nil {
 			return nil, err
 		}
 
-		var buffer bytes.Buffer
-		err = tmpl.Execute(&buffer, data)
+		var nameBuffer bytes.Buffer
+		err = tmpl.Execute(&nameBuffer, data)
+		if err != nil {
+			return nil, err
+		}
+
+		namespace := libsveltostemplate.GetReferenceResourceNamespace(uCluster.GetNamespace(),
+			templateResourceRefs[i].Resource.Namespace)
+
+		tmpl, err = template.New(templateName).Option("missingkey=error").Funcs(
+			funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(namespace)
+		if err != nil {
+			return nil, err
+		}
+
+		var namespaceBuffer bytes.Buffer
+		err = tmpl.Execute(&namespaceBuffer, data)
 		if err != nil {
 			return nil, err
 		}
 
 		instantiated[i] = templateResourceRefs[i]
-		instantiated[i].Resource.Namespace = namespace
-		instantiated[i].Resource.Name = buffer.String()
+		instantiated[i].Resource.Namespace = namespaceBuffer.String()
+		instantiated[i].Resource.Name = nameBuffer.String()
 	}
 
 	return instantiated, nil
