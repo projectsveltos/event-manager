@@ -266,11 +266,7 @@ func getConfigMap(ctx context.Context, c client.Client, configmapName types.Name
 ) (*corev1.ConfigMap, error) {
 
 	configMap := &corev1.ConfigMap{}
-	configMapKey := client.ObjectKey{
-		Namespace: configmapName.Namespace,
-		Name:      configmapName.Name,
-	}
-	if err := c.Get(ctx, configMapKey, configMap); err != nil {
+	if err := c.Get(ctx, configmapName, configMap); err != nil {
 		return nil, err
 	}
 
@@ -282,11 +278,7 @@ func getSecret(ctx context.Context, c client.Client, secretName types.Namespaced
 ) (*corev1.Secret, error) {
 
 	secret := &corev1.Secret{}
-	secretKey := client.ObjectKey{
-		Namespace: secretName.Namespace,
-		Name:      secretName.Name,
-	}
-	if err := c.Get(ctx, secretKey, secret); err != nil {
+	if err := c.Get(ctx, secretName, secret); err != nil {
 		return nil, err
 	}
 
