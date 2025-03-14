@@ -108,3 +108,18 @@ func (s *EventTriggerScope) SetMatchingClusterRefs(matchingClusters []corev1.Obj
 func (s *EventTriggerScope) SetClusterInfo(clusterInfo []libsveltosv1beta1.ClusterInfo) {
 	s.EventTrigger.Status.ClusterInfo = clusterInfo
 }
+
+// GetFailureMessage returns the ClusterInfo FailureMessage
+func (s *EventTriggerScope) GetFailureMessage(clusterRef *corev1.ObjectReference) *string {
+	for i := range s.EventTrigger.Status.ClusterInfo {
+		if s.EventTrigger.Status.ClusterInfo[i].Cluster.APIVersion == clusterRef.APIVersion &&
+			s.EventTrigger.Status.ClusterInfo[i].Cluster.Kind == clusterRef.Kind &&
+			s.EventTrigger.Status.ClusterInfo[i].Cluster.Namespace == clusterRef.Namespace &&
+			s.EventTrigger.Status.ClusterInfo[i].Cluster.Name == clusterRef.Name {
+
+			return s.EventTrigger.Status.ClusterInfo[i].FailureMessage
+		}
+	}
+
+	return nil
+}

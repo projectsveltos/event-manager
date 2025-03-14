@@ -372,33 +372,40 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		status = r.convertResultStatus(result)
 	}
 
+	clusterInfo := &libsveltosv1beta1.ClusterInfo{
+		Cluster:        *cluster,
+		Hash:           currentHash,
+		FailureMessage: nil,
+	}
+
+	previousError := eScope.GetFailureMessage(cluster)
+	clusterInfo.FailureMessage = previousError
 	if status != nil {
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("result is available %q. updating status.", *status))
-		var errorMessage string
 		if result.Err != nil {
-			errorMessage = result.Err.Error()
-		}
-		clusterInfo := &libsveltosv1beta1.ClusterInfo{
-			Cluster:        *cluster,
-			Status:         *status,
-			Hash:           currentHash,
-			FailureMessage: &errorMessage,
+			errorMessage := result.Err.Error()
+			clusterInfo.FailureMessage = &errorMessage
 		}
 
 		if *status == libsveltosv1beta1.SveltosStatusProvisioned {
+			clusterInfo.Status = *status
+			clusterInfo.FailureMessage = nil
 			return clusterInfo, nil
 		}
+
 		if *status == libsveltosv1beta1.SveltosStatusProvisioning {
+			clusterInfo.Status = *status
 			return clusterInfo, fmt.Errorf("EventTrigger is still being provisioned")
 		}
 	} else if isConfigSame && currentStatus != nil && *currentStatus == libsveltosv1beta1.SveltosStatusProvisioned {
 		logger.V(logs.LogInfo).Info("already deployed")
 		s := libsveltosv1beta1.SveltosStatusProvisioned
-		status = &s
+		clusterInfo.Status = s
+		clusterInfo.FailureMessage = nil
 	} else {
 		logger.V(logs.LogInfo).Info("no result is available. queue job and mark status as provisioning")
 		s := libsveltosv1beta1.SveltosStatusProvisioning
-		status = &s
+		clusterInfo.Status = s
 
 		// Getting here means either EventTrigger failed to be deployed or EventTrigger has changed.
 		// EventTrigger must be (re)deployed.
@@ -406,13 +413,6 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 			false, processEventTriggerForCluster, programDuration, deployer.Options{}); err != nil {
 			return nil, err
 		}
-	}
-
-	clusterInfo := &libsveltosv1beta1.ClusterInfo{
-		Cluster:        *cluster,
-		Status:         *status,
-		Hash:           currentHash,
-		FailureMessage: nil,
 	}
 
 	return clusterInfo, nil
@@ -665,7 +665,7 @@ func deployEventSource(ctx context.Context, c client.Client,
 
 	err = createOrUpdateEventSource(ctx, remoteClient, resource, currentReferenced, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create/update HealthCheck: %v", err))
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create/update EventSource: %v", err))
 		return err
 	}
 

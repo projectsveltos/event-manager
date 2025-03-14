@@ -1,6 +1,6 @@
 module github.com/projectsveltos/event-manager
 
-go 1.23.6
+go 1.24.1
 
 require (
 	github.com/TwiN/go-color v1.4.1
