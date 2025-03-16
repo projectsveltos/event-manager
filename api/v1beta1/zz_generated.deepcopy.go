@@ -113,6 +113,11 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 		*out = new(intstr.IntOrString)
 		**out = **in
 	}
+	if in.DependsOn != nil {
+		in, out := &in.DependsOn, &out.DependsOn
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.TemplateResourceRefs != nil {
 		in, out := &in.TemplateResourceRefs, &out.TemplateResourceRefs
 		*out = make([]apiv1beta1.TemplateResourceRef, len(*in))
