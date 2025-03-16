@@ -1120,15 +1120,15 @@ func instantiateClusterProfileSpecPerAllResource(ctx context.Context, c client.C
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, labels map[string]string,
 	objects *currentObjects, logger logr.Logger) (*configv1beta1.Spec, error) {
 
-	clusterProfileSpec := configv1beta1.Spec{}
+	clusterProfileSpec := getClusterProfileSpec(eventTrigger)
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
-	err := setTemplateResourceRefs(&clusterProfileSpec, templateName, objects.Cluster, objects, eventTrigger, logger)
+	err := setTemplateResourceRefs(clusterProfileSpec, templateName, objects.Cluster, objects, eventTrigger, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	setClusterSelector(&clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger)
+	setClusterSelector(clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger)
 
 	instantiateHelmChartsWithResources, err := instantiateHelmChartsWithAllResources(ctx, c, eventTrigger,
 		clusterNamespace, templateName, eventTrigger.Spec.HelmCharts, objects, labels, logger)
@@ -1146,13 +1146,13 @@ func instantiateClusterProfileSpecPerAllResource(ctx context.Context, c client.C
 
 	clusterProfileSpec.DriftExclusions = eventTrigger.Spec.DriftExclusions
 
-	err = setPolicyRefs(ctx, c, &clusterProfileSpec, templateName, clusterNamespace, clusterName, clusterType,
+	err = setPolicyRefs(ctx, c, clusterProfileSpec, templateName, clusterNamespace, clusterName, clusterType,
 		objects, eventTrigger, labels, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	return &clusterProfileSpec, nil
+	return clusterProfileSpec, nil
 }
 
 func setTemplateResourceRefs(clusterProfileSpec *configv1beta1.Spec, templateName string, clusterContent map[string]interface{},
@@ -2715,5 +2715,6 @@ func getClusterProfileSpec(eventTrigger *v1beta1.EventTrigger) *configv1beta1.Sp
 		ExtraLabels:          eventTrigger.Spec.ExtraLabels,
 		ExtraAnnotations:     eventTrigger.Spec.ExtraAnnotations,
 		DriftExclusions:      eventTrigger.Spec.DriftExclusions,
+		DependsOn:            eventTrigger.Spec.DependsOn,
 	}
 }

@@ -100,6 +100,15 @@ spec:
                   This field will be directly transferred to the ClusterProfile Spec
                   generated in response to events.
                 type: boolean
+              dependsOn:
+                description: |-
+                  DependsOn specifies a list of other ClusterProfiles that this instance depends on.
+                  In any managed cluster that matches this ClusterProfile, the add-ons and applications
+                  defined in this instance will not be deployed until all add-ons and applications in the
+                  ClusterProfiles listed as dependencies are deployed.
+                items:
+                  type: string
+                type: array
               destinationClusterSelector:
                 description: |-
                   DestinationClusterSelector identifies the cluster where add-ons will be deployed.

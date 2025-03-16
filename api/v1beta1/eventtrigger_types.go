@@ -206,6 +206,12 @@ type EventTriggerSpec struct {
 	// +optional
 	Reloader bool `json:"reloader,omitempty"`
 
+	// DependsOn specifies a list of other ClusterProfiles that this instance depends on.
+	// In any managed cluster that matches this ClusterProfile, the add-ons and applications
+	// defined in this instance will not be deployed until all add-ons and applications in the
+	// ClusterProfiles listed as dependencies are deployed.
+	DependsOn []string `json:"dependsOn,omitempty"`
+
 	// TemplateResourceRefs is a list of resource to collect from the management cluster.
 	// Those resources' values will be used to instantiate templates contained in referenced
 	// PolicyRefs and Helm charts
