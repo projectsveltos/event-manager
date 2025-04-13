@@ -35,4 +35,8 @@ version.txt
 .dockerignore
 
 ac-deployment-shard.yaml
-tmp-ac-deployment-shard.yaml
+tmp-ac-deployment-shard.yamlsveltos-agent.m
+tmp-ac-deployment-shard.yamlsveltos-agent.tmp
+em-deployment-agentless.yaml
+sveltos-agent.yaml.m
+sveltos-agent.yaml.tmp

@@ -16,3 +16,4 @@ spec:
         - "--capi-onboard-annotation="
         - "--v=5"
         - "--version=main"
+        - "--agent-in-mgmt-cluster=false"

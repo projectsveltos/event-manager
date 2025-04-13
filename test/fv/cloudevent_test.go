@@ -26,6 +26,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -106,20 +107,30 @@ var _ = Describe("CloudEvents", func() {
 		Expect(err).To(BeNil())
 		Expect(workloadClient).ToNot(BeNil())
 
-		Byf("Verifying EventSource %s is present in the managed cluster", eventSource.Name)
-		Eventually(func() error {
-			currentEventSource := &libsveltosv1beta1.EventSource{}
-			return workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
-				currentEventSource)
-		}, timeout, pollingInterval).Should(BeNil())
+		if isAgentLessMode() {
+			Byf("Verifying EventSource %s is NOT present in the managed cluster", eventSource.Name)
+			Consistently(func() bool {
+				currentEventSource := &libsveltosv1beta1.EventSource{}
+				err = workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
+					currentEventSource)
+				return err != nil && meta.IsNoMatchError(err) // CRD never installed
+			}, timeout/2, pollingInterval).Should(BeTrue())
+		} else {
+			Byf("Verifying EventSource %s is present in the managed cluster", eventSource.Name)
+			Eventually(func() error {
+				currentEventSource := &libsveltosv1beta1.EventSource{}
+				return workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
+					currentEventSource)
+			}, timeout, pollingInterval).Should(BeNil())
 
-		Byf("Verifying EventReports %s is present in the managed cluster", eventSource.Name)
-		Eventually(func() error {
-			currentEventReport := &libsveltosv1beta1.EventReport{}
-			return workloadClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
-				currentEventReport)
-		}, timeout, pollingInterval).Should(BeNil())
+			Byf("Verifying EventReports %s is present in the managed cluster", eventSource.Name)
+			Eventually(func() error {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				return workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					currentEventReport)
+			}, timeout, pollingInterval).Should(BeNil())
+		}
 
 		Byf("Verifying EventReports %s is present in the management cluster", eventSource.Name)
 		Eventually(func() error {
@@ -129,33 +140,59 @@ var _ = Describe("CloudEvents", func() {
 				currentEventReport)
 		}, timeout, pollingInterval).Should(BeNil())
 
-		Byf("Updating EventReports in the managed cluster adding a matching CloudEvent")
-		currentEventReport := &libsveltosv1beta1.EventReport{}
-		Expect(workloadClient.Get(context.TODO(),
-			types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
-			currentEventReport)).To(Succeed())
-
 		subject := randomString()
 		//nolint: lll // line with cloudEvent
 		jsonString := fmt.Sprintf(`{"specversion":"1.0","id":"10001","source":"my.source","type":"my.type","subject":%q,"datacontenttype":"application/json","data":{"message":"hello"}}`, subject)
 		jsonData := []byte(jsonString)
-		currentEventReport.Spec.CloudEvents = [][]byte{jsonData}
-		Expect(workloadClient.Update(context.TODO(), currentEventReport)).To(Succeed())
-		waitingForDelivery := libsveltosv1beta1.ReportWaitingForDelivery
-		currentEventReport.Status.Phase = &waitingForDelivery
-		Expect(workloadClient.Status().Update(context.TODO(), currentEventReport)).To(Succeed())
 
-		Byf("Verifying EventReports %s has CloudEvents reset in the managed cluster", eventSource.Name)
-		Eventually(func() bool {
-			currentEventReport := &libsveltosv1beta1.EventReport{}
-			err = workloadClient.Get(context.TODO(),
+		currentEventReport := &libsveltosv1beta1.EventReport{}
+		if isAgentLessMode() {
+			Byf("Updating EventReports in the management cluster adding a matching CloudEvent")
+			Expect(k8sClient.Get(context.TODO(),
+				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				currentEventReport)).To(Succeed())
+			currentEventReport.Spec.CloudEvents = [][]byte{jsonData}
+			Expect(k8sClient.Update(context.TODO(), currentEventReport)).To(Succeed())
+			waitingForDelivery := libsveltosv1beta1.ReportWaitingForDelivery
+			currentEventReport.Status.Phase = &waitingForDelivery
+			Expect(k8sClient.Status().Update(context.TODO(), currentEventReport)).To(Succeed())
+		} else {
+			Byf("Updating EventReports in the managed cluster adding a matching CloudEvent")
+			Expect(workloadClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
-				currentEventReport)
-			if err != nil {
-				return false
-			}
-			return len(currentEventReport.Spec.CloudEvents) == 0
-		}, timeout, pollingInterval).Should(BeTrue())
+				currentEventReport)).To(Succeed())
+			currentEventReport.Spec.CloudEvents = [][]byte{jsonData}
+			Expect(workloadClient.Update(context.TODO(), currentEventReport)).To(Succeed())
+			waitingForDelivery := libsveltosv1beta1.ReportWaitingForDelivery
+			currentEventReport.Status.Phase = &waitingForDelivery
+			Expect(workloadClient.Status().Update(context.TODO(), currentEventReport)).To(Succeed())
+		}
+
+		if isAgentLessMode() {
+			Byf("Verifying EventReports %s has CloudEvents reset in the management cluster", eventSource.Name)
+			Eventually(func() bool {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				err = k8sClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+					currentEventReport)
+				if err != nil {
+					return false
+				}
+				return len(currentEventReport.Spec.CloudEvents) == 0
+			}, timeout, pollingInterval).Should(BeTrue())
+		} else {
+			Byf("Verifying EventReports %s has CloudEvents reset in the managed cluster", eventSource.Name)
+			Eventually(func() bool {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				err = workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					currentEventReport)
+				if err != nil {
+					return false
+				}
+				return len(currentEventReport.Spec.CloudEvents) == 0
+			}, timeout, pollingInterval).Should(BeTrue())
+		}
 
 		By("Verifying ClusterProfile has been created")
 		Eventually(func() bool {
@@ -197,22 +234,24 @@ var _ = Describe("CloudEvents", func() {
 			currentEventTrigger)).To(Succeed())
 		Expect(k8sClient.Delete(context.TODO(), currentEventTrigger)).To(Succeed())
 
-		Byf("Verifying EventSource %s is removed from the managed cluster", eventSource.Name)
-		Eventually(func() bool {
-			currentEventSource := &libsveltosv1beta1.EventSource{}
-			err = workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
-				currentEventSource)
-			return err != nil && apierrors.IsNotFound(err)
-		}, timeout, pollingInterval).Should(BeTrue())
+		if !isAgentLessMode() {
+			Byf("Verifying EventSource %s is removed from the managed cluster", eventSource.Name)
+			Eventually(func() bool {
+				currentEventSource := &libsveltosv1beta1.EventSource{}
+				err = workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
+					currentEventSource)
+				return err != nil && apierrors.IsNotFound(err)
+			}, timeout, pollingInterval).Should(BeTrue())
 
-		Byf("Verifying EventReports %s is removed from the managed cluster", eventSource.Name)
-		Eventually(func() bool {
-			currentEventReport := &libsveltosv1beta1.EventReport{}
-			err = workloadClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
-				currentEventReport)
-			return err != nil && apierrors.IsNotFound(err)
-		}, timeout, pollingInterval).Should(BeTrue())
+			Byf("Verifying EventReports %s is removed from the managed cluster", eventSource.Name)
+			Eventually(func() bool {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				err = workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					currentEventReport)
+				return err != nil && apierrors.IsNotFound(err)
+			}, timeout, pollingInterval).Should(BeTrue())
+		}
 
 		Byf("Verifying EventTrigger %s is removed from the management cluster", eventTrigger.Name)
 		Eventually(func() bool {
@@ -221,7 +260,7 @@ var _ = Describe("CloudEvents", func() {
 			return err != nil && apierrors.IsNotFound(err)
 		}, timeout, pollingInterval).Should(BeTrue())
 
-		Byf("Deleting EventSource %s in the managed cluster", eventSource.Name)
+		Byf("Deleting EventSource %s in the management cluster", eventSource.Name)
 		currentEventSource := &libsveltosv1beta1.EventSource{}
 		Expect(k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
 			currentEventSource)).To(Succeed())

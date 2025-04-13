@@ -146,6 +146,7 @@ type EventTriggerReconciler struct {
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventtriggers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventsources,verbs=get;list;watch
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventreports,verbs=create;update;delete;get;watch;list
+//+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventreports/status,verbs=get;list;update
 //+kubebuilder:rbac:groups=config.projectsveltos.io,resources=clusterprofiles,verbs=get;list;update;create;delete;watch;patch
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=clustersets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=clustersets/status,verbs=get;watch;list
