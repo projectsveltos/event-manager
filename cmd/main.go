@@ -65,6 +65,7 @@ var (
 	version               string
 	diagnosticsAddress    string
 	insecureDiagnostics   bool
+	agentInMgmtCluster    bool
 	workers               int
 	concurrentReconciles  int
 	restConfigQPS         float32
@@ -122,6 +123,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	controllers.SetManagementClusterAccess(mgr.GetClient(), mgr.GetConfig())
+	controllers.SetAgentInMgmtCluster(agentInMgmtCluster)
+
 	// Setup the context that's going to be used in controllers and for the manager.
 	ctx := ctrl.SetupSignalHandler()
 
@@ -174,6 +178,9 @@ func main() {
 }
 
 func initFlags(fs *pflag.FlagSet) {
+	fs.BoolVar(&agentInMgmtCluster, "agent-in-mgmt-cluster", false,
+		"When set, indicates drift-detection-manager needs to be started in the management cluster")
+
 	fs.StringVar(&diagnosticsAddress, "diagnostics-address", ":8443",
 		"The address the diagnostics endpoint binds to. Per default metrics are served via https and with"+
 			"authentication/authorization. To serve via http and without authentication/authorization set --insecure-diagnostics."+

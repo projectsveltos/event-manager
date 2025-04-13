@@ -83,6 +83,9 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
+	controllers.SetAgentInMgmtCluster(false)
+	controllers.SetManagementClusterAccess(testEnv.Client, testEnv.Config)
+
 	var sveltosCRD *unstructured.Unstructured
 	sveltosCRD, err = k8s_utils.GetUnstructured(libsveltoscrd.GetSveltosClusterCRDYAML())
 	Expect(err).To(BeNil())

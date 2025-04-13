@@ -313,6 +313,12 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 		}
 	}
 
+	// When in agentless mode, EventSources instances are not copued to managed cluster anymore.
+	// This addition ensures the EvenTrigger is redeployed due to the change in deployment location.
+	if getAgentInMgmtCluster() {
+		config += ("agentless")
+	}
+
 	h := sha256.New()
 	h.Write([]byte(config))
 	return h.Sum(nil), nil
@@ -477,7 +483,7 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 	logger.V(logs.LogDebug).Info("queueing request to un-deploy")
 	if err := r.Deployer.Deploy(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id,
 		clusterproxy.GetClusterType(cluster), true,
-		undeployEventTriggerResourcesFromCluster, programDuration, deployer.Options{}); err != nil {
+		f.undeploy, programDuration, deployer.Options{}); err != nil {
 		return nil, err
 	}
 
@@ -638,20 +644,26 @@ func remove(s []libsveltosv1beta1.ClusterInfo, i int) []libsveltosv1beta1.Cluste
 // deployEventSource deploys (creates or updates) referenced EventSource.
 func deployEventSource(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
-	resource *v1beta1.EventTrigger, logger logr.Logger) error {
+	eventTrigger *v1beta1.EventTrigger, logger logr.Logger) error {
 
-	currentReferenced, err := fetchEventSource(ctx, c, clusterNamespace, clusterName, resource.Spec.EventSourceName,
-		clusterType, logger)
+	currentEventSource, err := fetchEventSource(ctx, c, clusterNamespace, clusterName,
+		eventTrigger.Spec.EventSourceName, clusterType, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventSource %s: %v",
-			resource.Spec.EventSourceName, err))
+			eventTrigger.Spec.EventSourceName, err))
 		return err
 	}
-	if currentReferenced == nil {
+	if currentEventSource == nil {
 		logger.V(logs.LogInfo).Info("EventSource not found")
 		return nil
 	}
 
+	if getAgentInMgmtCluster() {
+		return addEventSourceToConfigMap(ctx, c, clusterNamespace, clusterName, clusterType,
+			eventTrigger, currentEventSource, logger)
+	}
+
+	// If sveltos-agent is deployed to the managed cluster, deply EventSource there
 	var remoteClient client.Client
 	remoteClient, err = clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
 		"", "", clusterType, logger)
@@ -663,7 +675,7 @@ func deployEventSource(ctx context.Context, c client.Client,
 	// classifier installs sveltos-agent and CRDs it needs, including
 	// EventSource and EventReport CRDs.
 
-	err = createOrUpdateEventSource(ctx, remoteClient, resource, currentReferenced, logger)
+	err = createOrUpdateEventSource(ctx, remoteClient, eventTrigger, currentEventSource, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create/update EventSource: %v", err))
 		return err
@@ -751,7 +763,7 @@ func removeStaleEventReports(ctx context.Context, c client.Client,
 // An EventSource with zero OwnerReference will be deleted from managed cluster.
 func removeStaleEventSources(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
-	resource *v1beta1.EventTrigger, removeAll bool, logger logr.Logger) error {
+	eventTrigger *v1beta1.EventTrigger, removeAll bool, logger logr.Logger) error {
 
 	// If the cluster does not exist anymore, return (cluster has been deleted
 	// there is nothing to clear)
@@ -766,6 +778,18 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 			}
 		}
 		return err
+	}
+
+	if getAgentInMgmtCluster() {
+		leaveEntry := ""
+		if !removeAll && eventTrigger.DeletionTimestamp.IsZero() {
+			// If removeAll is false and eventTrigger still exists, remove all entries but the one pointing
+			// to current referenced EventSource
+			leaveEntry = eventTrigger.Spec.EventSourceName
+		}
+
+		return removeEventSourceFromConfigMap(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
+			leaveEntry, logger)
 	}
 
 	remoteClient, err := clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
@@ -788,18 +812,18 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 
 		// removeAll indicates all EventSources deployed by this EventTrigger on this cluster
 		// need to be removed (cluster is no longer a match)
-		if !removeAll && resource.DeletionTimestamp.IsZero() &&
-			es.Name == resource.Spec.EventSourceName {
+		if !removeAll && eventTrigger.DeletionTimestamp.IsZero() &&
+			es.Name == eventTrigger.Spec.EventSourceName {
 			// eventTrigger still exists and eventSource is still referenced
 			continue
 		}
 
-		if !util.IsOwnedByObject(es, resource) {
+		if !util.IsOwnedByObject(es, eventTrigger) {
 			continue
 		}
 
 		l.V(logs.LogDebug).Info("removing OwnerReference")
-		k8s_utils.RemoveOwnerReference(es, resource)
+		k8s_utils.RemoveOwnerReference(es, eventTrigger)
 
 		if len(es.GetOwnerReferences()) != 0 {
 			l.V(logs.LogDebug).Info("updating")
@@ -2622,7 +2646,6 @@ func deleteClusterProfile(ctx context.Context, c client.Client, clusterProfile *
 	}
 
 	logger.V(logs.LogInfo).Info(fmt.Sprintf("delete ClusterProfile %s", clusterProfile.Name))
-
 	return c.Delete(ctx, currentClusterProfile)
 }
 

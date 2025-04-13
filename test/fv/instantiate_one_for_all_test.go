@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -145,20 +146,30 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		Expect(err).To(BeNil())
 		Expect(workloadClient).ToNot(BeNil())
 
-		Byf("Verifying EventSource %s is present in the managed cluster", eventSource.Name)
-		Eventually(func() error {
-			currentEventSource := &libsveltosv1beta1.EventSource{}
-			return workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
-				currentEventSource)
-		}, timeout, pollingInterval).Should(BeNil())
+		if isAgentLessMode() {
+			Byf("Verifying EventSource %s is NOT present in the managed cluster", eventSource.Name)
+			Consistently(func() bool {
+				currentEventSource := &libsveltosv1beta1.EventSource{}
+				err = workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
+					currentEventSource)
+				return err != nil && meta.IsNoMatchError(err) // CRD never installed
+			}, timeout/2, pollingInterval).Should(BeTrue())
+		} else {
+			Byf("Verifying EventSource %s is present in the managed cluster", eventSource.Name)
+			Eventually(func() error {
+				currentEventSource := &libsveltosv1beta1.EventSource{}
+				return workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
+					currentEventSource)
+			}, timeout, pollingInterval).Should(BeNil())
 
-		Byf("Verifying EventReports %s is present in the managed cluster", eventSource.Name)
-		Eventually(func() error {
-			currentEventReport := &libsveltosv1beta1.EventReport{}
-			return workloadClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
-				currentEventReport)
-		}, timeout, pollingInterval).Should(BeNil())
+			Byf("Verifying EventReports %s is present in the managed cluster", eventSource.Name)
+			Eventually(func() error {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				return workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					currentEventReport)
+			}, timeout, pollingInterval).Should(BeNil())
+		}
 
 		Byf("Verifying EventReports %s is present in the management cluster", eventSource.Name)
 		Eventually(func() error {
@@ -225,17 +236,28 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		}
 		Expect(workloadClient.Create(context.TODO(), service)).To(Succeed())
 
-		Byf("Verifying EventReports %s is present in the managed cluster with matching resource", eventSource.Name)
-		Eventually(func() bool {
-			currentEventReport := &libsveltosv1beta1.EventReport{}
-			err = workloadClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
-				currentEventReport)
-			if err != nil {
-				return false
-			}
-			return len(currentEventReport.Spec.Resources) != 0
-		}, timeout, pollingInterval).Should(BeTrue())
+		if isAgentLessMode() {
+			Byf("Verifying EventReports %s is NOT present in the managed cluster", eventSource.Name)
+			Consistently(func() bool {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				err = workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					currentEventReport)
+				return err != nil && meta.IsNoMatchError(err) // CRD never installed
+			}, timeout/2, pollingInterval).Should(BeTrue())
+		} else {
+			Byf("Verifying EventReports %s is present in the managed cluster with matching resource", eventSource.Name)
+			Eventually(func() bool {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				err = workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					currentEventReport)
+				if err != nil {
+					return false
+				}
+				return len(currentEventReport.Spec.Resources) != 0
+			}, timeout, pollingInterval).Should(BeTrue())
+		}
 
 		Byf("Verifying EventReports %s is present in the management cluster with matching resource", getEventReportName(eventSource.Name))
 		Eventually(func() bool {
@@ -288,22 +310,24 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 			currentEventTrigger)).To(Succeed())
 		Expect(k8sClient.Delete(context.TODO(), currentEventTrigger)).To(Succeed())
 
-		Byf("Verifying EventSource %s is removed from the managed cluster", eventSource.Name)
-		Eventually(func() bool {
-			currentEventSource := &libsveltosv1beta1.EventSource{}
-			err = workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
-				currentEventSource)
-			return err != nil && apierrors.IsNotFound(err)
-		}, timeout, pollingInterval).Should(BeTrue())
+		if !isAgentLessMode() {
+			Byf("Verifying EventSource %s is removed from the managed cluster", eventSource.Name)
+			Eventually(func() bool {
+				currentEventSource := &libsveltosv1beta1.EventSource{}
+				err = workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSource.Name},
+					currentEventSource)
+				return err != nil && apierrors.IsNotFound(err)
+			}, timeout, pollingInterval).Should(BeTrue())
 
-		Byf("Verifying EventReports %s is removed from the managed cluster", eventSource.Name)
-		Eventually(func() bool {
-			currentEventReport := &libsveltosv1beta1.EventReport{}
-			err = workloadClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
-				currentEventReport)
-			return err != nil && apierrors.IsNotFound(err)
-		}, timeout, pollingInterval).Should(BeTrue())
+			Byf("Verifying EventReports %s is removed from the managed cluster", eventSource.Name)
+			Eventually(func() bool {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				err = workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					currentEventReport)
+				return err != nil && apierrors.IsNotFound(err)
+			}, timeout, pollingInterval).Should(BeTrue())
+		}
 
 		Byf("Verifying EventTrigger %s is removed from the management cluster", eventTrigger.Name)
 		Eventually(func() bool {

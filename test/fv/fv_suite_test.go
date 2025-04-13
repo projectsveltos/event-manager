@@ -19,6 +19,7 @@ package fv_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 
 	"github.com/TwiN/go-color"
 	ginkgotypes "github.com/onsi/ginkgo/v2/types"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,6 +55,12 @@ var (
 const (
 	timeout         = 2 * time.Minute
 	pollingInterval = 5 * time.Second
+)
+
+const (
+	deplNamespace        = "projectsveltos"
+	deplName             = "event-manager"
+	managerContainerName = "manager"
 )
 
 func TestFv(t *testing.T) {
@@ -185,4 +193,23 @@ func createNamespaceAndService(c client.Client, serviceNamespace string) {
 		},
 	}
 	Expect(c.Create(context.TODO(), service)).To(Succeed())
+}
+
+func isAgentLessMode() bool {
+	By("Getting event manager pod")
+	classfierDepl := &appsv1.Deployment{}
+	Expect(k8sClient.Get(context.TODO(),
+		types.NamespacedName{Namespace: deplNamespace, Name: deplName},
+		classfierDepl)).To(Succeed())
+
+	Expect(len(classfierDepl.Spec.Template.Spec.Containers)).To(Equal(1))
+
+	for i := range classfierDepl.Spec.Template.Spec.Containers[0].Args {
+		if strings.Contains(classfierDepl.Spec.Template.Spec.Containers[0].Args[i], "agent-in-mgmt-cluster=true") {
+			By("Event-manager in agentless mode")
+			return true
+		}
+	}
+
+	return false
 }
