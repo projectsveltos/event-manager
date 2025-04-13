@@ -317,10 +317,12 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 		}
 
 		if getAgentInMgmtCluster() {
-			// After ClusterProfiles are updated, EventReport status is updated to Processed.
-			// If in agentless mode, the Status of EventReport in the management cluster will be updated.
-			// So set er to current version (update otherwise will fail with object has been modified)
-			er = mgmtClusterEventReport
+			if mgmtClusterEventReport != nil {
+				// After ClusterProfiles are updated, EventReport status is updated to Processed.
+				// If in agentless mode, the Status of EventReport in the management cluster will be updated.
+				// So set er to current version (update otherwise will fail with object has been modified)
+				er = mgmtClusterEventReport
+			}
 		}
 
 		err = updateAllClusterProfiles(ctx, c, cluster, er, eventSourceMap, eventTriggerMap, logger)
