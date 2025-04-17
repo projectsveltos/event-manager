@@ -416,7 +416,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		// Getting here means either EventTrigger failed to be deployed or EventTrigger has changed.
 		// EventTrigger must be (re)deployed.
 		if err := r.Deployer.Deploy(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id, clusterproxy.GetClusterType(cluster),
-			false, processEventTriggerForCluster, programDuration, deployer.Options{}); err != nil {
+			false, f.deploy, programDuration, deployer.Options{}); err != nil {
 			return nil, err
 		}
 	}
