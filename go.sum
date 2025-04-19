@@ -138,10 +138,10 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prashantv/gostub v1.1.0 h1:BTyx3RfQjRHnUWaGF9oQos79AlQ5k8WNktv7VGvVH4g=
 github.com/prashantv/gostub v1.1.0/go.mod h1:A5zLQHz7ieHGG7is6LLXLz7I8+3LZzsrV0P1IAHhP5U=
-github.com/projectsveltos/addon-controller v0.52.1-0.20250419122547-22afd67545b9 h1:NxuBcv8157RlU2sXlgK/mUUxm6d5THIw6gOjJ5NT+XI=
-github.com/projectsveltos/addon-controller v0.52.1-0.20250419122547-22afd67545b9/go.mod h1:WFcmlzRedxvsWfxGOURbDteBzgyt6KUgP5adeEgOkx0=
-github.com/projectsveltos/libsveltos v0.52.1-0.20250419080121-999ada70dad8 h1:miJ1FxjiGma4LieY+mwkOHrMhvqwEzGtTdBxc9vxGIU=
-github.com/projectsveltos/libsveltos v0.52.1-0.20250419080121-999ada70dad8/go.mod h1:FR5Zi1h1HRuRxsvhH24HQRWRCbJLcKailfYlcbG/Cvk=
+github.com/projectsveltos/addon-controller v0.52.1 h1:Mo+HSoJ3N6anfkUHZBLZQzxPLYGXKnJ/cDzNgDRCdmM=
+github.com/projectsveltos/addon-controller v0.52.1/go.mod h1:AHNtPPwTR/RT5+WjbsCdfXW/H5AOa8H16giZO5hTdZU=
+github.com/projectsveltos/libsveltos v0.52.1 h1:EoQweDP8I7lsTa6wJI0wsqgXSdd2aLdf9DAvyb9bELA=
+github.com/projectsveltos/libsveltos v0.52.1/go.mod h1:FR5Zi1h1HRuRxsvhH24HQRWRCbJLcKailfYlcbG/Cvk=
 github.com/prometheus/client_golang v1.22.0 h1:rb93p9lokFEsctTys46VnV1kLCDpVZ0a/Y92Vm0Zc6Q=
 github.com/prometheus/client_golang v1.22.0/go.mod h1:R7ljNsLXhuQXYZYtw6GAE9AZg8Y7vEW5scdCXrWRXC0=
 github.com/prometheus/client_model v0.6.1 h1:ZKSh/rekM+n3CeS952MLRAdFwIKqeY8b62p8ais2e9E=
