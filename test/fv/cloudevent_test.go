@@ -63,6 +63,9 @@ var _ = Describe("CloudEvents", func() {
 		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namePrefix + randomString(),
+				Annotations: map[string]string{
+					randomString(): randomString(),
+				},
 			},
 			Spec: libsveltosv1beta1.EventSourceSpec{
 				MessagingMatchCriteria: []libsveltosv1beta1.MessagingMatchCriteria{

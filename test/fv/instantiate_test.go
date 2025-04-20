@@ -95,6 +95,9 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
+				Annotations: map[string]string{
+					randomString(): randomString(),
+				},
 			},
 			Spec: libsveltosv1beta1.EventSourceSpec{
 				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
