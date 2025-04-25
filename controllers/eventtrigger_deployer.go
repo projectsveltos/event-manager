@@ -63,7 +63,10 @@ const (
 	// Namespace where reports will be generated
 	ReportNamespace = "projectsveltos"
 
-	eventReportNameLabel             = "eventtrigger.lib.projectsveltos.io/eventreportname"
+	// TODO: remove this (it is replaced by eventSourceNameLabel)
+	eventReportNameLabel = "eventtrigger.lib.projectsveltos.io/eventreportname"
+
+	eventSourceNameLabel             = "eventtrigger.lib.projectsveltos.io/eventsourcename"
 	eventTriggerNameLabel            = "eventtrigger.lib.projectsveltos.io/eventtriggername"
 	clusterNamespaceLabel            = "eventtrigger.lib.projectsveltos.io/clusterNamespace"
 	clusterNameLabel                 = "eventtrigger.lib.projectsveltos.io/clustername"
@@ -1901,7 +1904,17 @@ func getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName
 
 	// When deleting all resources created by an EventTrigger, er will be nil
 	if er != nil {
-		labels[eventReportNameLabel] = er.Name
+		// In release v0.52.2 when running in agentless mode, the EventReport name.
+		// While previously the EventReport name used to match the EventSource, it is different
+		// name (getEventReportNameInManagementCluster). This caused on upgrade, same ClusterProfile
+		// to be instantiated twice because of that.
+		// EventReport has projectsveltos.io/eventsource-name label. So use that instead to avoid
+		// this problem
+		// Given eventReportNameLabel is now misleading (it contains the EventSource name not the
+		// EventReport one) introducing eventSourceNameLabel. In few releases after v0.52.2 we can
+		// remove eventReportNameLabel
+		labels[eventReportNameLabel] = er.Labels[libsveltosv1beta1.EventSourceNameLabel]
+		labels[eventSourceNameLabel] = er.Labels[libsveltosv1beta1.EventSourceNameLabel]
 	}
 
 	return labels
