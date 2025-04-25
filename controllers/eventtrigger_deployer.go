@@ -1023,6 +1023,14 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		return nil, err
 	}
 
+	// It is important to add this label here (after we searched if a ClusterProfile already exists)
+	if er != nil && er.Labels != nil {
+		// Given eventReportNameLabel is now misleading (it contains the EventSource name not the
+		// EventReport one) introducing eventSourceNameLabel. In few releases after v0.52.2 we can
+		// remove eventReportNameLabel
+		labels[eventSourceNameLabel] = er.Labels[libsveltosv1beta1.EventSourceNameLabel]
+	}
+
 	clusterProfile := getNonInstantiatedClusterProfile(eventTrigger, clusterProfileName, labels)
 	if object.CloudEvent != nil {
 		instantiatedCloudEventAction, err := instantiateCloudEventAction(clusterNamespace, clusterName, eventTrigger,
@@ -1121,6 +1129,14 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile name: %v", err))
 		return nil, err
+	}
+
+	// It is important to add this label here (after we searched if a ClusterProfile already exists)
+	if eventReport != nil && eventReport.Labels != nil {
+		// Given eventReportNameLabel is now misleading (it contains the EventSource name not the
+		// EventReport one) introducing eventSourceNameLabel. In few releases after v0.52.2 we can
+		// remove eventReportNameLabel
+		labels[eventSourceNameLabel] = eventReport.Labels[libsveltosv1beta1.EventSourceNameLabel]
 	}
 
 	clusterProfile := getNonInstantiatedClusterProfile(eventTrigger, clusterProfileName, labels)
@@ -1910,11 +1926,7 @@ func getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName
 		// to be instantiated twice because of that.
 		// EventReport has projectsveltos.io/eventsource-name label. So use that instead to avoid
 		// this problem
-		// Given eventReportNameLabel is now misleading (it contains the EventSource name not the
-		// EventReport one) introducing eventSourceNameLabel. In few releases after v0.52.2 we can
-		// remove eventReportNameLabel
 		labels[eventReportNameLabel] = er.Labels[libsveltosv1beta1.EventSourceNameLabel]
-		labels[eventSourceNameLabel] = er.Labels[libsveltosv1beta1.EventSourceNameLabel]
 	}
 
 	return labels
