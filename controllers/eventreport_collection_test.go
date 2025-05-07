@@ -200,9 +200,17 @@ var _ = Describe("EventSource Deployer", func() {
 			},
 		}
 
-		cluster := &corev1.ObjectReference{
-			Namespace:  randomString(),
-			Name:       randomString(),
+		cluster := &libsveltosv1beta1.SveltosCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: randomString(),
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		clusterRef := &corev1.ObjectReference{
+			Namespace:  cluster.Namespace,
+			Name:       cluster.Name,
 			Kind:       libsveltosv1beta1.SveltosClusterKind,
 			APIVersion: libsveltosv1beta1.GroupVersion.String(),
 		}
@@ -217,27 +225,40 @@ var _ = Describe("EventSource Deployer", func() {
 			},
 		}
 
-		initObjects := []client.Object{
-			et1, et2,
-		}
+		Expect(testEnv.Create(context.TODO(), et1)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, et1)).To(Succeed())
 
-		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
-			WithObjects(initObjects...).Build()
+		Expect(testEnv.Create(context.TODO(), et2)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, et2)).To(Succeed())
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: cluster.Namespace,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
 
 		eventTriggers := &v1beta1.EventTriggerList{}
-		Expect(c.List(context.TODO(), eventTriggers)).To(Succeed())
+		Expect(testEnv.List(context.TODO(), eventTriggers)).To(Succeed())
 
-		eventSourceMap, err := controllers.BuildEventTriggersForEventSourceMap(cluster, eventTriggers)
+		eventSourceMap, err := controllers.BuildEventTriggersForEventSourceMap(context.TODO(), clusterRef,
+			eventTriggers)
 		Expect(err).To(BeNil())
 		Expect(eventSourceMap).ToNot(BeNil())
 
 		v, ok := eventSourceMap[eventSourceName1]
 		Expect(ok).To(BeTrue())
-		Expect(v).To(ContainElement(et1))
+		Expect(len(v)).To(Equal(1))
+		Expect(v[0].Name).To(Equal(et1.Name))
 
 		v, ok = eventSourceMap[fmt.Sprintf("%s-%s", prefix, cluster.Name)]
 		Expect(ok).To(BeTrue())
-		Expect(v).To(ContainElement(et2))
+		Expect(len(v)).To(Equal(1))
+		Expect(v[0].Name).To(Equal(et2.Name))
 	})
 
 	It("buildEventTriggersForClusterMap builds a map of clusters matching an eventTrigger", func() {

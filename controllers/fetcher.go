@@ -84,14 +84,14 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 		templateName := getTemplateName(cluster.Namespace, cluster.Name, e.Name)
 
 		referencedResources, err := collectResourcesFromConfigMapGenerators(ctx, c, objects, e,
-			cluster.Namespace, templateName, logger)
+			templateName, cluster, logger)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, referencedResources...)
 
 		referencedResources, err = collectResourcesFromSecretGenerators(ctx, c, objects, e,
-			cluster.Namespace, templateName, logger)
+			templateName, cluster, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -102,14 +102,14 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 		result = append(result, remote...)
 
 		for i := range e.Spec.HelmCharts {
-			valuesFrom := getValuesFrom(ctx, c, e.Spec.HelmCharts[i].ValuesFrom, cluster.Namespace,
-				templateName, objects, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
+			valuesFrom := getValuesFrom(ctx, c, e.Spec.HelmCharts[i].ValuesFrom, templateName,
+				cluster, objects, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 			result = append(result, valuesFrom...)
 		}
 
 		for i := range e.Spec.KustomizationRefs {
-			valuesFrom := getValuesFrom(ctx, c, e.Spec.KustomizationRefs[i].ValuesFrom, cluster.Namespace,
-				templateName, objects, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
+			valuesFrom := getValuesFrom(ctx, c, e.Spec.KustomizationRefs[i].ValuesFrom, templateName,
+				cluster, objects, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 			result = append(result, valuesFrom...)
 		}
 	}
@@ -118,13 +118,19 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 }
 
 func collectResourcesFromConfigMapGenerators(ctx context.Context, c client.Client, objects any,
-	e *v1beta1.EventTrigger, templateName, clusterNamespace string, logger logr.Logger) ([]client.Object, error) {
+	e *v1beta1.EventTrigger, templateName string, cluster *corev1.ObjectReference, logger logr.Logger,
+) ([]client.Object, error) {
 
 	results := make([]client.Object, len(e.Spec.ConfigMapGenerator))
 
+	clusterType := clusterproxy.GetClusterType(cluster)
 	for i := range e.Spec.ConfigMapGenerator {
 		generator := &e.Spec.ConfigMapGenerator[i]
-		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, generator.Namespace)
+		namespace, err := libsveltostemplate.GetReferenceResourceNamespace(ctx, c,
+			cluster.Namespace, cluster.Name, generator.Namespace, clusterType)
+		if err != nil {
+			return nil, err
+		}
 
 		// The name of the referenced resource can be expressed as a template
 		referencedName, err := instantiateSection(templateName, []byte(generator.Name), objects,
@@ -146,13 +152,19 @@ func collectResourcesFromConfigMapGenerators(ctx context.Context, c client.Clien
 }
 
 func collectResourcesFromSecretGenerators(ctx context.Context, c client.Client, objects any,
-	e *v1beta1.EventTrigger, templateName, clusterNamespace string, logger logr.Logger) ([]client.Object, error) {
+	e *v1beta1.EventTrigger, templateName string, cluster *corev1.ObjectReference, logger logr.Logger,
+) ([]client.Object, error) {
 
 	results := make([]client.Object, len(e.Spec.SecretGenerator))
 
+	clusterType := clusterproxy.GetClusterType(cluster)
 	for i := range e.Spec.SecretGenerator {
 		generator := &e.Spec.SecretGenerator[i]
-		namespace := libsveltostemplate.GetReferenceResourceNamespace(clusterNamespace, generator.Namespace)
+		namespace, err := libsveltostemplate.GetReferenceResourceNamespace(ctx, c,
+			cluster.Namespace, cluster.Name, generator.Namespace, clusterType)
+		if err != nil {
+			return nil, err
+		}
 
 		// The name of the referenced resource can be expressed as a template
 		referencedName, err := instantiateSection(templateName, []byte(generator.Name), objects,
@@ -178,8 +190,8 @@ func fetchEventSource(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName, eventSourceName string, clusterType libsveltosv1beta1.ClusterType,
 	logger logr.Logger) (*libsveltosv1beta1.EventSource, error) {
 
-	instantiatedEventSourceName, err := libsveltostemplate.GetReferenceResourceName(clusterNamespace, clusterName,
-		string(clusterType), eventSourceName)
+	instantiatedEventSourceName, err := libsveltostemplate.GetReferenceResourceName(ctx, c,
+		clusterNamespace, clusterName, eventSourceName, clusterType)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get EventSource Name %s: %v",
 			eventSourceName, err))
@@ -228,7 +240,11 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 		var err error
 		var object client.Object
 
-		namespace := libsveltostemplate.GetReferenceResourceNamespace(cluster.Namespace, policyRef.Namespace)
+		namespace, err := libsveltostemplate.GetReferenceResourceNamespace(ctx, c,
+			cluster.Namespace, cluster.Name, policyRef.Namespace, clusterproxy.GetClusterType(cluster))
+		if err != nil {
+			return nil, nil, err
+		}
 
 		referencedName, err := instantiateSection(templateName, []byte(policyRef.Name), objects,
 			funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
