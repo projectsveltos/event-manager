@@ -1212,9 +1212,17 @@ var _ = Describe("EventTrigger deployer", func() {
 			},
 		}
 
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: namespace,
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
 		clusterRef := &corev1.ObjectReference{
 			Namespace:  namespace,
-			Name:       randomString(),
+			Name:       cluster.Name,
 			Kind:       "Cluster",
 			APIVersion: clusterv1.GroupVersion.String(),
 		}
@@ -1235,6 +1243,9 @@ var _ = Describe("EventTrigger deployer", func() {
 
 		Expect(testEnv.Client.Create(context.TODO(), eventTrigger)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventTrigger)).To(Succeed())
+
+		Expect(testEnv.Client.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
 
 		object := &controllers.CurrentObject{
 			MatchingResource: corev1.ObjectReference{
@@ -1349,9 +1360,17 @@ var _ = Describe("EventTrigger deployer", func() {
 			},
 		}
 
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: namespace,
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
 		clusterRef := &corev1.ObjectReference{
 			Namespace:  namespace,
-			Name:       randomString(),
+			Name:       cluster.Name,
 			Kind:       "Cluster",
 			APIVersion: clusterv1.GroupVersion.String(),
 		}
@@ -1383,6 +1402,9 @@ var _ = Describe("EventTrigger deployer", func() {
 
 		Expect(testEnv.Create(context.TODO(), eventTrigger)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv, eventTrigger)).To(Succeed())
+
+		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, cluster)).To(Succeed())
 
 		httpsService1 := `apiVersion: v1
 kind: Service

@@ -132,15 +132,6 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		initObjects := []client.Object{
-			secret,
-			configMap,
-			e,
-		}
-
-		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
-			WithObjects(initObjects...).Build()
-
 		cluster := &clusterv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      randomString(),
@@ -148,6 +139,16 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		initObjects := []client.Object{
+			secret,
+			configMap,
+			e,
+			cluster,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
 
 		local, remote, err := controllers.FetchPolicyRefs(context.TODO(), c, e, getClusterRef(cluster), nil,
 			randomString(), logger)
@@ -282,12 +283,20 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		initObjects := []client.Object{eventSource}
+		cluster := &libsveltosv1beta1.SveltosCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: randomString(),
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		initObjects := []client.Object{eventSource, cluster}
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		es, err := controllers.FetchEventSource(context.TODO(), c, randomString(), randomString(),
+		es, err := controllers.FetchEventSource(context.TODO(), c, cluster.Namespace, cluster.Name,
 			e.Spec.EventSourceName, libsveltosv1beta1.ClusterTypeSveltos, logger)
 		Expect(err).To(BeNil())
 		Expect(es).ToNot(BeNil())

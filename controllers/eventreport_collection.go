@@ -114,8 +114,8 @@ func removeEventReportsFromCluster(ctx context.Context, c client.Client, cluster
 // values => slice of the EventTriggers referencing it
 // This map is built one per cluster as EventSource can be expressed as a template and instantiated using
 // cluster namespace, name and type
-func buildEventTriggersForEventSourceMap(cluster *corev1.ObjectReference, eventTriggers *v1beta1.EventTriggerList,
-) (map[string][]*v1beta1.EventTrigger, error) {
+func buildEventTriggersForEventSourceMap(ctx context.Context, cluster *corev1.ObjectReference,
+	eventTriggers *v1beta1.EventTriggerList) (map[string][]*v1beta1.EventTrigger, error) {
 
 	clusterType := clusterproxy.GetClusterType(cluster)
 
@@ -124,8 +124,8 @@ func buildEventTriggersForEventSourceMap(cluster *corev1.ObjectReference, eventT
 	for i := range eventTriggers.Items {
 		et := &eventTriggers.Items[i]
 
-		eventSourceName, err := libsveltostemplate.GetReferenceResourceName(cluster.Namespace, cluster.Name,
-			string(clusterType), et.Spec.EventSourceName)
+		eventSourceName, err := libsveltostemplate.GetReferenceResourceName(ctx, getManagementClusterClient(),
+			cluster.Namespace, cluster.Name, et.Spec.EventSourceName, clusterType)
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +218,7 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 			// Build a map of EventTrigger consuming an EventSource. This is built once per cluster
 			// as EventSourceName in EventTrigger.Spec can be expressed as a template and instantiated
 			// using cluster namespace, name and type.
-			eventSourceMap, err := buildEventTriggersForEventSourceMap(cluster, eventTriggers)
+			eventSourceMap, err := buildEventTriggersForEventSourceMap(ctx, cluster, eventTriggers)
 			if err != nil {
 				time.Sleep(interval)
 				continue
