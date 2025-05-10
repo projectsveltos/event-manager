@@ -200,13 +200,28 @@ var _ = Describe("EventSource Deployer", func() {
 			},
 		}
 
+		annotationKey := randomString()
+		annotationValue := randomString()
 		cluster := &libsveltosv1beta1.SveltosCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      randomString(),
 				Namespace: randomString(),
+				Annotations: map[string]string{
+					annotationKey: annotationValue,
+				},
 			},
 		}
-		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: cluster.Namespace,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
 
 		clusterRef := &corev1.ObjectReference{
 			Namespace:  cluster.Namespace,
@@ -215,7 +230,8 @@ var _ = Describe("EventSource Deployer", func() {
 			APIVersion: libsveltosv1beta1.GroupVersion.String(),
 		}
 		prefix := "test-template"
-		eventSourceName2 := fmt.Sprintf("%s-{{ .Cluster.metadata.name }}", prefix)
+		eventSourceName2 := fmt.Sprintf("%s-{{ .Cluster.metadata.name }}-{{ index .Cluster.metadata.annotations %q}}",
+			prefix, annotationKey)
 		et2 := &v1beta1.EventTrigger{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
@@ -231,19 +247,8 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(testEnv.Create(context.TODO(), et2)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, et2)).To(Succeed())
 
-		ns := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: cluster.Namespace,
-			},
-		}
-		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
-		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
-
-		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
-		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
-
 		eventTriggers := &v1beta1.EventTriggerList{}
-		Expect(testEnv.List(context.TODO(), eventTriggers)).To(Succeed())
+		eventTriggers.Items = []v1beta1.EventTrigger{*et1, *et2}
 
 		eventSourceMap, err := controllers.BuildEventTriggersForEventSourceMap(context.TODO(), clusterRef,
 			eventTriggers)
@@ -255,7 +260,7 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(len(v)).To(Equal(1))
 		Expect(v[0].Name).To(Equal(et1.Name))
 
-		v, ok = eventSourceMap[fmt.Sprintf("%s-%s", prefix, cluster.Name)]
+		v, ok = eventSourceMap[fmt.Sprintf("%s-%s-%s", prefix, cluster.Name, annotationValue)]
 		Expect(ok).To(BeTrue())
 		Expect(len(v)).To(Equal(1))
 		Expect(v[0].Name).To(Equal(et2.Name))

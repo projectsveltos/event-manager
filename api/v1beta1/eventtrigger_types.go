@@ -74,6 +74,13 @@ type GeneratorReference struct {
 	// - `.Cluster.kind`: kind of the managed cluster object
 	// +kubebuilder:validation:MinLength=1
 	InstantiatedResourceNameFormat string `json:"nameFormat"`
+
+	// Optional indicates that the referenced resource is not mandatory.
+	// If set to true and the resource is not found, the error will be ignored,
+	// and Sveltos will continue processing other generators.
+	// +kubebuilder:default:=false
+	// +optional
+	Optional bool `json:"optional,omitempty"`
 }
 
 // EventTriggerSpec defines the desired state of EventTrigger

@@ -142,6 +142,13 @@ func collectResourcesFromConfigMapGenerators(ctx context.Context, c client.Clien
 		var referencedResource client.Object
 		referencedResource, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(referencedName)})
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				logger.V(logs.LogInfo).Info("referenced ConfigMapGenerator %s/%s not found",
+					namespace, referencedName)
+				if generator.Optional {
+					continue
+				}
+			}
 			return nil, err
 		}
 
@@ -170,6 +177,13 @@ func collectResourcesFromSecretGenerators(ctx context.Context, c client.Client, 
 		referencedName, err := instantiateSection(templateName, []byte(generator.Name), objects,
 			funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				logger.V(logs.LogInfo).Info("referenced SecretMapGenerator %s/%s not found",
+					namespace, referencedName)
+				if generator.Optional {
+					continue
+				}
+			}
 			return nil, err
 		}
 
@@ -201,6 +215,9 @@ func fetchEventSource(ctx context.Context, c client.Client,
 	eventSource := &libsveltosv1beta1.EventSource{}
 	err = c.Get(ctx, types.NamespacedName{Name: instantiatedEventSourceName}, eventSource)
 	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventSource %s: %v",
+			instantiatedEventSourceName, err))
+
 		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
@@ -261,6 +278,9 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 			if apierrors.IsNotFound(err) {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("%s %s/%s does not exist yet",
 					policyRef.Kind, namespace, referencedName))
+				if policyRef.Optional {
+					continue
+				}
 				return nil, nil, fmt.Errorf("referenced %s %s/%s does not exist",
 					policyRef.Kind, namespace, string(referencedName))
 			}

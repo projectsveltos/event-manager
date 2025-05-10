@@ -10,8 +10,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/addon-controller v0.53.0
-	github.com/projectsveltos/libsveltos v0.53.1-0.20250506070210-ef75a78e70a1
+	github.com/projectsveltos/addon-controller v0.53.1-0.20250509155036-e39ae0fd2aa6
+	github.com/projectsveltos/libsveltos v0.53.1-0.20250508204842-3ec81919e31d
 	github.com/prometheus/client_golang v1.22.0
 	github.com/spf13/pflag v1.0.6
 	golang.org/x/text v0.24.0
