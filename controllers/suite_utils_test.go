@@ -61,7 +61,7 @@ var (
 
 func randomString() string {
 	const length = 10
-	return util.RandomString(length)
+	return "prefix-" + util.RandomString(length)
 }
 
 func setupScheme() (*runtime.Scheme, error) {

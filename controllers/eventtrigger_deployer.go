@@ -652,12 +652,9 @@ func deployEventSource(ctx context.Context, c client.Client,
 	currentEventSource, err := fetchEventSource(ctx, c, clusterNamespace, clusterName,
 		eventTrigger.Spec.EventSourceName, clusterType, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventSource %s: %v",
-			eventTrigger.Spec.EventSourceName, err))
 		return err
 	}
 	if currentEventSource == nil {
-		logger.V(logs.LogInfo).Info("EventSource not found")
 		return nil
 	}
 
