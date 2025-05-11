@@ -123,13 +123,19 @@ func collectResourcesFromConfigMapGenerators(ctx context.Context, c client.Clien
 
 	results := make([]client.Object, len(e.Spec.ConfigMapGenerator))
 
-	clusterType := clusterproxy.GetClusterType(cluster)
 	for i := range e.Spec.ConfigMapGenerator {
 		generator := &e.Spec.ConfigMapGenerator[i]
-		namespace, err := libsveltostemplate.GetReferenceResourceNamespace(ctx, c,
-			cluster.Namespace, cluster.Name, generator.Namespace, clusterType)
-		if err != nil {
-			return nil, err
+
+		var namespace string
+		if generator.Namespace == "" {
+			namespace = cluster.Namespace
+		} else {
+			instantiatedNamespace, err := instantiateSection(templateName, []byte(generator.Namespace), objects,
+				funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
+			if err != nil {
+				return nil, err
+			}
+			namespace = string(instantiatedNamespace)
 		}
 
 		// The name of the referenced resource can be expressed as a template
@@ -164,13 +170,19 @@ func collectResourcesFromSecretGenerators(ctx context.Context, c client.Client, 
 
 	results := make([]client.Object, len(e.Spec.SecretGenerator))
 
-	clusterType := clusterproxy.GetClusterType(cluster)
 	for i := range e.Spec.SecretGenerator {
 		generator := &e.Spec.SecretGenerator[i]
-		namespace, err := libsveltostemplate.GetReferenceResourceNamespace(ctx, c,
-			cluster.Namespace, cluster.Name, generator.Namespace, clusterType)
-		if err != nil {
-			return nil, err
+
+		var namespace string
+		if generator.Namespace == "" {
+			namespace = cluster.Namespace
+		} else {
+			instantiatedNamespace, err := instantiateSection(templateName, []byte(generator.Namespace), objects,
+				funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
+			if err != nil {
+				return nil, err
+			}
+			namespace = string(instantiatedNamespace)
 		}
 
 		// The name of the referenced resource can be expressed as a template
@@ -257,10 +269,16 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 		var err error
 		var object client.Object
 
-		namespace, err := libsveltostemplate.GetReferenceResourceNamespace(ctx, c,
-			cluster.Namespace, cluster.Name, policyRef.Namespace, clusterproxy.GetClusterType(cluster))
-		if err != nil {
-			return nil, nil, err
+		var namespace string
+		if policyRef.Namespace == "" {
+			namespace = cluster.Namespace
+		} else {
+			instantiatedNamespace, err := instantiateSection(templateName, []byte(policyRef.Namespace), objects,
+				funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
+			if err != nil {
+				return nil, nil, err
+			}
+			namespace = string(instantiatedNamespace)
 		}
 
 		referencedName, err := instantiateSection(templateName, []byte(policyRef.Name), objects,
