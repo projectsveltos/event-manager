@@ -94,6 +94,21 @@ type EventTriggerSpec struct {
 	// +optional
 	ClusterSetRefs []string `json:"clusterSetRefs,omitempty"`
 
+	// DestinationClusterSelector identifies the cluster where add-ons will be deployed.
+	// By default, this is nil and add-ons will be deployed in the very same cluster the
+	// event happened.
+	// If DestinationClusterSelector is set though, when an event happens in any of the
+	// cluster identified by SourceClusterSelector, add-ons will be deployed in each of
+	// the cluster indentified by DestinationClusterSelector.
+	// +optional
+	DestinationClusterSelector libsveltosv1beta1.Selector `json:"destinationClusterSelector,omitempty"`
+
+	// DestinationCluster identifies a specific cluster (by name) to deploy add-ons to.
+	// This field is templatable, allowing dynamic values based on the event context.
+	// Cannot be set if DestinationClusterSelector is set.
+	// +optional
+	DestinationCluster *corev1.ObjectReference `json:"destinationCluster,omitempty"`
+
 	// Multiple resources in a managed cluster can be a match for referenced
 	// EventSource. OneForEvent indicates whether a ClusterProfile for all
 	// resource (OneForEvent = false) or one per resource (OneForEvent = true)
@@ -112,15 +127,6 @@ type EventTriggerSpec struct {
 	// - cluster type: .Cluster.kind
 	// +kubebuilder:validation:MinLength=1
 	EventSourceName string `json:"eventSourceName"`
-
-	// DestinationClusterSelector identifies the cluster where add-ons will be deployed.
-	// By default, this is nil and add-ons will be deployed in the very same cluster the
-	// event happened.
-	// If DestinationClusterSelector is set though, when an event happens in any of the
-	// cluster identified by SourceClusterSelector, add-ons will be deployed in each of
-	// the cluster indentified by DestinationClusterSelector.
-	// +optional
-	DestinationClusterSelector libsveltosv1beta1.Selector `json:"destinationClusterSelector,omitempty"`
 
 	// The ConfigMapGenerator field references ConfigMaps containing templates.
 	// These referenced ConfigMaps will be dynamically instantiated in the management cluster

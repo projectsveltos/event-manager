@@ -1069,12 +1069,17 @@ func instantiateClusterProfileSpecForResource(ctx context.Context, c client.Clie
 	clusterProfileSpec := *getClusterProfileSpec(eventTrigger)
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
-	err := setTemplateResourceRefs(&clusterProfileSpec, templateName, object.Cluster, object, eventTrigger, logger)
+	err := setTemplateResourceRefs(&clusterProfileSpec, templateName, object.Cluster, object,
+		eventTrigger, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	setClusterSelector(&clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger)
+	err = setClusterSelector(&clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger,
+		object, logger)
+	if err != nil {
+		return nil, err
+	}
 
 	instantiateHelmChartsWithResource, err := instantiateHelmChartsWithResource(ctx, c, eventTrigger,
 		clusterNamespace, templateName, eventTrigger.Spec.HelmCharts, object, labels, logger)
@@ -1163,12 +1168,17 @@ func instantiateClusterProfileSpecPerAllResource(ctx context.Context, c client.C
 	clusterProfileSpec := getClusterProfileSpec(eventTrigger)
 
 	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
-	err := setTemplateResourceRefs(clusterProfileSpec, templateName, objects.Cluster, objects, eventTrigger, logger)
+	err := setTemplateResourceRefs(clusterProfileSpec, templateName, objects.Cluster, objects,
+		eventTrigger, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	setClusterSelector(clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger)
+	err = setClusterSelector(clusterProfileSpec, clusterNamespace, clusterName, clusterType, eventTrigger,
+		objects, logger)
+	if err != nil {
+		return nil, err
+	}
 
 	instantiateHelmChartsWithResources, err := instantiateHelmChartsWithAllResources(ctx, c, eventTrigger,
 		clusterNamespace, templateName, eventTrigger.Spec.HelmCharts, objects, labels, logger)
@@ -1224,15 +1234,44 @@ func setPolicyRefs(ctx context.Context, c client.Client, clusterProfileSpec *con
 }
 
 func setClusterSelector(clusterProfileSpec *configv1beta1.Spec, clusterNamespace, clusterName string,
-	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger) {
+	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, data any,
+	logger logr.Logger) error {
 
-	if reflect.DeepEqual(eventTrigger.Spec.DestinationClusterSelector, libsveltosv1beta1.Selector{}) {
-		clusterProfileSpec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
-		clusterProfileSpec.ClusterSelector = libsveltosv1beta1.Selector{}
-	} else {
+	useSameCluster := true
+	if !reflect.DeepEqual(eventTrigger.Spec.DestinationClusterSelector, libsveltosv1beta1.Selector{}) {
+		useSameCluster = false
 		clusterProfileSpec.ClusterRefs = nil
 		clusterProfileSpec.ClusterSelector = eventTrigger.Spec.DestinationClusterSelector
 	}
+
+	if eventTrigger.Spec.DestinationCluster != nil {
+		useSameCluster = false
+		templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
+
+		raw, err := json.Marshal(*eventTrigger.Spec.DestinationCluster)
+		if err != nil {
+			return err
+		}
+
+		instantiated, err := instantiateSection(templateName, raw, data, false, logger)
+		if err != nil {
+			return err
+		}
+
+		var destinationCluster corev1.ObjectReference
+		if err := json.Unmarshal(instantiated, &destinationCluster); err != nil {
+			return err
+		}
+
+		clusterProfileSpec.ClusterRefs = []corev1.ObjectReference{destinationCluster}
+	}
+
+	if useSameCluster {
+		clusterProfileSpec.ClusterRefs = []corev1.ObjectReference{*getClusterRef(clusterNamespace, clusterName, clusterType)}
+		clusterProfileSpec.ClusterSelector = libsveltosv1beta1.Selector{}
+	}
+
+	return nil
 }
 
 func getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef *libsveltosset.Set) []configv1beta1.PolicyRef {

@@ -98,6 +98,11 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 		copy(*out, *in)
 	}
 	in.DestinationClusterSelector.DeepCopyInto(&out.DestinationClusterSelector)
+	if in.DestinationCluster != nil {
+		in, out := &in.DestinationCluster, &out.DestinationCluster
+		*out = new(v1.ObjectReference)
+		**out = **in
+	}
 	if in.ConfigMapGenerator != nil {
 		in, out := &in.ConfigMapGenerator, &out.ConfigMapGenerator
 		*out = make([]GeneratorReference, len(*in))
