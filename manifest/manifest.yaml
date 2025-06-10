@@ -1700,11 +1700,11 @@ spec:
         - --shard-key=
         - --capi-onboard-annotation=
         - --v=5
-        - --version=v0.57.1
+        - --version=v0.57.2
         - --agent-in-mgmt-cluster=false
         command:
         - /manager
-        image: docker.io/projectsveltos/event-manager:v0.57.1
+        image: docker.io/projectsveltos/event-manager:v0.57.2
         livenessProbe:
           failureThreshold: 3
           httpGet:
