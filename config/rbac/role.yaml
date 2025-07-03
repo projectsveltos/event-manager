@@ -120,3 +120,16 @@ rules:
   - list
   - update
   - watch
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - buckets
+  - buckets/status
+  - gitrepositories
+  - gitrepositories/status
+  - ocirepositories
+  - ocirepositories/status
+  verbs:
+  - get
+  - list
+  - watch

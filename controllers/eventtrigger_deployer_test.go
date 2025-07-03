@@ -1270,9 +1270,9 @@ var _ = Describe("EventTrigger deployer", func() {
 			eventTrigger, randomString(), eventTrigger, clusterRef, object, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(localSet).ToNot(BeNil())
-		Expect(localSet.Len()).To(Equal(1))
+		Expect(len(localSet)).To(Equal(1))
 		Expect(remoteSet).ToNot(BeNil())
-		Expect(remoteSet.Len()).To(Equal(1))
+		Expect(len(remoteSet)).To(Equal(1))
 
 		expectedLabels := controllers.GetInstantiatedObjectLabels(clusterRef.Namespace, clusterRef.Name, eventTrigger.Name,
 			eventReport, libsveltosv1beta1.ClusterTypeCapi)
@@ -1468,9 +1468,9 @@ spec:
 			eventTrigger, randomString(), eventTrigger, clusterRef, objects, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(localSet).ToNot(BeNil())
-		Expect(localSet.Len()).To(Equal(0))
+		Expect(len(localSet)).To(Equal(0))
 		Expect(remoteSet).ToNot(BeNil())
-		Expect(remoteSet.Len()).To(Equal(1))
+		Expect(len(remoteSet)).To(Equal(1))
 
 		listOptions := []client.ListOption{
 			client.InNamespace(controllers.ReportNamespace),

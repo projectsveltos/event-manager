@@ -56,7 +56,6 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/funcmap"
 	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
-	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	"github.com/projectsveltos/libsveltos/lib/sharding"
 )
 
@@ -1282,29 +1281,29 @@ func setClusterSelector(clusterProfileSpec *configv1beta1.Spec, clusterNamespace
 	return nil
 }
 
-func getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef *libsveltosset.Set) []configv1beta1.PolicyRef {
-	result := make([]configv1beta1.PolicyRef, localPolicyRef.Len()+remotePolicyRef.Len())
+func getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef []configv1beta1.PolicyRef) []configv1beta1.PolicyRef {
+	result := make([]configv1beta1.PolicyRef, len(localPolicyRef)+len(remotePolicyRef))
 
 	// Add local policyRef
-	items := localPolicyRef.Items()
-	for i := range items {
+	for i := range localPolicyRef {
 		result[i] = configv1beta1.PolicyRef{
 			DeploymentType: configv1beta1.DeploymentTypeLocal,
-			Namespace:      items[i].Namespace,
-			Name:           items[i].Name,
-			Kind:           items[i].Kind,
+			Namespace:      localPolicyRef[i].Namespace,
+			Name:           localPolicyRef[i].Name,
+			Kind:           localPolicyRef[i].Kind,
+			Path:           localPolicyRef[i].Path,
 		}
 	}
 
-	numOfPolicyItems := localPolicyRef.Len()
+	numOfPolicyItems := len(localPolicyRef)
 	// Add remote policyRef
-	items = remotePolicyRef.Items()
-	for i := range items {
+	for i := range remotePolicyRef {
 		result[numOfPolicyItems+i] = configv1beta1.PolicyRef{
 			DeploymentType: configv1beta1.DeploymentTypeRemote,
-			Namespace:      items[i].Namespace,
-			Name:           items[i].Name,
-			Kind:           items[i].Kind,
+			Namespace:      remotePolicyRef[i].Namespace,
+			Name:           remotePolicyRef[i].Name,
+			Kind:           remotePolicyRef[i].Kind,
+			Path:           remotePolicyRef[i].Path,
 		}
 	}
 
@@ -1632,7 +1631,7 @@ func instantiateKustomizationRefsWithAllResources(ctx context.Context, c client.
 // which represent all of the resources matching referenced EventSource in the managed cluster.
 func instantiateReferencedPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
 	templateName string, eventTrigger *v1beta1.EventTrigger, cluster *corev1.ObjectReference, objects any,
-	labels map[string]string, logger logr.Logger) (localSet, remoteSet *libsveltosset.Set, err error) {
+	labels map[string]string, logger logr.Logger) (localSet, remoteSet []configv1beta1.PolicyRef, err error) {
 
 	// fetches all referenced ConfigMaps/Secrets
 	var local map[configv1beta1.PolicyRef]client.Object
@@ -1656,13 +1655,13 @@ func instantiateReferencedPolicyRefs(ctx context.Context, c client.Client, e *v1
 
 func instantiateResources(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
 	templateName string, resources map[configv1beta1.PolicyRef]client.Object, objects any, labels map[string]string,
-	logger logr.Logger) (*libsveltosset.Set, error) {
+	logger logr.Logger) ([]configv1beta1.PolicyRef, error) {
 
-	result := libsveltosset.Set{}
+	result := make([]configv1beta1.PolicyRef, 0)
 
-	for i := range resources {
-		ref := resources[i]
-		apiVersion, kind := ref.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+	for k := range resources {
+		ref := resources[k]
+		_, kind := ref.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 
 		l := logger.WithValues("referencedResource", fmt.Sprintf("%s:%s/%s",
 			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
@@ -1690,11 +1689,13 @@ func instantiateResources(ctx context.Context, c client.Client, e *v1beta1.Event
 			}
 		}
 
-		result.Insert(&corev1.ObjectReference{APIVersion: apiVersion, Kind: kind,
-			Namespace: info.Namespace, Name: info.Name})
+		result = append(result, configv1beta1.PolicyRef{
+			Namespace: info.Namespace, Name: info.Name,
+			Kind: kind, Path: k.Path, Optional: k.Optional, DeploymentType: k.DeploymentType,
+		})
 	}
 
-	return &result, nil
+	return result, nil
 }
 
 func instantiateReferencedPolicy(ctx context.Context, e *v1beta1.EventTrigger, ref client.Object,
