@@ -17,6 +17,8 @@ limitations under the License.
 package controllers
 
 import (
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1b2 "github.com/fluxcd/source-controller/api/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -54,6 +56,12 @@ func InitScheme() (*runtime.Scheme, error) {
 		return nil, err
 	}
 	if err := apiextensionsv1.AddToScheme(s); err != nil {
+		return nil, err
+	}
+	if err := sourcev1.AddToScheme(s); err != nil {
+		return nil, err
+	}
+	if err := sourcev1b2.AddToScheme(s); err != nil {
 		return nil, err
 	}
 	return s, nil

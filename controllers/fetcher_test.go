@@ -20,16 +20,17 @@ import (
 	"context"
 	"fmt"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	sourcev1b2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2/textlogger"
-
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -229,6 +230,89 @@ var _ = Describe("Fetcher", func() {
 		Expect(err).To(BeNil())
 		Expect(len(local)).To(Equal(1))
 		Expect(len(remote)).To(Equal(1))
+	})
+
+	It("fetchPolicyRefs fetches referenced Flux Source (names/paths are expressed as templates)", func() {
+		clusterNamespace := randomString()
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: clusterNamespace,
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		namePrefix := randomString()
+		gitRepository := &sourcev1.GitRepository{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", namePrefix, cluster.Name),
+				Namespace: randomString(),
+			},
+		}
+
+		ociRegistry := &sourcev1b2.OCIRepository{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", namePrefix, cluster.Name),
+				Namespace: clusterNamespace, // this is put in cluster namespace on purpose
+				// PolicyRef does not set namespace when referencing Secret. So cluster namespace
+				// is used
+			},
+		}
+
+		e := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				PolicyRefs: []configv1beta1.PolicyRef{
+					{
+						DeploymentType: configv1beta1.DeploymentTypeLocal,
+						Kind:           string(sourcev1b2.OCIRepositoryKind),
+						Name:           namePrefix + "-{{ .Cluster.metadata.name }}",
+						Namespace:      "", // leaving it empty to use cluster namespace
+						Path:           "charts/{{ .Cluster.metadata.name }}",
+					},
+					{
+						DeploymentType: configv1beta1.DeploymentTypeRemote,
+						Kind:           string(sourcev1.GitRepositoryKind),
+						Name:           namePrefix + "-{{ .Cluster.metadata.name }}",
+						Namespace:      gitRepository.Namespace,
+						Path:           "charts/{{ .Cluster.metadata.name }}",
+					},
+				},
+			},
+		}
+
+		initObjects := []client.Object{
+			ociRegistry,
+			gitRepository,
+			e,
+			cluster,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cluster)
+		Expect(err).To(BeNil())
+
+		object := &controllers.CurrentObject{
+			Cluster: content,
+		}
+
+		local, remote, err := controllers.FetchPolicyRefs(context.TODO(), c, e, getClusterRef(cluster),
+			object, randomString(), logger)
+		Expect(err).To(BeNil())
+		Expect(len(local)).To(Equal(1))
+		Expect(len(remote)).To(Equal(1))
+
+		for k := range local {
+			Expect(k.Path).To(Equal(fmt.Sprintf("charts/%s", cluster.Name)))
+		}
+
+		for k := range remote {
+			Expect(k.Path).To(Equal(fmt.Sprintf("charts/%s", cluster.Name)))
+		}
 	})
 
 	It("fetchEventReports fetch EventReports for a given EventSource/Cluster pair", func() {

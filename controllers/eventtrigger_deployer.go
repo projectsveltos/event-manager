@@ -27,6 +27,8 @@ import (
 	"strings"
 	"text/template"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1b2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/gdexlab/go-render/render"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -306,6 +308,12 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 			config += render.AsCode(r.Data)
 		case *corev1.Secret:
 			config += render.AsCode(r.Data)
+		case *sourcev1b2.Bucket:
+			config += render.AsCode(r.Status.Artifact)
+		case *sourcev1b2.OCIRepository:
+			config += render.AsCode(r.Status.Artifact)
+		case *sourcev1.GitRepository:
+			config += render.AsCode(r.Status.Artifact)
 		case *libsveltosv1beta1.EventSource:
 			config += render.AsCode(r.Spec)
 		case *libsveltosv1beta1.EventReport:
@@ -1277,20 +1285,14 @@ func setClusterSelector(clusterProfileSpec *configv1beta1.Spec, clusterNamespace
 func getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef *libsveltosset.Set) []configv1beta1.PolicyRef {
 	result := make([]configv1beta1.PolicyRef, localPolicyRef.Len()+remotePolicyRef.Len())
 
-	secret := "Secret"
-
 	// Add local policyRef
 	items := localPolicyRef.Items()
 	for i := range items {
-		kind := libsveltosv1beta1.ConfigMapReferencedResourceKind
-		if items[i].Kind == secret {
-			kind = libsveltosv1beta1.SecretReferencedResourceKind
-		}
 		result[i] = configv1beta1.PolicyRef{
 			DeploymentType: configv1beta1.DeploymentTypeLocal,
 			Namespace:      items[i].Namespace,
 			Name:           items[i].Name,
-			Kind:           string(kind),
+			Kind:           items[i].Kind,
 		}
 	}
 
@@ -1298,15 +1300,11 @@ func getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef *libsveltosset.
 	// Add remote policyRef
 	items = remotePolicyRef.Items()
 	for i := range items {
-		kind := libsveltosv1beta1.ConfigMapReferencedResourceKind
-		if items[i].Kind == secret {
-			kind = libsveltosv1beta1.SecretReferencedResourceKind
-		}
 		result[numOfPolicyItems+i] = configv1beta1.PolicyRef{
 			DeploymentType: configv1beta1.DeploymentTypeRemote,
 			Namespace:      items[i].Namespace,
 			Name:           items[i].Name,
-			Kind:           string(kind),
+			Kind:           items[i].Kind,
 		}
 	}
 
@@ -1637,8 +1635,8 @@ func instantiateReferencedPolicyRefs(ctx context.Context, c client.Client, e *v1
 	labels map[string]string, logger logr.Logger) (localSet, remoteSet *libsveltosset.Set, err error) {
 
 	// fetches all referenced ConfigMaps/Secrets
-	var local []client.Object
-	var remote []client.Object
+	var local map[configv1beta1.PolicyRef]client.Object
+	var remote map[configv1beta1.PolicyRef]client.Object
 	local, remote, err = fetchPolicyRefs(ctx, c, eventTrigger, cluster, objects, templateName, logger)
 	if err != nil {
 		return nil, nil, err
@@ -1657,7 +1655,7 @@ func instantiateReferencedPolicyRefs(ctx context.Context, c client.Client, e *v1
 }
 
 func instantiateResources(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
-	templateName string, resources []client.Object, objects any, labels map[string]string,
+	templateName string, resources map[configv1beta1.PolicyRef]client.Object, objects any, labels map[string]string,
 	logger logr.Logger) (*libsveltosset.Set, error) {
 
 	result := libsveltosset.Set{}
