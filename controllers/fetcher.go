@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1b2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -98,8 +100,9 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 		result = append(result, referencedResources...)
 
 		local, remote, _ := fetchPolicyRefs(ctx, c, e, cluster, objects, templateName, logger)
-		result = append(result, local...)
-		result = append(result, remote...)
+
+		result = appendToResult(result, local)
+		result = appendToResult(result, remote)
 
 		for i := range e.Spec.HelmCharts {
 			valuesFrom := getValuesFrom(ctx, c, e.Spec.HelmCharts[i].ValuesFrom, templateName,
@@ -115,6 +118,13 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 	}
 
 	return result, nil
+}
+
+func appendToResult(result []client.Object, objects map[configv1beta1.PolicyRef]client.Object) []client.Object {
+	for k := range objects {
+		result = append(result, objects[k])
+	}
+	return result
 }
 
 func collectResourcesFromConfigMapGenerators(ctx context.Context, c client.Client, objects any,
@@ -259,10 +269,10 @@ func fetchEventReports(ctx context.Context, c client.Client, clusterNamespace, c
 // fetchPolicyRefs fetches referenced ConfigMaps/Secrets
 func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
 	cluster *corev1.ObjectReference, objects any, templateName string, logger logr.Logger,
-) (local, remote []client.Object, err error) {
+) (local, remote map[configv1beta1.PolicyRef]client.Object, err error) {
 
-	local = make([]client.Object, 0)
-	remote = make([]client.Object, 0)
+	local = make(map[configv1beta1.PolicyRef]client.Object, 0)
+	remote = make(map[configv1beta1.PolicyRef]client.Object, 0)
 
 	for i := range e.Spec.PolicyRefs {
 		policyRef := &e.Spec.PolicyRefs[i]
@@ -289,9 +299,12 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 
 		if policyRef.Kind == string(libsveltosv1beta1.ConfigMapReferencedResourceKind) {
 			object, err = getConfigMap(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(referencedName)})
-		} else {
+		} else if policyRef.Kind == string(libsveltosv1beta1.SecretReferencedResourceKind) {
 			object, err = getSecret(ctx, c, types.NamespacedName{Namespace: namespace, Name: string(referencedName)})
+		} else {
+			object, err = getSource(ctx, c, namespace, string(referencedName), policyRef.Kind)
 		}
+
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("%s %s/%s does not exist yet",
@@ -305,10 +318,28 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 			return nil, nil, err
 		}
 
+		var referencedPath []byte
+		if policyRef.Path != "" {
+			referencedPath, err = instantiateSection(templateName, []byte(policyRef.Path), objects,
+				funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+
+		referencedPolicyRef := configv1beta1.PolicyRef{
+			Kind:           policyRef.Kind,
+			Namespace:      namespace,
+			Name:           string(referencedName),
+			Path:           string(referencedPath),
+			Optional:       policyRef.Optional,
+			DeploymentType: policyRef.DeploymentType,
+		}
+
 		if policyRef.DeploymentType == configv1beta1.DeploymentTypeLocal {
-			local = append(local, object)
+			local[referencedPolicyRef] = object
 		} else {
-			remote = append(remote, object)
+			remote[referencedPolicyRef] = object
 		}
 	}
 
@@ -341,4 +372,49 @@ func getSecret(ctx context.Context, c client.Client, secretName types.Namespaced
 	}
 
 	return secret, nil
+}
+
+func getSource(ctx context.Context, c client.Client, namespace, sourceName, sourceKind string,
+) (client.Object, error) {
+
+	namespacedName := types.NamespacedName{
+		Namespace: namespace,
+		Name:      sourceName,
+	}
+
+	switch sourceKind {
+	case sourcev1.GitRepositoryKind:
+		var repository sourcev1.GitRepository
+		err := c.Get(ctx, namespacedName, &repository)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("unable to get source '%s': %w", namespacedName, err)
+		}
+		return &repository, nil
+	case sourcev1b2.OCIRepositoryKind:
+		var repository sourcev1b2.OCIRepository
+		err := c.Get(ctx, namespacedName, &repository)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("unable to get source '%s': %w", namespacedName, err)
+		}
+		return &repository, nil
+	case sourcev1b2.BucketKind:
+		var bucket sourcev1b2.Bucket
+		err := c.Get(ctx, namespacedName, &bucket)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("unable to get source '%s': %w", namespacedName, err)
+		}
+		return &bucket, nil
+	default:
+		return nil, fmt.Errorf("source `%s` kind '%s' not supported",
+			sourceName, sourceKind)
+	}
 }

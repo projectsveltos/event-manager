@@ -5,6 +5,7 @@ go 1.24.4
 require (
 	github.com/TwiN/go-color v1.4.1
 	github.com/cloudevents/sdk-go/v2 v2.16.0
+	github.com/fluxcd/source-controller/api v1.6.0
 	github.com/gdexlab/go-render v1.0.1
 	github.com/go-logr/logr v1.4.3
 	github.com/onsi/ginkgo/v2 v2.23.4
@@ -43,6 +44,8 @@ require (
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/fluxcd/pkg/apis/acl v0.7.0 // indirect
+	github.com/fluxcd/pkg/apis/meta v1.12.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.8.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
