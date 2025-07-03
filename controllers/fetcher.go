@@ -336,6 +336,8 @@ func fetchPolicyRefs(ctx context.Context, c client.Client, e *v1beta1.EventTrigg
 			DeploymentType: policyRef.DeploymentType,
 		}
 
+		addTypeInformationToObject(c.Scheme(), object)
+
 		if policyRef.DeploymentType == configv1beta1.DeploymentTypeLocal {
 			local[referencedPolicyRef] = object
 		} else {
@@ -387,30 +389,21 @@ func getSource(ctx context.Context, c client.Client, namespace, sourceName, sour
 		var repository sourcev1.GitRepository
 		err := c.Get(ctx, namespacedName, &repository)
 		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("unable to get source '%s': %w", namespacedName, err)
+			return nil, err
 		}
 		return &repository, nil
 	case sourcev1b2.OCIRepositoryKind:
 		var repository sourcev1b2.OCIRepository
 		err := c.Get(ctx, namespacedName, &repository)
 		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("unable to get source '%s': %w", namespacedName, err)
+			return nil, err
 		}
 		return &repository, nil
 	case sourcev1b2.BucketKind:
 		var bucket sourcev1b2.Bucket
 		err := c.Get(ctx, namespacedName, &bucket)
 		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("unable to get source '%s': %w", namespacedName, err)
+			return nil, err
 		}
 		return &bucket, nil
 	default:
