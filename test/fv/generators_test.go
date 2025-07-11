@@ -249,7 +249,7 @@ var _ = Describe("Generators", func() {
 		clusterSummary := verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
 
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Resources feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1beta1.FeatureResources)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, libsveltosv1beta1.FeatureResources)
 
 		Byf("Verifying ConfigMap is created in the namespace %s", kindWorkloadCluster.Namespace)
 		deployedConfigMap := &corev1.ConfigMap{}

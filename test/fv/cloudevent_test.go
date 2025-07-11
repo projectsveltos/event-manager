@@ -219,7 +219,7 @@ var _ = Describe("CloudEvents", func() {
 		clusterSummary := verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
 
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Resources feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1beta1.FeatureResources)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, libsveltosv1beta1.FeatureResources)
 
 		// Namespace with Subject name should be present in the managed cluster as response
 		Byf("Verifying Namespace %s is created in the managed cluster", subject)

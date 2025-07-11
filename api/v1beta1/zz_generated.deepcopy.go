@@ -149,7 +149,7 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 	}
 	if in.ValidateHealths != nil {
 		in, out := &in.ValidateHealths, &out.ValidateHealths
-		*out = make([]apiv1beta1.ValidateHealth, len(*in))
+		*out = make([]libsveltosapiv1beta1.ValidateHealth, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -163,7 +163,7 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 	}
 	if in.DriftExclusions != nil {
 		in, out := &in.DriftExclusions, &out.DriftExclusions
-		*out = make([]apiv1beta1.DriftExclusion, len(*in))
+		*out = make([]libsveltosapiv1beta1.DriftExclusion, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

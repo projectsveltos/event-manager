@@ -297,7 +297,7 @@ var _ = Describe("Instantiate one ClusterProfile for all resources", func() {
 		clusterSummary = verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
 
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Resources feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1beta1.FeatureResources)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, libsveltosv1beta1.FeatureResources)
 
 		Byf("Verifying Ingress is created in the namespace %s", serviceNamespace)
 		listOptions = []client.ListOption{

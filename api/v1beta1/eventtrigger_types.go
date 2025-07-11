@@ -260,7 +260,7 @@ type EventTriggerSpec struct {
 	// This field will be directly transferred to the ClusterProfile Spec
 	// generated in response to events.
 	// +optional
-	ValidateHealths []configv1beta1.ValidateHealth `json:"validateHealths,omitempty"`
+	ValidateHealths []libsveltosv1beta1.ValidateHealth `json:"validateHealths,omitempty"`
 
 	// Define additional Kustomize inline Patches applied for all resources on this profile
 	// Within the Patch Spec you can use templating
@@ -275,7 +275,7 @@ type EventTriggerSpec struct {
 	// This field will be directly transferred to the ClusterProfile Spec
 	// generated in response to events.
 	// +optional
-	DriftExclusions []configv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
+	DriftExclusions []libsveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 
 	// CloudEventAction determines the action to take based on the received CloudEvent.
 	// CloudEvents with the same source and subject are considered related and represent

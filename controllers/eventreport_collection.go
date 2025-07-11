@@ -240,6 +240,16 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 	eventSourceMap map[string][]*v1beta1.EventTrigger, eventTriggerMap map[string]libsveltosset.Set,
 	version string, logger logr.Logger) error {
 
+	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, c, cluster.Namespace, cluster.Name,
+		clusterproxy.GetClusterType(cluster), logger)
+	if err != nil {
+		return err
+	}
+
+	if isPullMode {
+		return nil
+	}
+
 	logger = logger.WithValues("cluster", fmt.Sprintf("%s/%s", cluster.Namespace, cluster.Name))
 	clusterRef := &corev1.ObjectReference{
 		Namespace:  cluster.Namespace,

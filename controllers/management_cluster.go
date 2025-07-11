@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -40,4 +41,8 @@ func getManagementClusterClient() client.Client {
 
 func getAgentInMgmtCluster() bool {
 	return agentInMgmtCluster
+}
+
+func getManagementClusterScheme() *runtime.Scheme {
+	return managementClusterClient.Scheme()
 }
