@@ -675,7 +675,7 @@ var _ = Describe("EventTrigger deployer", func() {
 		// Existence of EventSource does not verify DeployEventSource. But DeployEventSource is also supposed
 		// to add EventTrigger as OwnerReference of EventSource and annotation. So test verifies that.
 		Expect(controllers.DeployEventSource(context.TODO(), testEnv.Client, clusterNamespace, clusterName,
-			clusterType, resource, logger)).To(Succeed())
+			clusterType, resource, deployer.Options{}, false, logger)).To(Succeed())
 
 		Eventually(func() bool {
 			instantiatedEventSourceName := fmt.Sprintf("%s-%s-%s", eventSourceNamePrefix, cluster.Name, labelValue)

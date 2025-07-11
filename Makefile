@@ -188,6 +188,10 @@ KIND_CONFIG ?= kind-cluster.yaml
 CONTROL_CLUSTER_NAME ?= sveltos-management
 WORKLOAD_CLUSTER_NAME ?= clusterapi-workload
 KIND_CLUSTER_YAML ?= test/$(WORKLOAD_CLUSTER_NAME).yaml
+KIND_PULLMODE_CLUSTER1 ?= pullmode-kind-cluster1.yaml
+KIND_PULLMODE_CLUSTER2 ?= pullmode-kind-cluster2.yaml
+TMP_FILE ?= test/pullmode-kubeconfig_data.tmp
+SVELTOS_NETWORK_NAME ?= sveltos-kind-network
 TIMEOUT ?= 10m
 NUM_NODES ?= 5
 
@@ -271,6 +275,58 @@ create-cluster: $(KIND) $(CLUSTERCTL) $(KUBECTL) $(ENVSUBST) ## Create a new kin
 
 	@echo wait for calico pod
 	$(KUBECTL) --kubeconfig=./test/fv/workload_kubeconfig wait --for=condition=Available deployment/calico-kube-controllers -n kube-system --timeout=$(TIMEOUT)
+
+create-cluster-pullmode: $(KIND) $(KUBECTL) $(ENVSUBST) $(KUSTOMIZE)
+	docker network rm $(SVELTOS_NETWORK_NAME) 2>/dev/null || true
+	docker network create $(SVELTOS_NETWORK_NAME)
+
+	echo "Create the management cluster"
+	sed -e "s/K8S_VERSION/$(K8S_VERSION)/g"  test/$(KIND_PULLMODE_CLUSTER1) > test/$(KIND_PULLMODE_CLUSTER1).tmp
+	$(KIND) create cluster --name=$(CONTROL_CLUSTER_NAME) --config test/$(KIND_PULLMODE_CLUSTER1).tmp
+
+	@echo "Start projectsveltos"
+	$(MAKE) deploy-projectsveltos
+
+	@echo "Deploy a Job in cluster1 that creates the kubeconfig sveltos-applier needs to connect to"
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/pullmode-prepper/refs/heads/main/manifest.yaml
+	$(KUBECTL) wait --for=condition=complete job/register-pullmode-cluster-job -n projectsveltos --timeout=$(TIMEOUT)
+	@echo "Waiting for KUBECONFIG_DATA to be available..."
+	@temp_kubeconfig_data="" ; \
+	while true; do \
+		temp_kubeconfig_data="$$($(KUBECTL) get configmap clusterapi-workload -o jsonpath='{.data.kubeconfig}' 2>/dev/null |base64 -d || echo '')"; \
+		echo "KUBECONFIG DATA: $$temp_kubeconfig_data"; \
+  		if [ -n "$$temp_kubeconfig_data" ]; then \
+  			echo "$$temp_kubeconfig_data" > $(TMP_FILE); \
+  			break; \
+  		fi; \
+  		echo "KUBECONFIG_DATA not found. Retrying in 5 seconds..."; \
+  		sleep 5; \
+	done
+
+	echo "Create the managed cluster"
+	sed -e "s/K8S_VERSION/$(K8S_VERSION)/g"  test/$(KIND_PULLMODE_CLUSTER2) > test/$(KIND_PULLMODE_CLUSTER2).tmp
+	$(KIND) create cluster --name=$(WORKLOAD_CLUSTER_NAME) --config test/$(KIND_PULLMODE_CLUSTER2).tmp
+
+	docker network connect $(SVELTOS_NETWORK_NAME) $(CONTROL_CLUSTER_NAME)-control-plane
+	docker network connect $(SVELTOS_NETWORK_NAME) $(WORKLOAD_CLUSTER_NAME)-control-plane
+
+	echo "Create a Secret with cluster1 kubeconfig in cluster2"
+	$(KUBECTL) create ns projectsveltos
+	$(KUBECTL) create secret generic -n projectsveltos $(WORKLOAD_CLUSTER_NAME)-sveltos-kubeconfig --from-file=kubeconfig=$(TMP_FILE)
+
+	echo "Deploy sveltos-applier in cluster2"
+	$(KUBECTL) apply -f test/pullmode-sveltosapplier.yaml
+
+	KUBECONFIG="" $(MAKE) deploy-sveltos-agent
+
+	@echo "Waiting for projectsveltos sveltos-applier to be available..."
+	$(KUBECTL) wait --for=condition=Available deployment/sveltos-applier-manager -n projectsveltos --timeout=$(TIMEOUT)
+
+	@echo "get kubeconfig to access workload cluster"
+	$(KIND) get kubeconfig --name $(WORKLOAD_CLUSTER_NAME) > test/fv/workload_kubeconfig
+
+	@echo "Switching to cluster1..."
+	$(KUBECTL) config use-context kind-$(CONTROL_CLUSTER_NAME)
 
 .PHONY: delete-cluster
 delete-cluster: $(KIND) ## Deletes the kind cluster $(CONTROL_CLUSTER_NAME)
@@ -383,6 +439,8 @@ deploy-projectsveltos: $(KUSTOMIZE)
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_sveltosclusters.lib.projectsveltos.io.yaml
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_clustersets.lib.projectsveltos.io.yaml
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_sets.lib.projectsveltos.io.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_configurationgroups.lib.projectsveltos.io.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_configurationbundles.lib.projectsveltos.io.yaml
 
 	# Install projectsveltos addon-controller
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/manifest.yaml

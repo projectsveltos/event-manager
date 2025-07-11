@@ -72,6 +72,8 @@ const (
 	// normalRequeueAfter is how long to wait before checking again to see if the cluster can be moved
 	// to ready after or workload features (for instance ingress or reporter) have failed
 	normalRequeueAfter = 20 * time.Second
+
+	configurationHash = "configurationHash"
 )
 
 // EventTriggerReconciler reconciles a EventTrigger object
@@ -150,6 +152,10 @@ type EventTriggerReconciler struct {
 //+kubebuilder:rbac:groups=config.projectsveltos.io,resources=clusterprofiles,verbs=get;list;update;create;delete;watch;patch
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=clustersets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=clustersets/status,verbs=get;watch;list
+//+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=configurationgroups,verbs=get;list;watch;create;delete;update;patch
+//+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=configurationgroups/status,verbs=get;list;watch
+//+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=configurationbundles,verbs=get;list;watch;create;delete;update;patch
+//+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=configurationbundles/status,verbs=get;list;watch;update
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters,verbs=get;watch;list
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters/status,verbs=get;watch;list
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines,verbs=get;watch;list

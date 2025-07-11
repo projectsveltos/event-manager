@@ -140,7 +140,7 @@ func verifyClusterSummary(clusterProfile *configv1beta1.ClusterProfile,
 	return clusterSummary
 }
 
-func verifyFeatureStatusIsProvisioned(clusterSummaryNamespace, clusterSummaryName string, featureID configv1beta1.FeatureID) {
+func verifyFeatureStatusIsProvisioned(clusterSummaryNamespace, clusterSummaryName string, featureID libsveltosv1beta1.FeatureID) {
 	Eventually(func() bool {
 		currentClusterSummary := &configv1beta1.ClusterSummary{}
 		err := k8sClient.Get(context.TODO(),
@@ -151,7 +151,7 @@ func verifyFeatureStatusIsProvisioned(clusterSummaryNamespace, clusterSummaryNam
 		}
 		for i := range currentClusterSummary.Status.FeatureSummaries {
 			if currentClusterSummary.Status.FeatureSummaries[i].FeatureID == featureID &&
-				currentClusterSummary.Status.FeatureSummaries[i].Status == configv1beta1.FeatureStatusProvisioned {
+				currentClusterSummary.Status.FeatureSummaries[i].Status == libsveltosv1beta1.FeatureStatusProvisioned {
 
 				return true
 			}

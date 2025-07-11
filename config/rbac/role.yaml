@@ -59,12 +59,37 @@ rules:
   resources:
   - clustersets
   - clustersets/status
+  - configurationgroups/status
   - debuggingconfigurations
   - eventsources
   - sveltosclusters/status
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
+  - configurationbundles
+  - configurationgroups
+  - eventtriggers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - lib.projectsveltos.io
+  resources:
+  - configurationbundles/status
+  - sveltosclusters
+  verbs:
+  - get
+  - list
+  - update
   - watch
 - apiGroups:
   - lib.projectsveltos.io
@@ -88,18 +113,6 @@ rules:
 - apiGroups:
   - lib.projectsveltos.io
   resources:
-  - eventtriggers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - lib.projectsveltos.io
-  resources:
   - eventtriggers/finalizers
   verbs:
   - update
@@ -111,15 +124,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - lib.projectsveltos.io
-  resources:
-  - sveltosclusters
-  verbs:
-  - get
-  - list
-  - update
-  - watch
 - apiGroups:
   - source.toolkit.fluxcd.io
   resources:

@@ -238,7 +238,10 @@ func setupChecks(mgr ctrl.Manager) {
 }
 
 // capiCRDHandler restarts process if a CAPI CRD is updated
-func capiCRDHandler(gvk *schema.GroupVersionKind) {
+func capiCRDHandler(gvk *schema.GroupVersionKind, action crd.ChangeType) {
+	if action == crd.Modify {
+		return
+	}
 	if gvk.Group == clusterv1.GroupVersion.Group {
 		if killErr := syscall.Kill(syscall.Getpid(), syscall.SIGTERM); killErr != nil {
 			panic("kill -TERM failed")

@@ -302,12 +302,12 @@ func prepareClient(clusterNamespace, clusterName string, clusterType libsveltosv
 		Status: configv1beta1.ClusterSummaryStatus{
 			FeatureSummaries: []configv1beta1.FeatureSummary{
 				{
-					FeatureID: configv1beta1.FeatureHelm,
-					Status:    configv1beta1.FeatureStatusProvisioned,
+					FeatureID: libsveltosv1beta1.FeatureHelm,
+					Status:    libsveltosv1beta1.FeatureStatusProvisioned,
 				},
 				{
-					FeatureID: configv1beta1.FeatureResources,
-					Status:    configv1beta1.FeatureStatusProvisioned,
+					FeatureID: libsveltosv1beta1.FeatureResources,
+					Status:    libsveltosv1beta1.FeatureStatusProvisioned,
 				},
 			},
 		},

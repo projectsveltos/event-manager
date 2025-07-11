@@ -237,7 +237,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 		clusterSummary = verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
 
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Helm feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, configv1beta1.FeatureHelm)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, libsveltosv1beta1.FeatureHelm)
 
 		Expect(len(clusterSummary.Spec.ClusterProfileSpec.HelmCharts)).To(Equal(1))
 		Expect(len(clusterSummary.Spec.ClusterProfileSpec.HelmCharts[0].ValuesFrom)).To(Equal(1))
