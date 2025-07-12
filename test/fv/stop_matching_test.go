@@ -49,7 +49,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 		projectsveltos = "projectsveltos"
 	)
 
-	It("Verifies ClusterProfiles is deleted when cluster stops matching EventTrigger", Label("FV"), func() {
+	It("Verifies ClusterProfiles is deleted when cluster stops matching EventTrigger", Label("FV", "PULLMODE"), func() {
 		nsKey := randomString()
 		nsValue := randomString()
 
@@ -144,7 +144,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 		Eventually(func() error {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			return k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 		}, timeout, pollingInterval).Should(BeNil())
 
@@ -178,7 +178,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 		Eventually(func() bool {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 			if err != nil {
 				return false
@@ -208,7 +208,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 		clusterProfile := &clusterProfileList.Items[0]
 		Expect(len(clusterProfile.Spec.PolicyRefs)).To(Equal(1))
 		Expect(clusterProfile.Spec.PolicyRefs[0].DeploymentType).To(Equal(configv1beta1.DeploymentTypeLocal))
-		_ = verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
+		_ = verifyClusterSummary(clusterProfile, kindWorkloadCluster.GetNamespace(), kindWorkloadCluster.GetName())
 
 		Byf("Change EventTrigger %s SourceClusterSelector", eventTrigger.Name)
 		currentEventTrigger := &v1beta1.EventTrigger{}
@@ -228,7 +228,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = k8sClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+					types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 					currentEventReport)
 				return err != nil && apierrors.IsNotFound(err)
 			}, timeout, pollingInterval).Should(BeTrue())
@@ -279,7 +279,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 		Eventually(func() bool {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 			return err != nil && apierrors.IsNotFound(err)
 		}, timeout, pollingInterval).Should(BeTrue())

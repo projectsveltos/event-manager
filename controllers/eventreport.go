@@ -45,6 +45,17 @@ func getEventReportClient(ctx context.Context, clusterNamespace, clusterName str
 		return getManagementClusterClient(), nil
 	}
 
+	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, getManagementClusterClient(), clusterNamespace, clusterName,
+		clusterType, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	if isPullMode {
+		// In pull mode the applier copies the EventReports to the management cluster.
+		return getManagementClusterClient(), nil
+	}
+
 	// ResourceSummary is a Sveltos resource created in managed clusters.
 	// Sveltos resources are always created using cluster-admin so that admin does not need to be
 	// given such permissions.

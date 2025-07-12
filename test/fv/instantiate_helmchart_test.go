@@ -42,7 +42,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 
 	var clusterSummary *configv1beta1.ClusterSummary
 
-	It("Verifies ClusterProfiles with helmChart and ValuesFrom is instantiated", Label("FV"), func() {
+	It("Verifies ClusterProfiles with helmChart and ValuesFrom is instantiated", Label("FV", "PULLMODE"), func() {
 		serviceNamespace := randomString()
 
 		Byf("Create a EventSource matching in namespace: %s", serviceNamespace)
@@ -151,7 +151,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 		Eventually(func() error {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			return k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 		}, timeout, pollingInterval).Should(BeNil())
 
@@ -206,7 +206,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 		Eventually(func() bool {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 			if err != nil {
 				return false
@@ -234,10 +234,10 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 		clusterProfileList := &configv1beta1.ClusterProfileList{}
 		Expect(k8sClient.List(context.TODO(), clusterProfileList, listOptions...)).To(Succeed())
 		clusterProfile := &clusterProfileList.Items[0]
-		clusterSummary = verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
+		clusterSummary = verifyClusterSummary(clusterProfile, kindWorkloadCluster.GetNamespace(), kindWorkloadCluster.GetName())
 
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Helm feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, libsveltosv1beta1.FeatureHelm)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.GetNamespace(), clusterSummary.Name, libsveltosv1beta1.FeatureHelm)
 
 		Expect(len(clusterSummary.Spec.ClusterProfileSpec.HelmCharts)).To(Equal(1))
 		Expect(len(clusterSummary.Spec.ClusterProfileSpec.HelmCharts[0].ValuesFrom)).To(Equal(1))
@@ -289,7 +289,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 		Eventually(func() bool {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 			return err != nil && apierrors.IsNotFound(err)
 		}, timeout, pollingInterval).Should(BeTrue())

@@ -29,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -163,12 +162,16 @@ func verifyFeatureStatusIsProvisioned(clusterSummaryNamespace, clusterSummaryNam
 func getClusterSummary(ctx context.Context,
 	clusterProfileName, clusterNamespace, clusterName string) (*configv1beta1.ClusterSummary, error) {
 
+	clusterType := string(libsveltosv1beta1.ClusterTypeCapi)
+	if kindWorkloadCluster.GetKind() == libsveltosv1beta1.SveltosClusterKind {
+		clusterType = string(libsveltosv1beta1.ClusterTypeSveltos)
+	}
 	listOptions := []client.ListOption{
 		client.InNamespace(clusterNamespace),
 		client.MatchingLabels{
 			"projectsveltos.io/cluster-profile-name": clusterProfileName,
 			configv1beta1.ClusterNameLabel:           clusterName,
-			configv1beta1.ClusterTypeLabel:           string(libsveltosv1beta1.ClusterTypeCapi),
+			configv1beta1.ClusterTypeLabel:           clusterType,
 		},
 	}
 
@@ -209,7 +212,7 @@ func getClusterSet(namePrefix string, clusterLabels map[string]string) *libsvelt
 
 func verifyClusterSetMatches(clusterSet *libsveltosv1beta1.ClusterSet) {
 	Byf("Verifying Cluster %s/%s is a match for ClusterSet %s",
-		kindWorkloadCluster.Namespace, kindWorkloadCluster.Name, clusterSet.Name)
+		kindWorkloadCluster.GetNamespace(), kindWorkloadCluster.GetName(), clusterSet.Name)
 	Eventually(func() bool {
 		currentClusterSet := &libsveltosv1beta1.ClusterSet{}
 		err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: clusterSet.Name}, currentClusterSet)
@@ -217,9 +220,9 @@ func verifyClusterSetMatches(clusterSet *libsveltosv1beta1.ClusterSet) {
 			return false
 		}
 		for i := range currentClusterSet.Status.MatchingClusterRefs {
-			if currentClusterSet.Status.MatchingClusterRefs[i].Namespace == kindWorkloadCluster.Namespace &&
-				currentClusterSet.Status.MatchingClusterRefs[i].Name == kindWorkloadCluster.Name &&
-				currentClusterSet.Status.MatchingClusterRefs[i].APIVersion == clusterv1.GroupVersion.String() {
+			if currentClusterSet.Status.MatchingClusterRefs[i].Namespace == kindWorkloadCluster.GetNamespace() &&
+				currentClusterSet.Status.MatchingClusterRefs[i].Name == kindWorkloadCluster.GetName() &&
+				currentClusterSet.Status.MatchingClusterRefs[i].APIVersion == kindWorkloadCluster.GetAPIVersion() {
 
 				return true
 			}
@@ -230,7 +233,7 @@ func verifyClusterSetMatches(clusterSet *libsveltosv1beta1.ClusterSet) {
 
 func verifyEventTriggerMatches(eventTrigger *v1beta1.EventTrigger) {
 	Byf("Verifying Cluster %s/%s is a match for EventTrigger %s",
-		kindWorkloadCluster.Namespace, kindWorkloadCluster.Name, eventTrigger.Name)
+		kindWorkloadCluster.GetNamespace(), kindWorkloadCluster.GetName(), eventTrigger.Name)
 	Eventually(func() bool {
 		currentEventTrigger := &v1beta1.EventTrigger{}
 		err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name}, currentEventTrigger)
@@ -238,9 +241,9 @@ func verifyEventTriggerMatches(eventTrigger *v1beta1.EventTrigger) {
 			return false
 		}
 		for i := range currentEventTrigger.Status.MatchingClusterRefs {
-			if currentEventTrigger.Status.MatchingClusterRefs[i].Namespace == kindWorkloadCluster.Namespace &&
-				currentEventTrigger.Status.MatchingClusterRefs[i].Name == kindWorkloadCluster.Name &&
-				currentEventTrigger.Status.MatchingClusterRefs[i].APIVersion == clusterv1.GroupVersion.String() {
+			if currentEventTrigger.Status.MatchingClusterRefs[i].Namespace == kindWorkloadCluster.GetNamespace() &&
+				currentEventTrigger.Status.MatchingClusterRefs[i].Name == kindWorkloadCluster.GetName() &&
+				currentEventTrigger.Status.MatchingClusterRefs[i].APIVersion == kindWorkloadCluster.GetAPIVersion() {
 
 				return true
 			}

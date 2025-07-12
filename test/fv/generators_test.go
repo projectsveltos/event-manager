@@ -83,7 +83,7 @@ var _ = Describe("Generators", func() {
 		projectsveltos = "projectsveltos"
 	)
 
-	It("Configures Generators and have ClusterProfile consume those", Label("FV"), func() {
+	It("Configures Generators and have ClusterProfile consume those", Label("FV", "PULLMODE"), func() {
 		secretNamespace := randomString()
 
 		Byf("Create a EventSource matching Secrets in namespace: %s", secretNamespace)
@@ -194,7 +194,7 @@ var _ = Describe("Generators", func() {
 		Eventually(func() error {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			return k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 		}, timeout, pollingInterval).Should(BeNil())
 
@@ -218,7 +218,7 @@ var _ = Describe("Generators", func() {
 		Eventually(func() bool {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 			if err != nil {
 				return false
@@ -246,15 +246,15 @@ var _ = Describe("Generators", func() {
 		clusterProfileList := &configv1beta1.ClusterProfileList{}
 		Expect(k8sClient.List(context.TODO(), clusterProfileList, listOptions...)).To(Succeed())
 		clusterProfile := &clusterProfileList.Items[0]
-		clusterSummary := verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
+		clusterSummary := verifyClusterSummary(clusterProfile, kindWorkloadCluster.GetNamespace(), kindWorkloadCluster.GetName())
 
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Resources feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, libsveltosv1beta1.FeatureResources)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.GetNamespace(), clusterSummary.Name, libsveltosv1beta1.FeatureResources)
 
-		Byf("Verifying ConfigMap is created in the namespace %s", kindWorkloadCluster.Namespace)
+		Byf("Verifying ConfigMap is created in the namespace %s", kindWorkloadCluster.GetNamespace())
 		deployedConfigMap := &corev1.ConfigMap{}
 		Expect(workloadClient.Get(context.TODO(),
-			types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: kindWorkloadCluster.Name},
+			types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: kindWorkloadCluster.GetName()},
 			deployedConfigMap)).To(Succeed())
 		Expect(deployedConfigMap.Data).ToNot(BeNil())
 		_, ok := deployedConfigMap.Data["token"]
@@ -302,7 +302,7 @@ var _ = Describe("Generators", func() {
 		Eventually(func() bool {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 			return err != nil && apierrors.IsNotFound(err)
 		}, timeout, pollingInterval).Should(BeTrue())

@@ -217,7 +217,7 @@ func prepareCluster(version string) *clusterv1.Cluster {
 
 	Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
 	Expect(testEnv.Create(context.TODO(), machine)).To(Succeed())
-	Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+	Expect(waitForObject(context.TODO(), testEnv.Client, machine)).To(Succeed())
 
 	cluster.Status = clusterv1.ClusterStatus{
 		InfrastructureReady: true,
