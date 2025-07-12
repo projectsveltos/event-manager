@@ -152,8 +152,8 @@ github.com/prashantv/gostub v1.1.0 h1:BTyx3RfQjRHnUWaGF9oQos79AlQ5k8WNktv7VGvVH4
 github.com/prashantv/gostub v1.1.0/go.mod h1:A5zLQHz7ieHGG7is6LLXLz7I8+3LZzsrV0P1IAHhP5U=
 github.com/projectsveltos/addon-controller v0.57.2-0.20250710123540-031bfb020c1c h1:N8S53sreHoq08Ah/VpZcPQHAwt+wy5CGTM7PnLs38Nk=
 github.com/projectsveltos/addon-controller v0.57.2-0.20250710123540-031bfb020c1c/go.mod h1:tOxeiaZfxIK47TEnyxlYIwqNn7/X/QA+6QzpmyT9HUY=
-github.com/projectsveltos/libsveltos v0.57.3-0.20250706132153-6f2f96f68b4f h1:Rs4k+YV5GZlbv3BlPN4nLbZ+RxtbkLz4FHlO9WKTSAY=
-github.com/projectsveltos/libsveltos v0.57.3-0.20250706132153-6f2f96f68b4f/go.mod h1:TGkY/5FIDFIQTgJN8sWTMinkGUfUD3ncntdPOwknYiM=
+github.com/projectsveltos/libsveltos v0.57.3-0.20250712141454-5bb04ea32759 h1:QnJ4pKq/tddAe4A5xjCvmCJ5pUE8ks6KfZo1S0Oc/GQ=
+github.com/projectsveltos/libsveltos v0.57.3-0.20250712141454-5bb04ea32759/go.mod h1:TGkY/5FIDFIQTgJN8sWTMinkGUfUD3ncntdPOwknYiM=
 github.com/prometheus/client_golang v1.22.0 h1:rb93p9lokFEsctTys46VnV1kLCDpVZ0a/Y92Vm0Zc6Q=
 github.com/prometheus/client_golang v1.22.0/go.mod h1:R7ljNsLXhuQXYZYtw6GAE9AZg8Y7vEW5scdCXrWRXC0=
 github.com/prometheus/client_model v0.6.1 h1:ZKSh/rekM+n3CeS952MLRAdFwIKqeY8b62p8ais2e9E=

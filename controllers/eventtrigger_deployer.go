@@ -621,7 +621,6 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 		}
 
 		if *status == libsveltosv1beta1.SveltosStatusRemoved {
-			// MGIANLUC
 			logger.V(logs.LogDebug).Info("status is removed")
 			if err := removeClusterInfoEntry(ctx, r.Client, cluster.Namespace, cluster.Name,
 				clusterproxy.GetClusterType(cluster), resource, logger); err != nil {

@@ -58,7 +58,7 @@ var _ = Describe("CloudEvents", func() {
 		projectsveltos = "projectsveltos"
 	)
 
-	It("EventTrigger using matching CloudEvents", Label("FV"), func() {
+	It("EventTrigger using matching CloudEvents", Label("FV", "PULLMODE"), func() {
 		Byf("Create a EventSource matching CloudEvents")
 		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
@@ -139,7 +139,7 @@ var _ = Describe("CloudEvents", func() {
 		Eventually(func() error {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			return k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 		}, timeout, pollingInterval).Should(BeNil())
 
@@ -152,7 +152,7 @@ var _ = Describe("CloudEvents", func() {
 		if isAgentLessMode() {
 			Byf("Updating EventReports in the management cluster adding a matching CloudEvent")
 			Expect(k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)).To(Succeed())
 			currentEventReport.Spec.CloudEvents = [][]byte{jsonData}
 			Expect(k8sClient.Update(context.TODO(), currentEventReport)).To(Succeed())
@@ -176,7 +176,7 @@ var _ = Describe("CloudEvents", func() {
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = k8sClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+					types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 					currentEventReport)
 				if err != nil {
 					return false
@@ -216,10 +216,10 @@ var _ = Describe("CloudEvents", func() {
 		clusterProfileList := &configv1beta1.ClusterProfileList{}
 		Expect(k8sClient.List(context.TODO(), clusterProfileList, listOptions...)).To(Succeed())
 		clusterProfile := &clusterProfileList.Items[0]
-		clusterSummary := verifyClusterSummary(clusterProfile, kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
+		clusterSummary := verifyClusterSummary(clusterProfile, kindWorkloadCluster.GetNamespace(), kindWorkloadCluster.GetName())
 
 		Byf("Verifying ClusterSummary %s status is set to Deployed for Resources feature", clusterSummary.Name)
-		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.Namespace, clusterSummary.Name, libsveltosv1beta1.FeatureResources)
+		verifyFeatureStatusIsProvisioned(kindWorkloadCluster.GetNamespace(), clusterSummary.Name, libsveltosv1beta1.FeatureResources)
 
 		// Namespace with Subject name should be present in the managed cluster as response
 		Byf("Verifying Namespace %s is created in the managed cluster", subject)
@@ -273,7 +273,7 @@ var _ = Describe("CloudEvents", func() {
 		Eventually(func() bool {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.Namespace, Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)
 			return err != nil && apierrors.IsNotFound(err)
 		}, timeout, pollingInterval).Should(BeTrue())

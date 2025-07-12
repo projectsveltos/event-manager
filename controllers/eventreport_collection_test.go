@@ -341,13 +341,13 @@ var _ = Describe("EventSource Deployer", func() {
 			},
 		}
 
-		Expect(controllers.ShouldIgnore(&eventReport)).To(BeFalse())
+		Expect(controllers.ShouldIgnore(&eventReport, false)).To(BeFalse())
 
 		eventReport.Labels = map[string]string{
 			libsveltosv1beta1.EventReportClusterNameLabel: randomString(),
 		}
 
-		Expect(controllers.ShouldIgnore(&eventReport)).To(BeTrue())
+		Expect(controllers.ShouldIgnore(&eventReport, false)).To(BeTrue())
 	})
 
 	It("shouldReprocess returns true for EventReport with Status set to processed", func() {

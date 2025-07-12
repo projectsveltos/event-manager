@@ -238,6 +238,12 @@ fv-agentless: $(KUBECTL) $(GINKGO)
 	sleep 50
 	cd test/fv; $(GINKGO) -nodes $(NUM_NODES) --label-filter='FV' --v --trace --randomize-all
 
+.PHONY: fv-pullmode
+fv-pullmode: $(GINKGO) ## Run Sveltos Controller tests using existing cluster
+	cp test/sveltos-agent.yaml test/sveltos-agent.yaml.m
+	KUBECONFIG="--kubeconfig=./test/fv/workload_kubeconfig" $(MAKE) deploy-sveltos-agent
+	cd test/fv; $(GINKGO) -nodes $(NUM_NODES) --label-filter='PULLMODE' --v --trace --randomize-all
+
 .PHONY: test
 test: manifests generate fmt vet check-manifests $(SETUP_ENVTEST) ## Run uts.
 	KUBEBUILDER_ASSETS="$(KUBEBUILDER_ASSETS)" go test $(shell go list ./... |grep -v test/fv |grep -v test/helpers) $(TEST_ARGS) -coverprofile cover.out
@@ -317,6 +323,7 @@ create-cluster-pullmode: $(KIND) $(KUBECTL) $(ENVSUBST) $(KUSTOMIZE)
 	echo "Deploy sveltos-applier in cluster2"
 	$(KUBECTL) apply -f test/pullmode-sveltosapplier.yaml
 
+	cp test/sveltos-agent.yaml test/sveltos-agent.yaml.m
 	KUBECONFIG="" $(MAKE) deploy-sveltos-agent
 
 	@echo "Waiting for projectsveltos sveltos-applier to be available..."

@@ -25,7 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
@@ -38,8 +37,8 @@ var _ = Describe("Reference ClusterSet", func() {
 		projectsveltos = "projectsveltos"
 	)
 
-	It("Verifies EventTrigger reacts to ClusterSet changes", Label("FV"), func() {
-		Byf("Create a ClusterSet matching Cluster %s/%s", kindWorkloadCluster.Namespace, kindWorkloadCluster.Name)
+	It("Verifies EventTrigger reacts to ClusterSet changes", Label("FV", "PULLMODE"), func() {
+		Byf("Create a ClusterSet matching Cluster %s/%s", kindWorkloadCluster.GetNamespace(), kindWorkloadCluster.GetName())
 		clusterSet := getClusterSet(namePrefix, map[string]string{key: value})
 		clusterSet.Spec.MaxReplicas = 1
 		Expect(k8sClient.Create(context.TODO(), clusterSet)).To(Succeed())
@@ -53,10 +52,10 @@ var _ = Describe("Reference ClusterSet", func() {
 		Expect(len(currentClusterSet.Status.SelectedClusterRefs)).To(Equal(1))
 		Expect(currentClusterSet.Status.SelectedClusterRefs).To(ContainElement(
 			corev1.ObjectReference{
-				Kind:       "Cluster",
-				APIVersion: clusterv1.GroupVersion.String(),
-				Namespace:  kindWorkloadCluster.Namespace,
-				Name:       kindWorkloadCluster.Name,
+				Kind:       kindWorkloadCluster.GetKind(),
+				APIVersion: kindWorkloadCluster.GetAPIVersion(),
+				Namespace:  kindWorkloadCluster.GetNamespace(),
+				Name:       kindWorkloadCluster.GetName(),
 			}))
 
 		serviceNamespace := randomString()

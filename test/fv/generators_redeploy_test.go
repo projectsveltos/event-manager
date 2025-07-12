@@ -126,9 +126,9 @@ metadata:
   namespace: default
   annotations:
     projectsveltos.io/template: "ok"
-data: 
+data:
   content: |
-    {{ $namespaces := ( ( index (getResource "Namespaces").data "namespaces" ) | fromYaml ) }} 
+    {{ $namespaces := ( ( index (getResource "Namespaces").data "namespaces" ) | fromYaml ) }}
     {{- range $key, $value := $namespaces }}
         apiVersion: v1
         kind: Secret
@@ -156,7 +156,7 @@ data:
     {{- end }}`
 	)
 
-	It("Configures Generators and have ClusterProfile consume those and redeploy on changes", Label("FV"), func() {
+	It("Configures Generators and have ClusterProfile consume those and redeploy on changes", Label("FV", "PULLMODE"), func() {
 		// Prepare the test by removing label imagepullsecret from all namespaces in the workload cluster
 		// This is neeed just if we re-run test on same workload cluster
 		cleanLabelsFromNamespaces()
