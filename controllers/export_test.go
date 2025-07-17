@@ -63,6 +63,9 @@ var (
 	InstantiateOneClusterProfilePerResource    = instantiateOneClusterProfilePerResource
 	RemoveClusterProfiles                      = removeClusterProfiles
 
+	InstantiateCloudEventAction = instantiateCloudEventAction
+	PrepareCurrentObjectList    = prepareCurrentObjectList
+
 	InstantiateFromGeneratorsPerResource = instantiateFromGeneratorsPerResource
 	DeleteInstantiatedFromGenerators     = deleteInstantiatedFromGenerators
 

@@ -1179,6 +1179,7 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 	// by Sveltos by looking at just Subject and Source.
 
 	if eventTrigger.Spec.OneForEvent {
+		logger.V(logs.LogDebug).Info("updating one clusterProfile per resource")
 		clusterProfiles, err = instantiateOneClusterProfilePerResource(ctx, c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, er, logger)
 		if err != nil {
@@ -1194,6 +1195,7 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 			return err
 		}
 	} else {
+		logger.V(logs.LogDebug).Info("updating one clusterProfile for all resources")
 		clusterProfiles, err = instantiateOneClusterProfilePerAllResource(ctx, c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, er, logger)
 		if err != nil {
@@ -1272,6 +1274,7 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
 		er, clusterType)
 	if object.CloudEvent != nil {
+		logger.V(logs.LogDebug).Info("instantiateClusterProfileForResource with cloudEvent")
 		labels = appendInstantiatedObjectLabelsForCloudEvent(labels, getCESource(object.CloudEvent),
 			getCESubject(object.CloudEvent))
 	} else {
@@ -1285,6 +1288,8 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile name: %v", err))
 		return nil, err
 	}
+
+	logger.V(logs.LogDebug).Info(fmt.Sprintf("instantiateClusterProfileForResource ClusterProfile name: %s", clusterProfileName))
 
 	// It is important to add this label here (after we searched if a ClusterProfile already exists)
 	if er != nil && er.Labels != nil {
@@ -1301,6 +1306,8 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		if err != nil {
 			return nil, err
 		}
+
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("instantiateClusterProfileForResource cloudEventAction: %s", *instantiatedCloudEventAction))
 
 		if *instantiatedCloudEventAction == v1beta1.CloudEventActionDelete {
 			// Resources created because of a cloudEvent are ONLY removed when same (same subject/source) cloudEvent

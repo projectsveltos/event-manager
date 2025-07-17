@@ -28,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -37,6 +38,7 @@ import (
 	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
@@ -436,6 +438,130 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(controllers.IsEventTriggerMatchingTheCluster(et2, cluster1, eventTriggerMap)).To(BeFalse())
 		Expect(controllers.IsEventTriggerMatchingTheCluster(et2, cluster2, eventTriggerMap)).To(BeFalse())
 		Expect(controllers.IsEventTriggerMatchingTheCluster(et2, cluster3, eventTriggerMap)).To(BeFalse())
+	})
+
+	It("getCloudEvents returns all cloudEvents", func() {
+		//nolint: lll, goconst // just a test with data
+		erYAML := `apiVersion: lib.projectsveltos.io/v1beta1
+kind: EventReport
+metadata:
+  creationTimestamp: "2025-07-15T10:18:28Z"
+  generation: 18
+  labels:
+    projectsveltos.io/eventsource-name: repo-error
+  name: repo-error
+  namespace: projectsveltos
+  resourceVersion: "1176661"
+  uid: 4771b97b-c9ea-4fc1-a5cf-c4ec9722e4c1
+spec:
+  cloudEvents:
+  - eyJzcGVjdmVyc2lvbiI6IjEuMCIsImlkIjoiMTc1MjY1OTkwNiIsInNvdXJjZSI6InJlcG8ucmVxdWVzdGVyLmNvZGVzYWxvdC5jb20iLCJ0eXBlIjoicmVwby5lcnJvciIsInN1YmplY3QiOiJvcGVuLWdhcmxpYy1kZWxldGUtcmVwbyIsImRhdGFjb250ZW50dHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJkYXRhIjp7Im9yZyI6Im9wZW4tZ2FybGljIiwibmFtZSI6ImRlbGV0ZS1yZXBvIn19
+  clusterName: ""
+  clusterNamespace: ""
+  clusterType: ""
+  eventSourceName: repo-error`
+
+		u, err := k8s_utils.GetUnstructured([]byte(erYAML))
+		Expect(err).To(BeNil())
+
+		eventReport := &libsveltosv1beta1.EventReport{}
+		err = runtime.DefaultUnstructuredConverter.
+			FromUnstructured(u.UnstructuredContent(), eventReport)
+		Expect(err).To(BeNil())
+
+		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+		events, err := controllers.GetCloudEvents(eventReport, logger)
+		Expect(err).To(BeNil())
+		Expect(len(events)).To(Equal(1))
+		Expect(events[0]["specversion"]).To(Equal("1.0"))
+		Expect(events[0]["source"]).To(Equal("repo.requester.codesalot.com"))
+		Expect(events[0]["type"]).To(Equal("repo.error"))
+	})
+
+	It("instantiateCloudEventAction ", func() {
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: clusterNamespace,
+			},
+		}
+		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: clusterNamespace},
+		}
+
+		Expect(testEnv.Client.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
+
+		etYAML := `apiVersion: lib.projectsveltos.io/v1beta1
+kind: EventTrigger
+metadata:
+  name: delete-argo-app
+  namespace: projectsveltos
+  annotations:
+    projectsveltos.io/description: "Delete ArgoCD Application when a repo creation fails"
+spec:
+  sourceClusterSelector:
+    matchLabels:
+      projectsveltos.io/role: management
+  eventSourceName: repo-error
+  oneForEvent: true
+  syncMode: ContinuousWithDriftDetection
+  cloudEventAction: '{{if eq .CloudEvent.type "repo.error"}}Delete{{end}}'
+  policyRefs:
+  - name: argo-app-config
+    namespace: default
+    kind: ConfigMap`
+
+		u, err := k8s_utils.GetUnstructured([]byte(etYAML))
+		Expect(err).To(BeNil())
+
+		eventTrigger := &v1beta1.EventTrigger{}
+		err = runtime.DefaultUnstructuredConverter.
+			FromUnstructured(u.UnstructuredContent(), eventTrigger)
+		Expect(err).To(BeNil())
+
+		//nolint: lll // just a test with data
+		erYAML := `apiVersion: lib.projectsveltos.io/v1beta1
+kind: EventReport
+metadata:
+  creationTimestamp: "2025-07-15T10:18:28Z"
+  generation: 18
+  labels:
+    projectsveltos.io/eventsource-name: repo-error
+  name: repo-error
+  namespace: projectsveltos
+  resourceVersion: "1176661"
+  uid: 4771b97b-c9ea-4fc1-a5cf-c4ec9722e4c1
+spec:
+  cloudEvents:
+  - eyJzcGVjdmVyc2lvbiI6IjEuMCIsImlkIjoiMTc1MjY1OTkwNiIsInNvdXJjZSI6InJlcG8ucmVxdWVzdGVyLmNvZGVzYWxvdC5jb20iLCJ0eXBlIjoicmVwby5lcnJvciIsInN1YmplY3QiOiJvcGVuLWdhcmxpYy1kZWxldGUtcmVwbyIsImRhdGFjb250ZW50dHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJkYXRhIjp7Im9yZyI6Im9wZW4tZ2FybGljIiwibmFtZSI6ImRlbGV0ZS1yZXBvIn19
+  clusterName: ""
+  clusterNamespace: ""
+  clusterType: ""
+  eventSourceName: repo-error`
+
+		u, err = k8s_utils.GetUnstructured([]byte(erYAML))
+		Expect(err).To(BeNil())
+
+		eventReport := &libsveltosv1beta1.EventReport{}
+		err = runtime.DefaultUnstructuredConverter.
+			FromUnstructured(u.UnstructuredContent(), eventReport)
+		Expect(err).To(BeNil())
+
+		objects, err := controllers.PrepareCurrentObjectList(ctx, testEnv.Client, clusterNamespace, clusterName, clusterType, eventReport, logger)
+		Expect(err).To(BeNil())
+		Expect(len(objects)).To(Equal(1))
+
+		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+		ceAction, err := controllers.InstantiateCloudEventAction(clusterNamespace, clusterName, eventTrigger, objects[0], logger)
+		Expect(err).To(BeNil())
+		Expect(string(*ceAction)).To(Equal("Delete"))
 	})
 })
 
