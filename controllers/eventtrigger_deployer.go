@@ -26,6 +26,7 @@ import (
 	"reflect"
 	"strings"
 	"text/template"
+	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1b2 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -1300,8 +1301,9 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	}
 
 	clusterProfile := getNonInstantiatedClusterProfile(eventTrigger, clusterProfileName, labels)
+	var instantiatedCloudEventAction *v1beta1.CloudEventAction
 	if object.CloudEvent != nil {
-		instantiatedCloudEventAction, err := instantiateCloudEventAction(clusterNamespace, clusterName, eventTrigger,
+		instantiatedCloudEventAction, err = instantiateCloudEventAction(clusterNamespace, clusterName, eventTrigger,
 			object, logger)
 		if err != nil {
 			return nil, err
@@ -1332,7 +1334,18 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		return nil, err
 	}
 
-	return clusterProfile, updateResource(ctx, dr, clusterProfile, logger)
+	err = updateResource(ctx, dr, clusterProfile, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	if object.CloudEvent != nil && *instantiatedCloudEventAction == v1beta1.CloudEventActionCreate {
+		// To prevent stale ClusterProfiles, ensure the cache is synced before processing next CloudEvents.
+		// This is especially crucial when an EventReport contains both add and delete CloudEvents for the same profile.
+		waitForClusterProfile(ctx, c, clusterProfileName)
+	}
+
+	return clusterProfile, nil
 }
 
 // instantiateClusterProfileSpecForResource creates one ClusterProfile.Spec per event
@@ -3116,4 +3129,26 @@ func prepareSetters(eventTrigger *v1beta1.EventTrigger, configurationHash []byte
 	setters = append(setters, pullmode.WithSourceRef(&sourceRef))
 
 	return setters
+}
+
+func waitForClusterProfile(ctx context.Context, c client.Client, clusterProfileName string) {
+	clusterProfile := &configv1beta1.ClusterProfile{}
+
+	const waitTimeout = 30 * time.Second
+	timeout := time.After(waitTimeout)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return // Exit after 30 seconds
+		case <-ticker.C:
+			err := c.Get(ctx, types.NamespacedName{Name: clusterProfileName}, clusterProfile)
+			if err == nil {
+				return // Found the resource
+			}
+			// Continue retrying on error
+		}
+	}
 }
