@@ -55,64 +55,70 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 	resource, err := fetchEventSource(ctx, c, cluster.Namespace, cluster.Name, e.Spec.EventSourceName,
 		clusterproxy.GetClusterType(cluster), logger)
 	if err != nil {
-		return nil, err
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("Failed to fetch EventSource during hash evaluation: %v",
+			err))
 	}
-	if resource == nil {
-		// If there is no EventSource, nothing to do
-		return nil, nil
-	}
+	if resource != nil {
+		result = append(result, resource)
 
-	result = append(result, resource)
+		logger.V(logs.LogDebug).Info("fetch EventReports")
+		var eventReports *libsveltosv1beta1.EventReportList
+		eventReports, err = fetchEventReports(ctx, c, cluster.Namespace, cluster.Name, resource.Name,
+			clusterproxy.GetClusterType(cluster))
+		if err != nil {
+			return nil, err
+		}
 
-	logger.V(logs.LogDebug).Info("fetch EventReports")
-	var eventReports *libsveltosv1beta1.EventReportList
-	eventReports, err = fetchEventReports(ctx, c, cluster.Namespace, cluster.Name, resource.Name,
-		clusterproxy.GetClusterType(cluster))
-	if err != nil {
-		return nil, err
-	}
-
-	for i := range eventReports.Items {
-		result = append(result, &eventReports.Items[i])
+		for i := range eventReports.Items {
+			result = append(result, &eventReports.Items[i])
+		}
 	}
 
 	clusterType := clusterproxy.GetClusterType(cluster)
 	clusterObj, err := fecthClusterObjects(ctx, c, cluster.Namespace, cluster.Name, clusterType, logger)
 	if err == nil {
-		objects := currentObjects{
+		object := currentObject{
 			Cluster: clusterObj,
 		}
 
 		templateName := getTemplateName(cluster.Namespace, cluster.Name, e.Name)
 
-		referencedResources, err := collectResourcesFromConfigMapGenerators(ctx, c, objects, e,
+		referencedResources, err := collectResourcesFromConfigMapGenerators(ctx, c, object, e,
 			templateName, cluster, logger)
 		if err != nil {
-			return nil, err
+			logger.V(logs.LogDebug).Info(fmt.Sprintf("Failed to fetch ConfigMapGenerators during hash evaluation: %v",
+				err))
+		} else {
+			result = append(result, referencedResources...)
 		}
-		result = append(result, referencedResources...)
 
-		referencedResources, err = collectResourcesFromSecretGenerators(ctx, c, objects, e,
+		referencedResources, err = collectResourcesFromSecretGenerators(ctx, c, object, e,
 			templateName, cluster, logger)
 		if err != nil {
-			return nil, err
+			logger.V(logs.LogDebug).Info(fmt.Sprintf("Failed to fetch SecretGenerators during hash evaluation: %v",
+				err))
+		} else {
+			result = append(result, referencedResources...)
 		}
-		result = append(result, referencedResources...)
 
-		local, remote, _ := fetchPolicyRefs(ctx, c, e, cluster, objects, templateName, logger)
-
-		result = appendToResult(result, local)
-		result = appendToResult(result, remote)
+		local, remote, err := fetchPolicyRefs(ctx, c, e, cluster, object, templateName, logger)
+		if err != nil {
+			logger.V(logs.LogDebug).Info(fmt.Sprintf("Failed to fetch PolicyRefs during hash evaluation: %v",
+				err))
+		} else {
+			result = appendToResult(result, local)
+			result = appendToResult(result, remote)
+		}
 
 		for i := range e.Spec.HelmCharts {
 			valuesFrom := getValuesFrom(ctx, c, e.Spec.HelmCharts[i].ValuesFrom, templateName,
-				cluster, objects, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
+				cluster, object, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 			result = append(result, valuesFrom...)
 		}
 
 		for i := range e.Spec.KustomizationRefs {
 			valuesFrom := getValuesFrom(ctx, c, e.Spec.KustomizationRefs[i].ValuesFrom, templateName,
-				cluster, objects, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
+				cluster, object, funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 			result = append(result, valuesFrom...)
 		}
 	}

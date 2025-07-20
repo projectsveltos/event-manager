@@ -70,7 +70,7 @@ func (r *EventSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return reconcile.Result{}, nil
 	}
 
-	return ctrl.Result{}, nil
+	return reconcile.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

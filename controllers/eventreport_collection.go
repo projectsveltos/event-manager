@@ -503,6 +503,7 @@ func updateEventReport(ctx context.Context, c client.Client, cluster *corev1.Obj
 		if apierrors.IsNotFound(err) {
 			return eventReport, nil
 		}
+		return nil, err
 	}
 	if !currentEventSource.DeletionTimestamp.IsZero() {
 		return eventReport, nil

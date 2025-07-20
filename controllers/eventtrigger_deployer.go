@@ -573,6 +573,7 @@ func (r *EventTriggerReconciler) proceesAgentDeploymentStatus(ctx context.Contex
 			provisioning := libsveltosv1beta1.FeatureStatusProvisioning
 			return &provisioning, nil
 		}
+		return nil, err
 	}
 
 	return status.DeploymentStatus, err
