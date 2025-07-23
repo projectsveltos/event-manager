@@ -1760,5 +1760,7 @@ spec:
             - ALL
       securityContext:
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: event-manager
       terminationGracePeriodSeconds: 10
