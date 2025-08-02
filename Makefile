@@ -478,3 +478,18 @@ deploy-sveltos-agent:
 	$(KUBECTL) ${KUBECONFIG} apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_eventreports.lib.projectsveltos.io.yaml
 	$(KUBECTL) ${KUBECONFIG} apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_reloaders.lib.projectsveltos.io.yaml
 	$(KUBECTL) ${KUBECONFIG} apply -f test/sveltos-agent.yaml.m
+
+define get-digest-sveltos-applier
+$(shell skopeo inspect --format '{{.Digest}}' "docker://projectsveltos/sveltos-applier:${TAG}" --override-os="linux" --override-arch="amd64" --override-variant="v8" 2>/dev/null)
+endef
+
+sveltos-applier:
+	@echo "Downloading sveltos applier yaml"
+	$(eval digest :=$(call get-digest-sveltos-applier))
+	@echo "image digest is $(get-digest-sveltos-applier)"
+	curl -L -H "Authorization: token $$GITHUB_PAT" https://raw.githubusercontent.com/projectsveltos/sveltos-applier/$(TAG)/manifest/manifest.yaml -o ./test/pullmode-sveltosapplier.yaml
+	sed -i '' -e "s#image: docker.io/projectsveltos/sveltos-applier:${TAG}#image: docker.io/projectsveltos/sveltos-applier@${digest}#g" ./test/pullmode-sveltosapplier.yaml
+	sed -i '' -e "s#cluster-namespace=#cluster-namespace=default#g" ./test/pullmode-sveltosapplier.yaml
+	sed -i '' -e "s#cluster-name=#cluster-name=clusterapi-workload#g" ./test/pullmode-sveltosapplier.yaml
+	sed -i '' -e "s#cluster-type=#cluster-type=sveltos#g" ./test/pullmode-sveltosapplier.yaml
+	sed -i '' -e "s#secret-with-kubeconfig=#secret-with-kubeconfig=clusterapi-workload-sveltos-kubeconfig#g" ./test/pullmode-sveltosapplier.yaml
