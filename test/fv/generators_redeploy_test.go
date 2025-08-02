@@ -28,11 +28,13 @@ import (
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/projectsveltos/event-manager/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 )
 
@@ -42,6 +44,8 @@ const (
 
 var _ = Describe("Redeploy when Generators change", func() {
 	const (
+		projectsveltos = "projectsveltos"
+
 		eventTriggerName = "deploy-imagepullsecret"
 
 		namePrefix = "redeploy-generator-"
@@ -192,6 +196,32 @@ data:
 		Expect(err).To(BeNil())
 		Expect(workloadClient).ToNot(BeNil())
 
+		eventSourceName := "new-namespace"
+		if isAgentLessMode() {
+			Byf("Verifying EventSource %s is NOT present in the managed cluster", eventSourceName)
+			Consistently(func() bool {
+				currentEventSource := &libsveltosv1beta1.EventSource{}
+				err = workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSourceName},
+					currentEventSource)
+				return err != nil && meta.IsNoMatchError(err) // CRD never installed
+			}, timeout/2, pollingInterval).Should(BeTrue())
+		} else {
+			Byf("Verifying EventSource %s is present in the managed cluster", eventSourceName)
+			Eventually(func() error {
+				currentEventSource := &libsveltosv1beta1.EventSource{}
+				return workloadClient.Get(context.TODO(), types.NamespacedName{Name: eventSourceName},
+					currentEventSource)
+			}, timeout, pollingInterval).Should(BeNil())
+
+			Byf("Verifying EventReports %s is present in the managed cluster", eventSourceName)
+			Eventually(func() error {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				return workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: eventSourceName},
+					currentEventReport)
+			}, timeout, pollingInterval).Should(BeNil())
+		}
+
 		namespace := namePrefix + randomString()
 		Byf("Create a namespace %s with proper label", namespace)
 		ns := &corev1.Namespace{
@@ -203,6 +233,33 @@ data:
 			},
 		}
 		Expect(workloadClient.Create(context.TODO(), ns)).To(Succeed())
+
+		if !isAgentLessMode() {
+			Byf("Verifying EventReports %s is present in the managed cluster with matching resource", eventSourceName)
+			Eventually(func() bool {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				err = workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: eventSourceName},
+					currentEventReport)
+				if err != nil {
+					return false
+				}
+				return len(currentEventReport.Spec.MatchingResources) != 0
+			}, timeout, pollingInterval).Should(BeTrue())
+		}
+
+		Byf("Verifying EventReports %s is present in the management cluster with matching resource", getEventReportName(eventSourceName))
+		Eventually(func() bool {
+			currentEventReport := &libsveltosv1beta1.EventReport{}
+			err = k8sClient.Get(context.TODO(),
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSourceName)},
+				currentEventReport)
+			if err != nil {
+				return false
+			}
+
+			return len(currentEventReport.Spec.MatchingResources) != 0
+		}, timeout, pollingInterval).Should(BeTrue())
 
 		Byf("Verifying Secret %s is copied to the managed cluster", regcred.GetName())
 		Eventually(func() error {
