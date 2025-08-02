@@ -282,19 +282,17 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 	}
 
 	var listOptions []client.ListOption
-	if getAgentInMgmtCluster() {
-		// If agent is in the management cluster, EventReports for this cluster are also
-		// in the management cluuster in the cluster namespace.
+	if getAgentInMgmtCluster() || isPullMode {
+		clusterType := clusterproxy.GetClusterType(cluster)
+		// If agent is in the management cluster or in pull mode, EventReports for this
+		// cluster are also in the management cluuster in the cluster namespace.
 		listOptions = []client.ListOption{
 			client.InNamespace(cluster.Namespace),
-		}
-	} else if isPullMode {
-		listOptions = append(listOptions,
 			client.MatchingLabels{
 				libsveltosv1beta1.EventReportClusterNameLabel: cluster.Name,
-				libsveltosv1beta1.EventReportClusterTypeLabel: strings.ToLower(string(libsveltosv1beta1.ClusterTypeSveltos)),
+				libsveltosv1beta1.EventReportClusterTypeLabel: strings.ToLower(string(clusterType)),
 			},
-		)
+		}
 	}
 
 	eventReportList := libsveltosv1beta1.EventReportList{}
