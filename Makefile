@@ -38,7 +38,7 @@ ARCH ?= $(shell go env GOARCH)
 OS ?= $(shell uname -s | tr A-Z a-z)
 K8S_LATEST_VER ?= $(shell curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
 export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
-TAG ?= v1.0.0-beta.0
+TAG ?= main
 
 ## Tool Binaries
 CONTROLLER_GEN := $(TOOLS_BIN_DIR)/controller-gen
@@ -207,6 +207,12 @@ fv: $(GINKGO) ## Run Sveltos Controller tests using existing cluster
 .PHONY: fv-sharding
 fv-sharding: $(KUBECTL) $(GINKGO) ## Run Sveltos Controller tests using existing cluster
 	cp test/sveltos-agent.yaml test/sveltos-agent.yaml.m
+	sed -e "s/--cluster-namespace=/--cluster-namespace=default/g" test/sveltos-agent.yaml.m > test/sveltos-agent.yaml.tmp
+	mv test/sveltos-agent.yaml.tmp test/sveltos-agent.yaml.m
+	sed -e "s/--cluster-name=/--cluster-name=clusterapi-workload/g" test/sveltos-agent.yaml.m > test/sveltos-agent.yaml.tmp
+	mv test/sveltos-agent.yaml.tmp test/sveltos-agent.yaml.m
+	sed -e "s/--cluster-type=/--cluster-type=capi/g" test/sveltos-agent.yaml.m > test/sveltos-agent.yaml.tmp
+	mv test/sveltos-agent.yaml.tmp test/sveltos-agent.yaml.m
 	KUBECONFIG="--kubeconfig=./test/fv/workload_kubeconfig" $(MAKE) deploy-sveltos-agent
 	curl https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/deployment-shard.yaml -o ac-deployment-shard.yaml
 	sed -e "s/{{.SHARD}}/shard1/g"  ac-deployment-shard.yaml > tmp-ac-deployment-shard.yaml
@@ -241,6 +247,12 @@ fv-agentless: $(KUBECTL) $(GINKGO)
 .PHONY: fv-pullmode
 fv-pullmode: $(GINKGO) ## Run Sveltos Controller tests using existing cluster
 	cp test/sveltos-agent.yaml test/sveltos-agent.yaml.m
+	sed -e "s/--cluster-namespace=/--cluster-namespace=default/g" test/sveltos-agent.yaml.m > test/sveltos-agent.yaml.tmp
+	mv test/sveltos-agent.yaml.tmp test/sveltos-agent.yaml.m
+	sed -e "s/--cluster-name=/--cluster-name=clusterapi-workload/g" test/sveltos-agent.yaml.m > test/sveltos-agent.yaml.tmp
+	mv test/sveltos-agent.yaml.tmp test/sveltos-agent.yaml.m
+	sed -e "s/--cluster-type=/--cluster-type=capi/g" test/sveltos-agent.yaml.m > test/sveltos-agent.yaml.tmp
+	mv test/sveltos-agent.yaml.tmp test/sveltos-agent.yaml.m
 	KUBECONFIG="--kubeconfig=./test/fv/workload_kubeconfig" $(MAKE) deploy-sveltos-agent
 	cd test/fv; $(GINKGO) -nodes $(NUM_NODES) --label-filter='PULLMODE' --v --trace --randomize-all
 
