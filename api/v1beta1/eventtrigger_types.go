@@ -239,18 +239,21 @@ type EventTriggerSpec struct {
 	// that need to be deployed in the matching clusters based on EventSource.
 	// This field will be directly transferred to the ClusterProfile Spec
 	// generated in response to events.
+	// +listType=atomic
 	// +optional
 	PolicyRefs []configv1beta1.PolicyRef `json:"policyRefs,omitempty"`
 
 	// Helm charts to be deployed in the matching clusters based on EventSource.
 	// This field will be directly transferred to the ClusterProfile Spec
 	// generated in response to events.
+	// +listType=atomic
 	// +optional
 	HelmCharts []configv1beta1.HelmChart `json:"helmCharts,omitempty"`
 
 	// Kustomization refs
 	// This field will be directly transferred to the ClusterProfile Spec
 	// generated in response to events.
+	// +listType=atomic
 	// +optional
 	KustomizationRefs []configv1beta1.KustomizationRef `json:"kustomizationRefs,omitempty"`
 
@@ -259,6 +262,7 @@ type EventTriggerSpec struct {
 	// is healthy
 	// This field will be directly transferred to the ClusterProfile Spec
 	// generated in response to events.
+	// +listType=atomic
 	// +optional
 	ValidateHealths []libsveltosv1beta1.ValidateHealth `json:"validateHealths,omitempty"`
 
@@ -266,6 +270,7 @@ type EventTriggerSpec struct {
 	// Within the Patch Spec you can use templating
 	// This field will be directly transferred to the ClusterProfile Spec
 	// generated in response to events.
+	// +listType=atomic
 	// +optional
 	Patches []libsveltosv1beta1.Patch `json:"patches,omitempty"`
 
@@ -274,6 +279,7 @@ type EventTriggerSpec struct {
 	// when evaluating drift, optionally targeting specific resources and features.
 	// This field will be directly transferred to the ClusterProfile Spec
 	// generated in response to events.
+	// +listType=atomic
 	// +optional
 	DriftExclusions []libsveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 
