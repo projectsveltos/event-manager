@@ -1593,7 +1593,11 @@ func getClusterProfilePolicyRefs(localPolicyRef, remotePolicyRef []configv1beta1
 
 // getResources returns a slice of unstructured.Unstructured by processing eventReport.Spec.Resources field
 func getResources(eventReport *libsveltosv1beta1.EventReport, logger logr.Logger) ([]unstructured.Unstructured, error) {
-	elements := strings.Split(string(eventReport.Spec.Resources), "---")
+	elements, err := deployer.CustomSplit(string(eventReport.Spec.Resources))
+	if err != nil {
+		return nil, err
+	}
+
 	result := make([]unstructured.Unstructured, 0)
 	for i := range elements {
 		if elements[i] == "" {
