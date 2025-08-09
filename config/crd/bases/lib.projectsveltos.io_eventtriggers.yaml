@@ -275,6 +275,7 @@ spec:
                   - paths
                   type: object
                 type: array
+                x-kubernetes-list-type: atomic
               eventSourceName:
                 description: |-
                   EventSourceName is the name of the referenced EventSource.
@@ -694,6 +695,7 @@ spec:
                     rule: 'self.repositoryURL.startsWith(''oci'') ? size(self.repositoryName)
                       >= 1 : true'
                 type: array
+                x-kubernetes-list-type: atomic
               kustomizationRefs:
                 description: |-
                   Kustomization refs
@@ -837,6 +839,7 @@ spec:
                   - namespace
                   type: object
                 type: array
+                x-kubernetes-list-type: atomic
               maxUpdate:
                 anyOf:
                 - type: integer
@@ -927,6 +930,7 @@ spec:
                   - patch
                   type: object
                 type: array
+                x-kubernetes-list-type: atomic
               policyRefs:
                 description: |-
                   PolicyRefs references all the ConfigMaps/Secrets containing kubernetes resources
@@ -988,6 +992,7 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-list-type: atomic
               reloader:
                 default: false
                 description: |-
@@ -1300,6 +1305,7 @@ spec:
                   - version
                   type: object
                 type: array
+                x-kubernetes-list-type: atomic
             required:
             - eventSourceName
             - sourceClusterSelector
