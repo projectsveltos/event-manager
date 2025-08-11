@@ -284,14 +284,6 @@ var _ = Describe("EventTrigger deployer", func() {
 	It("eventTriggerHash returns current EventAddBasedAddOn hash", func() {
 		clusterNamespace := randomString()
 
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      randomString(),
-				Namespace: randomString(),
-			},
-			Type: libsveltosv1beta1.ClusterProfileSecretType,
-		}
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      randomString(),
@@ -332,18 +324,12 @@ var _ = Describe("EventTrigger deployer", func() {
 						Name:      configMap.Name,
 						Namespace: configMap.Namespace,
 					},
-					{
-						Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
-						Name:      secret.Name,
-						Namespace: secret.Namespace,
-					},
 				},
 				EventSourceName: eventSource.Name,
 			},
 		}
 
 		initObjects := []client.Object{
-			secret,
 			cluster,
 			e,
 			configMap,
@@ -356,7 +342,6 @@ var _ = Describe("EventTrigger deployer", func() {
 		config += render.AsCode(eventSource.Spec)
 		config += render.AsCode(eventReport.Spec)
 		config += render.AsCode(configMap.Data)
-		config += render.AsCode(secret.Data)
 		h := sha256.New()
 		h.Write([]byte(config))
 		expectedHash := h.Sum(nil)
@@ -1742,6 +1727,52 @@ spec:
 				Expect(len(networkPolicy.Spec.Ingress[0].Ports)).ToNot(BeZero())
 			}
 		}
+	})
+
+	It("instantiateDataSection", func() {
+		key := "body"
+		content := map[string]string{
+			key: `    {{ $data := "hoge.com/fuga" }}
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: test-config
+      namespace: {{ .Resource.metadata.name }}
+    data:
+      data: {{ $data }}`,
+		}
+
+		ns := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: test
+  labels:
+    test: enabled
+  annotations:
+    hoge.com/fuga: piyo.com/piyo`
+
+		u, err := k8s_utils.GetUnstructured([]byte(ns))
+		Expect(err).To(BeNil())
+		Expect(u).ToNot(BeNil())
+
+		object := controllers.CurrentObject{
+			Resource: u.UnstructuredContent(),
+		}
+
+		result, err := controllers.InstantiateDataSection(randomString(), content, object, false, logger)
+		Expect(err).To(BeNil())
+		Expect(len(result)).To(Equal(1))
+
+		u, err = k8s_utils.GetUnstructured([]byte(result[key]))
+		Expect(err).To(BeNil())
+
+		cm := &corev1.ConfigMap{}
+		err = runtime.DefaultUnstructuredConverter.
+			FromUnstructured(u.UnstructuredContent(), cm)
+		Expect(err).To(BeNil())
+		Expect(cm.Namespace).To(Equal("test"))
+		Expect(len(cm.Data)).To(Equal(1))
+		Expect(cm.Data["data"]).To(Equal("hoge.com/fuga"))
 	})
 
 	It("instantiateFromGeneratorsPerResource instantiates from SecretGenerator", func() {
