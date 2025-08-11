@@ -1805,30 +1805,24 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, e *v1beta1.Even
 func instantiateDataSection(templateName string, content map[string]string, data any,
 	useTxtFuncMap bool, logger logr.Logger) (map[string]string, error) {
 
-	contentJson, err := json.Marshal(content)
-	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to marshal content: %v", err))
-		return nil, err
-	}
-
-	tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-		funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(string(contentJson))
-	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse content: %v", err))
-		return nil, err
-	}
-
-	var buffer bytes.Buffer
-	if err = tmpl.Execute(&buffer, data); err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute content: %v", err))
-		return nil, err
-	}
-
 	instantiatedContent := make(map[string]string)
-	err = json.Unmarshal(buffer.Bytes(), &instantiatedContent)
-	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to unmarshal content: %v", err))
-		return nil, err
+
+	for key := range content {
+		tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
+			funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(content[key])
+		if err != nil {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse content: %v", err))
+			return nil, err
+		}
+
+		var buffer bytes.Buffer
+		if err = tmpl.Execute(&buffer, data); err != nil {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute content: %v", err))
+			return nil, err
+		}
+
+		// Store the instantiated content
+		instantiatedContent[key] = buffer.String()
 	}
 
 	return instantiatedContent, nil
