@@ -53,31 +53,31 @@ function evaluate()
     return hs
   end`
 
-	ingress = `    apiVersion: networking.k8s.io/v1
-    kind: Ingress
-    metadata:
-      name: ingress
-      namespace: %s
-      annotations:
-        nginx.ingress.kubernetes.io/rewrite-target: /
-    spec:
-      ingressClassName: http-ingress
-      rules:
-      {{ range .Resources }}
-        - http:
-            paths:
-            - path: /{{ .metadata.name }}
-              pathType: Prefix
-              backend:
-                service:
-                  name: {{ .metadata.name }}
-                  port:
-                    {{ range .spec.ports }}
-                    {{ if or (eq .port 443 ) (eq .port 8443 ) }}
-                    number: {{ .port }}
-                    {{ end }}
-                    {{ end }}
-      {{ end }}`
+	ingress = `apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress
+  namespace: %s
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: http-ingress
+  rules:
+  {{ range .Resources }}
+    - http:
+        paths:
+        - path: /{{ .metadata.name }}
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ .metadata.name }}
+              port:
+                {{ range .spec.ports }}
+                {{ if or (eq .port 443 ) (eq .port 8443 ) }}
+                number: {{ .port }}
+                {{ end }}
+                {{ end }}
+  {{ end }}`
 )
 
 var _ = Describe("Instantiate one ClusterProfile for all resources", func() {

@@ -44,6 +44,7 @@ var (
 	GetConsumersForEntry  = getConsumersForEntry
 
 	GetCloudEvents = getCloudEvents
+	GetResources   = getResources
 )
 
 type (

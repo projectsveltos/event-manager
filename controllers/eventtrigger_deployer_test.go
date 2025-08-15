@@ -58,7 +58,7 @@ import (
 
 const (
 	ClusterKind         = "Cluster"
-	separator           = "---"
+	separator           = "---\n"
 	nginxDeploymentName = "nginx-deployment"
 )
 
@@ -284,14 +284,6 @@ var _ = Describe("EventTrigger deployer", func() {
 	It("eventTriggerHash returns current EventAddBasedAddOn hash", func() {
 		clusterNamespace := randomString()
 
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      randomString(),
-				Namespace: randomString(),
-			},
-			Type: libsveltosv1beta1.ClusterProfileSecretType,
-		}
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      randomString(),
@@ -332,18 +324,12 @@ var _ = Describe("EventTrigger deployer", func() {
 						Name:      configMap.Name,
 						Namespace: configMap.Namespace,
 					},
-					{
-						Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
-						Name:      secret.Name,
-						Namespace: secret.Namespace,
-					},
 				},
 				EventSourceName: eventSource.Name,
 			},
 		}
 
 		initObjects := []client.Object{
-			secret,
 			cluster,
 			e,
 			configMap,
@@ -356,7 +342,6 @@ var _ = Describe("EventTrigger deployer", func() {
 		config += render.AsCode(eventSource.Spec)
 		config += render.AsCode(eventReport.Spec)
 		config += render.AsCode(configMap.Data)
-		config += render.AsCode(secret.Data)
 		h := sha256.New()
 		h.Write([]byte(config))
 		expectedHash := h.Sum(nil)
@@ -369,6 +354,49 @@ var _ = Describe("EventTrigger deployer", func() {
 		Expect(err).To(BeNil())
 		Expect(hash).ToNot(BeNil())
 		Expect(reflect.DeepEqual(hash, expectedHash)).To(BeTrue())
+	})
+
+	It("getResources ", func() {
+		//nolint: lll // this is a test
+		eventReportYAML := `apiVersion: lib.projectsveltos.io/v1beta1
+kind: EventReport
+metadata:
+  creationTimestamp: "2025-08-08T08:49:40Z"
+  generation: 2
+  labels:
+    eventreport.projectsveltos.io/cluster-name: mgmt
+    eventreport.projectsveltos.io/cluster-type: sveltos
+    projectsveltos.io/eventsource-name: trust-bundle-propagation
+  name: sveltos--trust-bundle-propagation--mgmt
+  namespace: mgmt
+  resourceVersion: "87772893"
+  uid: edd11b32-e77e-459f-aca8-b50cb2af60bd
+spec:
+  clusterName: mgmt
+  clusterNamespace: mgmt
+  clusterType: Sveltos
+  eventSourceName: trust-bundle-propagation
+  matchingResources:
+  - apiVersion: v1
+    kind: ConfigMap
+    name: linkerd-identity-trust-roots
+    namespace: linkerd
+  resources: eyJhcGlWZXJzaW9uIjoidjEiLCJkYXRhIjp7ImNhLWJ1bmRsZS5jcnQiOiItLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJuVENDQVVPZ0F3SUJBZ0lSQUt2KzhzWmpsV2RrdUJ6bnFaTExocnN3Q2dZSUtvWkl6ajBFQXdJd0xqRXNcbk1Db0dBMVVFQXhNaloyeHZZbUZzTFRFdGNtOXZkQzVzYVc1clpYSmtMbU5zZFhOMFpYSXViRzlqWVd3d0hoY05cbk1qVXdPREE0TURRd05qSTBXaGNOTWpVeE1UQTJNRFF3TmpJMFdqQXVNU3d3S2dZRFZRUURFeU5uYkc5aVlXd3Rcbk1TMXliMjkwTG14cGJtdGxjbVF1WTJ4MWMzUmxjaTVzYjJOaGJEQlpNQk1HQnlxR1NNNDlBZ0VHQ0NxR1NNNDlcbkF3RUhBMElBQkJudkQ1Wm5DTExNcGlzY0pheFdZQXYvclhBZ0c2NU9kb3FOUmZsTVdwUWRNcDQyYmZpdlU4d1dcbkwzUFAwYmRMREdlWGNtaE1NNW9HSm5Ob3ZwLzZCdUdqUWpCQU1BNEdBMVVkRHdFQi93UUVBd0lDcERBUEJnTlZcbkhSTUJBZjhFQlRBREFRSC9NQjBHQTFVZERnUVdCQlFoZUpJNWpIamtCaDkxOXFzUmJHdUNDdXJsRERBS0JnZ3Fcbmhrak9QUVFEQWdOSUFEQkZBaUJ4V3dxZDFkK2x2UnBxSytMdTRYSVdjUGQvVjMydlZTV2E4MGVQcHNVa0JnSWhcbkFPZ0xjeWN0WUtSMUFEWFA3UHF3dElIbzhlMU9NN0xGTXp0Q21Cd3hPMks0XG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tXG4tLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJuRENDQVVLZ0F3SUJBZ0lRU3hwRGFkYzRYMWZEQ0licjZVdENyREFLQmdncWhrak9QUVFEQWpBdU1Td3dcbktnWURWUVFERXlObmJHOWlZV3d0TnkxeWIyOTBMbXhwYm10bGNtUXVZMngxYzNSbGNpNXNiMk5oYkRBZUZ3MHlcbk5UQTRNRGd3TkRBMk16UmFGdzB5TlRFeE1EWXdOREEyTXpSYU1DNHhMREFxQmdOVkJBTVRJMmRzYjJKaGJDMDNcbkxYSnZiM1F1YkdsdWEyVnlaQzVqYkhWemRHVnlMbXh2WTJGc01Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERcbkFRY0RRZ0FFblBSRXlkUjVyQlJDNGwyZzJBTEkrNWd3Qi9QenZzUndYS3pSc3Bsc1pBbkU3MjZMYlRjdUZ3TFFcbnVmUjZ0WHA2ZzhCcEtLWXhBY2plSlJURjVQSW5pYU5DTUVBd0RnWURWUjBQQVFIL0JBUURBZ0trTUE4R0ExVWRcbkV3RUIvd1FGTUFNQkFmOHdIUVlEVlIwT0JCWUVGRXVyRnoyU0ZDZlFWbm5KajJLM0JjdkNjdlhxTUFvR0NDcUdcblNNNDlCQU1DQTBnQU1FVUNJUUNVR1NjSHJTWmtQblR6UHBtSjdRaGcvQ1RkaEZmL0ZSQVdDTjZHdGc5VERnSWdcbkxXcTRFdGUySFVNQzZObG1WZkxEWmxUcGt1NUpZbnczN0t5Z1lzTUJzRXc9XG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tXG4tLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJuVENDQVVPZ0F3SUJBZ0lSQU91Y0ZQZEVnRHdaMzBLT3N1dm9qdzh3Q2dZSUtvWkl6ajBFQXdJd0xqRXNcbk1Db0dBMVVFQXhNaloyeHZZbUZzTFRrdGNtOXZkQzVzYVc1clpYSmtMbU5zZFhOMFpYSXViRzlqWVd3d0hoY05cbk1qVXdPREE0TURRd05qTTNXaGNOTWpVeE1UQTJNRFF3TmpNM1dqQXVNU3d3S2dZRFZRUURFeU5uYkc5aVlXd3Rcbk9TMXliMjkwTG14cGJtdGxjbVF1WTJ4MWMzUmxjaTVzYjJOaGJEQlpNQk1HQnlxR1NNNDlBZ0VHQ0NxR1NNNDlcbkF3RUhBMElBQkt2dkFvbzkyK3J5NzdmYlpPNlpBdjJ4YmhIN0pkdGMyaE52R29TOGxwVjAxQUFqbkF5MWxRYjRcbjBVQk9heXZpQ2dTZEcwZzBTdnI5Qmh1QWE1TENwcjJqUWpCQU1BNEdBMVVkRHdFQi93UUVBd0lDcERBUEJnTlZcbkhSTUJBZjhFQlRBREFRSC9NQjBHQTFVZERnUVdCQlJQTkp2emh5a1hwQ3RibFlnN2ZoRUhaaGlRd2pBS0JnZ3Fcbmhrak9QUVFEQWdOSUFEQkZBaUFrVlVTWXBmcVpjWFVQSGtQb3VRTnZhTzY5UklZU0xpZEhKcjA5ZHF6dDhnSWhcbkFLVkZZK3ZqWGdSa1ZlWXRKUGdRKzJoUnJXY3dNRUtTdWFwY3NKamJLTDFYXG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tXG4tLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJuRENDQVVLZ0F3SUJBZ0lRUTUzY2JxUVMwbDh5RVFyWGFQc0pLekFLQmdncWhrak9QUVFEQWpBdU1Td3dcbktnWURWUVFERXlObmJHOWlZV3d0TlMxeWIyOTBMbXhwYm10bGNtUXVZMngxYzNSbGNpNXNiMk5oYkRBZUZ3MHlcbk5UQTRNRGd3TkRBMk16RmFGdzB5TlRFeE1EWXdOREEyTXpGYU1DNHhMREFxQmdOVkJBTVRJMmRzYjJKaGJDMDFcbkxYSnZiM1F1YkdsdWEyVnlaQzVqYkhWemRHVnlMbXh2WTJGc01Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERcbkFRY0RRZ0FFU0I4Z1dwaGhhWHdaL2hTdVpPYlFaelRTYkk2ZjNGcTRjbmhXY05sVGR3MzdBR2g2Z2E3WStmd3JcbnY2U2VUaVhLdEY4UkIvMktUckVzOXkwNzErMEhKS05DTUVBd0RnWURWUjBQQVFIL0JBUURBZ0trTUE4R0ExVWRcbkV3RUIvd1FGTUFNQkFmOHdIUVlEVlIwT0JCWUVGSXkzOGJHNmZrU1ZXK1FCTldiSmFoclRsZEx4TUFvR0NDcUdcblNNNDlCQU1DQTBnQU1FVUNJRWNBVHZPL3dLem1BanVZUENJZVhlM0hrZS90Zk9uWG9sWUd6RjBrWmREaEFpRUFcbm9pd2hqckRGLy8ranlOaHB6RkpHTkJCZDNjbXluVFpSc3JCeHR6MFZHYTQ9XG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tXG4tLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJtekNDQVVLZ0F3SUJBZ0lRT0ZqdFc0L0NmMGEzcnU4MExtbHc1akFLQmdncWhrak9QUVFEQWpBdU1Td3dcbktnWURWUVFERXlObmJHOWlZV3d0TWkxeWIyOTBMbXhwYm10bGNtUXVZMngxYzNSbGNpNXNiMk5oYkRBZUZ3MHlcbk5UQTRNRGd3TkRBMk1qZGFGdzB5TlRFeE1EWXdOREEyTWpkYU1DNHhMREFxQmdOVkJBTVRJMmRzYjJKaGJDMHlcbkxYSnZiM1F1YkdsdWEyVnlaQzVqYkhWemRHVnlMbXh2WTJGc01Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERcbkFRY0RRZ0FFQ1Z0dlZXSHNqTEdWZGZiMkErZjVkbFg5NGhuNHdrOU81NHhZZzlCR0cxK1dlUklFRWNLOHBtU2VcbjJ1SGc4ZnBoQmxqNTFrNmRwVkdOSUt1MXRqRWZTcU5DTUVBd0RnWURWUjBQQVFIL0JBUURBZ0trTUE4R0ExVWRcbkV3RUIvd1FGTUFNQkFmOHdIUVlEVlIwT0JCWUVGQTdUSmRhN2xrc3NaSWNCRDhWd2t5eGhKMyszTUFvR0NDcUdcblNNNDlCQU1DQTBjQU1FUUNJRytFYVhWSHFKZGNkbnkvZjFyWVgwZVEvRlpzdmt3clJLdDJsVnNQNms0N0FpQndcblhDZ3RGaGRYYnluS1d5dTAwQisyKzRsOXpCWnpyb3dScXJPVWpaOUo2dz09XG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tXG4tLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJuRENDQVVLZ0F3SUJBZ0lRRFNVV2ZYNkg1anhTSU8rWGpHeTZ0VEFLQmdncWhrak9QUVFEQWpBdU1Td3dcbktnWURWUVFERXlObmJHOWlZV3d0TUMxeWIyOTBMbXhwYm10bGNtUXVZMngxYzNSbGNpNXNiMk5oYkRBZUZ3MHlcbk5UQTRNRGd3TkRBMk1qVmFGdzB5TlRFeE1EWXdOREEyTWpWYU1DNHhMREFxQmdOVkJBTVRJMmRzYjJKaGJDMHdcbkxYSnZiM1F1YkdsdWEyVnlaQzVqYkhWemRHVnlMbXh2WTJGc01Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERcbkFRY0RRZ0FFb25iUlA5OWUwa3hkRy95MTFnRFNWZUlPTS9zMWpJOWhRRk5JNHhnUE9Pam9tV293SXd0blpuZnVcbk9kaDcyTFBXWkJPNmNZaFRxN01TRGN0ZFRiUEhJcU5DTUVBd0RnWURWUjBQQVFIL0JBUURBZ0trTUE4R0ExVWRcbkV3RUIvd1FGTUFNQkFmOHdIUVlEVlIwT0JCWUVGRlBDaUUvTUxLK0ltdW54ekd4WkdaeHhjSVdyTUFvR0NDcUdcblNNNDlCQU1DQTBnQU1FVUNJQmNUWkF0QzdxWWZ5QnA4NEtZRGNUQS9RL2RiQ1l3ZnlLc3IvSENVODhBaEFpRUFcbjJlTTlFQlJFSHpEWldhLzdvRGFzbU9KTlFTa1FZWVhZa1pvK3Bzcm9LK3c9XG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tXG4tLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJuVENDQVVPZ0F3SUJBZ0lSQVBudkxTWGhSc2U4Q1RSbnFqNmM4b013Q2dZSUtvWkl6ajBFQXdJd0xqRXNcbk1Db0dBMVVFQXhNaloyeHZZbUZzTFRRdGNtOXZkQzVzYVc1clpYSmtMbU5zZFhOMFpYSXViRzlqWVd3d0hoY05cbk1qVXdPREE0TURRd05qSTJXaGNOTWpVeE1UQTJNRFF3TmpJMldqQXVNU3d3S2dZRFZRUURFeU5uYkc5aVlXd3Rcbk5DMXliMjkwTG14cGJtdGxjbVF1WTJ4MWMzUmxjaTVzYjJOaGJEQlpNQk1HQnlxR1NNNDlBZ0VHQ0NxR1NNNDlcbkF3RUhBMElBQkNOM1JCTksvQUMrcENkbkpoOXdZOSsrOTE3V00wSEpROWpscjRLWWpDMEpFU3h0eGJINHN6cVFcbk1SOU9NbXkrQ1haYUNDSHltYkUxL1FpbzRpOXV2RXVqUWpCQU1BNEdBMVVkRHdFQi93UUVBd0lDcERBUEJnTlZcbkhSTUJBZjhFQlRBREFRSC9NQjBHQTFVZERnUVdCQlNFZ0RvejRtNkR1dlJ1eDE2cUJQdEs2TENvU3pBS0JnZ3Fcbmhrak9QUVFEQWdOSUFEQkZBaUVBNG9tRjIwbHR1YkNpZ0I3WXcxdVNSS2h2MklQMjZFWFUvSEtvZjhjY1N5NENcbklHVUd4ZjZaZzV2QjlEaG9Ma0piY2VtUElLSnRVLzNWdzdOV0tNdnJ6WjlLXG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tXG4tLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJuRENDQVVLZ0F3SUJBZ0lRT2FaRnc4eVRnWTBqbFlkbkFVK3pwekFLQmdncWhrak9QUVFEQWpBdU1Td3dcbktnWURWUVFERXlObmJHOWlZV3d0TmkxeWIyOTBMbXhwYm10bGNtUXVZMngxYzNSbGNpNXNiMk5oYkRBZUZ3MHlcbk5UQTRNRGd3TkRBMk16RmFGdzB5TlRFeE1EWXdOREEyTXpGYU1DNHhMREFxQmdOVkJBTVRJMmRzYjJKaGJDMDJcbkxYSnZiM1F1YkdsdWEyVnlaQzVqYkhWemRHVnlMbXh2WTJGc01Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERcbkFRY0RRZ0FFa3VCMFpEblBuUUxyaGVnZ1gwSmpaeHg5SllXcHp2aUx6VVVwWkhtU1VvU29jbC9rbnhzM2JxNWVcbjZnWVBFUk50bXUxZFhxOVZjUlg0WkpzT2k2R0dVS05DTUVBd0RnWURWUjBQQVFIL0JBUURBZ0trTUE4R0ExVWRcbkV3RUIvd1FGTUFNQkFmOHdIUVlEVlIwT0JCWUVGRXYvRFlxVE1wMExGelI0MDNpTDZEdzZIK1RITUFvR0NDcUdcblNNNDlCQU1DQTBnQU1FVUNJUUNhTmNwK1VDYnNMdmpLbFIwM0VObFROamNZY3JoL0U5eStEeitnVEYzdldnSWdcblN0ZDhlazg4MXNVMGhGRUlTWW04bG5mWGpXM2Zna0tMVXo5UkNNWW5KNDQ9XG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tXG4tLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJuVENDQVVPZ0F3SUJBZ0lSQUtvWitMUEhIejhqS2t1bTJTc1BaL013Q2dZSUtvWkl6ajBFQXdJd0xqRXNcbk1Db0dBMVVFQXhNaloyeHZZbUZzTFRndGNtOXZkQzVzYVc1clpYSmtMbU5zZFhOMFpYSXViRzlqWVd3d0hoY05cbk1qVXdPREE0TURRd05qTTFXaGNOTWpVeE1UQTJNRFF3TmpNMVdqQXVNU3d3S2dZRFZRUURFeU5uYkc5aVlXd3Rcbk9DMXliMjkwTG14cGJtdGxjbVF1WTJ4MWMzUmxjaTVzYjJOaGJEQlpNQk1HQnlxR1NNNDlBZ0VHQ0NxR1NNNDlcbkF3RUhBMElBQkVjbkxtY2JsYmI5TUVWZDN3UjdnOVRYVjlGUStlMzI3RzBMTEZGWjNHamtHcWNxMk9TUVVkdVBcbm5DQTRnc1NlMGhvRXRGOUFJSnF5eXJxT2N1Y2lNbHFqUWpCQU1BNEdBMVVkRHdFQi93UUVBd0lDcERBUEJnTlZcbkhSTUJBZjhFQlRBREFRSC9NQjBHQTFVZERnUVdCQlJ5NG1sZGpRbjNRZkFCcEUrSzhlb1lKYVZiMHpBS0JnZ3Fcbmhrak9QUVFEQWdOSUFEQkZBaUJPbE5oakdpNXVwSkZZVG9yN1hydjgvYURWRFJCNWpYc1MvRHpYL1dwZW9nSWhcbkFNUHc5Mmd4M1A5SU80LzVhaWxpYkpBTm1zekxvd1JIZjlzZERXZmVITkNxXG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tXG4tLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS1cbk1JSUJuRENDQVVLZ0F3SUJBZ0lRZmhsUktwcFNkbmgvb2NaNnBGa0FWREFLQmdncWhrak9QUVFEQWpBdU1Td3dcbktnWURWUVFERXlObmJHOWlZV3d0TXkxeWIyOTBMbXhwYm10bGNtUXVZMngxYzNSbGNpNXNiMk5oYkRBZUZ3MHlcbk5UQTRNRGd3TkRBMk1qaGFGdzB5TlRFeE1EWXdOREEyTWpoYU1DNHhMREFxQmdOVkJBTVRJMmRzYjJKaGJDMHpcbkxYSnZiM1F1YkdsdWEyVnlaQzVqYkhWemRHVnlMbXh2WTJGc01Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERcbkFRY0RRZ0FFd2JnWEdDT1J2S0Q2WFpOenhyMlNDUTBodThrMVlQNko1NkJERHpFZjNraTl2bmtNR2xxV0NLaEhcbjBCQUhkMHYycGplSVBFQy9UVER1YnpSUDNaNCt1YU5DTUVBd0RnWURWUjBQQVFIL0JBUURBZ0trTUE4R0ExVWRcbkV3RUIvd1FGTUFNQkFmOHdIUVlEVlIwT0JCWUVGTzE5dmdGbHVlZ0tVQ2dETE4vN3dlNlRHSHozTUFvR0NDcUdcblNNNDlCQU1DQTBnQU1FVUNJUUNlajg1MTRvQU5rb2l0NmxnM1hOZG1oTUg2a3lOblhBUXd1bkJNcHU4TTFRSWdcbkRHekZlMEk0aUpiVkdLM3RQbDc5S2RHSlM3bVZGMnFSWFBONVI0OTlLTVk9XG4tLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tIn0sImtpbmQiOiJDb25maWdNYXAiLCJtZXRhZGF0YSI6eyJhbm5vdGF0aW9ucyI6eyJ0cnVzdC5jZXJ0LW1hbmFnZXIuaW8vaGFzaCI6IjBjMDY3OTExZGYwYjdlNjJlMjc0NjZkOTgxNWYwM2VlYTVlODdkMTczMmE3NzVmMDk5NGI2YTA0NmMzZGQwZWQifSwiY3JlYXRpb25UaW1lc3RhbXAiOiIyMDI1LTA4LTA3VDA2OjQ0OjUzWiIsImxhYmVscyI6eyJ0cnVzdC5jZXJ0LW1hbmFnZXIuaW8vYnVuZGxlIjoibGlua2VyZC1pZGVudGl0eS10cnVzdC1yb290cyJ9LCJtYW5hZ2VkRmllbGRzIjpbeyJhcGlWZXJzaW9uIjoidjEiLCJmaWVsZHNUeXBlIjoiRmllbGRzVjEiLCJmaWVsZHNWMSI6eyJmOmRhdGEiOnsiZjpjYS1idW5kbGUuY3J0Ijp7fX0sImY6bWV0YWRhdGEiOnsiZjphbm5vdGF0aW9ucyI6eyJmOnRydXN0LmNlcnQtbWFuYWdlci5pby9oYXNoIjp7fX0sImY6bGFiZWxzIjp7ImY6dHJ1c3QuY2VydC1tYW5hZ2VyLmlvL2J1bmRsZSI6e319LCJmOm93bmVyUmVmZXJlbmNlcyI6eyJrOntcInVpZFwiOlwiYWQ3Y2Y4MTUtYzZhNy00NDMxLTkzNGQtYTAwM2EwNjk5ODAxXCJ9Ijp7fX19fSwibWFuYWdlciI6InRydXN0LW1hbmFnZXIiLCJvcGVyYXRpb24iOiJBcHBseSIsInRpbWUiOiIyMDI1LTA4LTA4VDA0OjA2OjQwWiJ9XSwibmFtZSI6ImxpbmtlcmQtaWRlbnRpdHktdHJ1c3Qtcm9vdHMiLCJuYW1lc3BhY2UiOiJsaW5rZXJkIiwib3duZXJSZWZlcmVuY2VzIjpbeyJhcGlWZXJzaW9uIjoidHJ1c3QuY2VydC1tYW5hZ2VyLmlvL3YxYWxwaGExIiwiYmxvY2tPd25lckRlbGV0aW9uIjp0cnVlLCJjb250cm9sbGVyIjp0cnVlLCJraW5kIjoiQnVuZGxlIiwibmFtZSI6ImxpbmtlcmQtaWRlbnRpdHktdHJ1c3Qtcm9vdHMiLCJ1aWQiOiJhZDdjZjgxNS1jNmE3LTQ0MzEtOTM0ZC1hMDAzYTA2OTk4MDEifV0sInJlc291cmNlVmVyc2lvbiI6Ijg3MzAwMTAyIiwidWlkIjoiNTU1NzVmZWEtMzA4Yy00ZjM4LTg0MjUtYzYzMWY1YmU2YzAzIn19Ci0tLQ==
+status:
+  phase: WaitingForDelivery`
+
+		u, err := deployer.GetUnstructured([]byte(eventReportYAML), logger)
+		Expect(err).To(BeNil())
+		Expect(len(u)).To(Equal(1))
+
+		eventReport := &libsveltosv1beta1.EventReport{}
+		err = runtime.DefaultUnstructuredConverter.
+			FromUnstructured(u[0].UnstructuredContent(), eventReport)
+		Expect(err).To(BeNil())
+
+		resources, err := controllers.GetResources(eventReport, logger)
+		Expect(err).To(BeNil())
+		Expect(len(resources)).To(Equal(1))
 	})
 
 	It("removeStaleEventReports removes all EventReports for a given cluster/eventSource pair", func() {
@@ -1699,6 +1727,52 @@ spec:
 				Expect(len(networkPolicy.Spec.Ingress[0].Ports)).ToNot(BeZero())
 			}
 		}
+	})
+
+	It("instantiateDataSection", func() {
+		key := "body"
+		content := map[string]string{
+			key: `    {{ $data := "hoge.com/fuga" }}
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: test-config
+      namespace: {{ .Resource.metadata.name }}
+    data:
+      data: {{ $data }}`,
+		}
+
+		ns := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: test
+  labels:
+    test: enabled
+  annotations:
+    hoge.com/fuga: piyo.com/piyo`
+
+		u, err := k8s_utils.GetUnstructured([]byte(ns))
+		Expect(err).To(BeNil())
+		Expect(u).ToNot(BeNil())
+
+		object := controllers.CurrentObject{
+			Resource: u.UnstructuredContent(),
+		}
+
+		result, err := controllers.InstantiateDataSection(randomString(), content, object, false, logger)
+		Expect(err).To(BeNil())
+		Expect(len(result)).To(Equal(1))
+
+		u, err = k8s_utils.GetUnstructured([]byte(result[key]))
+		Expect(err).To(BeNil())
+
+		cm := &corev1.ConfigMap{}
+		err = runtime.DefaultUnstructuredConverter.
+			FromUnstructured(u.UnstructuredContent(), cm)
+		Expect(err).To(BeNil())
+		Expect(cm.Namespace).To(Equal("test"))
+		Expect(len(cm.Data)).To(Equal(1))
+		Expect(cm.Data["data"]).To(Equal("hoge.com/fuga"))
 	})
 
 	It("instantiateFromGeneratorsPerResource instantiates from SecretGenerator", func() {
