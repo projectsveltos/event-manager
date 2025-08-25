@@ -39,7 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2/textlogger"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -210,10 +210,10 @@ var _ = Describe("EventTrigger deployer", func() {
 				*getClusterInfo(clusterNamespace, clusterName, libsveltosv1beta1.ClusterTypeSveltos),
 			},
 		}
-		Expect(testEnv.Client.Status().Update(context.TODO(), resource)).To(Succeed())
+		Expect(testEnv.Status().Update(context.TODO(), resource)).To(Succeed())
 		Eventually(func() bool {
 			currentChc := &v1beta1.EventTrigger{}
-			err := testEnv.Client.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)
+			err := testEnv.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)
 			if err != nil {
 				return false
 			}
@@ -227,7 +227,7 @@ var _ = Describe("EventTrigger deployer", func() {
 
 		Eventually(func() bool {
 			currentChc := &v1beta1.EventTrigger{}
-			err := testEnv.Client.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)
+			err := testEnv.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)
 			if err != nil {
 				return false
 			}
@@ -443,34 +443,34 @@ status:
 				Name: eventReport1.Namespace,
 			},
 		}
-		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), eventReport1)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), eventReport1)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport1)).To(Succeed())
 
 		ns.Name = eventReport2.Namespace
 		ns.SetResourceVersion("")
-		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), eventReport2)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), eventReport2)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport2)).To(Succeed())
 
 		ns.Name = eventReport3.Namespace
 		ns.SetResourceVersion("")
-		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), eventReport3)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), eventReport3)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport3)).To(Succeed())
 
 		ns.Name = eventReport4.Namespace
 		ns.SetResourceVersion("")
-		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), eventReport4)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), eventReport4)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport4)).To(Succeed())
 
 		Expect(controllers.RemoveStaleEventReports(context.TODO(), testEnv.Client,
@@ -572,7 +572,7 @@ status:
 		// Add EventTrigger as owner of EventSource. This indicates previously EventSource was
 		// deployed because of this EventTrigger instance
 		k8s_utils.AddOwnerReference(eventSource, resource)
-		Expect(testEnv.Client.Update(context.TODO(), eventSource)).To(Succeed())
+		Expect(testEnv.Update(context.TODO(), eventSource)).To(Succeed())
 
 		// Wait for cache to sync
 		Eventually(func() bool {
@@ -911,10 +911,10 @@ status:
 				Name: clusterNamespace,
 			},
 		}
-		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
 
 		_, err = controllers.InstantiateOneClusterProfilePerAllResource(context.TODO(), testEnv.Client,
@@ -1032,10 +1032,10 @@ status:
 				Name: clusterNamespace,
 			},
 		}
-		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
 
 		_, err = controllers.InstantiateOneClusterProfilePerResource(context.TODO(), testEnv.Client,
@@ -1267,19 +1267,19 @@ status:
 				Name: namespace,
 			},
 		}
-		Expect(testEnv.Client.Create(context.TODO(), ns)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), secret)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), secret)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, secret)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), configMap)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), configMap)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, configMap)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), eventTrigger)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), eventTrigger)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventTrigger)).To(Succeed())
 
-		Expect(testEnv.Client.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
 		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
 
 		object := &controllers.CurrentObject{
@@ -2084,7 +2084,7 @@ data:
 		// Secret1 must be deleted
 		Eventually(func() bool {
 			currentSecret := &corev1.Secret{}
-			err := testEnv.Client.Get(context.TODO(),
+			err := testEnv.Get(context.TODO(),
 				types.NamespacedName{Namespace: secret1.Namespace, Name: secret1.Name}, currentSecret)
 			if err == nil {
 				return currentSecret.DeletionTimestamp.IsZero()
@@ -2095,7 +2095,7 @@ data:
 		// ConfigMap1 must be deleted
 		Eventually(func() bool {
 			currentConfigMap := &corev1.ConfigMap{}
-			err := testEnv.Client.Get(context.TODO(),
+			err := testEnv.Get(context.TODO(),
 				types.NamespacedName{Namespace: configMap1.Namespace, Name: configMap1.Name}, currentConfigMap)
 			if err == nil {
 				return currentConfigMap.DeletionTimestamp.IsZero()
@@ -2105,13 +2105,13 @@ data:
 
 		// Secret2 must exist
 		currentSecret := &corev1.Secret{}
-		err := testEnv.Client.Get(context.TODO(),
+		err := testEnv.Get(context.TODO(),
 			types.NamespacedName{Namespace: secret2.Namespace, Name: secret2.Name}, currentSecret)
 		Expect(err).To(BeNil())
 
 		// ConfigMap2 must exist
 		currentConfigMap := &corev1.ConfigMap{}
-		err = testEnv.Client.Get(context.TODO(),
+		err = testEnv.Get(context.TODO(),
 			types.NamespacedName{Namespace: configMap2.Namespace, Name: configMap2.Name}, currentConfigMap)
 		Expect(err).To(BeNil())
 	})

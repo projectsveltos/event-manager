@@ -47,7 +47,7 @@ func (r *EventSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	eventSource := &libsveltosv1beta1.EventSource{}
 	if err := r.Get(ctx, req.NamespacedName, eventSource); err != nil {
 		if apierrors.IsNotFound(err) {
-			err = removeEventReports(ctx, r.Client, req.NamespacedName.Name, logger)
+			err = removeEventReports(ctx, r.Client, req.Name, logger)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
