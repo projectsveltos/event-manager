@@ -43,7 +43,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,7 +56,6 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	"github.com/projectsveltos/libsveltos/lib/funcmap"
 	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
-	"github.com/projectsveltos/libsveltos/lib/logsettings"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	"github.com/projectsveltos/libsveltos/lib/pullmode"
 	"github.com/projectsveltos/libsveltos/lib/sharding"
@@ -518,7 +517,8 @@ func (r *EventTriggerReconciler) proceedDeployingEventTriggerInPullMode(ctx cont
 
 	if pullmodeStatus != nil {
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("agent result is available. updating status: %v", *pullmodeStatus))
-		if *pullmodeStatus == libsveltosv1beta1.FeatureStatusProvisioned {
+		switch *pullmodeStatus {
+		case libsveltosv1beta1.FeatureStatusProvisioned:
 			if err := pullmode.TerminateDeploymentTracking(ctx, r.Client, cluster.Namespace,
 				cluster.Name, v1beta1.EventTriggerKind, eventTrigger.Name, f.id, logger); err != nil {
 				logger.V(logs.LogDebug).Info(fmt.Sprintf("failed to terminate tracking: %v", err))
@@ -527,16 +527,19 @@ func (r *EventTriggerReconciler) proceedDeployingEventTriggerInPullMode(ctx cont
 			provisioned := libsveltosv1beta1.SveltosStatusProvisioned
 			clusterInfo.Status = provisioned
 			return clusterInfo, nil
-		} else if *pullmodeStatus == libsveltosv1beta1.FeatureStatusProvisioning {
+		case libsveltosv1beta1.FeatureStatusProvisioning:
 			msg := "agent is provisioning the content"
 			logger.V(logs.LogDebug).Info(msg)
 			provisioning := libsveltosv1beta1.SveltosStatusProvisioning
 			clusterInfo.Status = provisioning
 			return clusterInfo, nil
-		} else if *pullmodeStatus == libsveltosv1beta1.FeatureStatusFailed {
+		case libsveltosv1beta1.FeatureStatusFailed:
 			logger.V(logs.LogDebug).Info("agent failed provisioning the content")
 			failed := libsveltosv1beta1.SveltosStatusFailed
 			clusterInfo.Status = failed
+		case libsveltosv1beta1.FeatureStatusFailedNonRetriable, libsveltosv1beta1.FeatureStatusRemoving,
+			libsveltosv1beta1.FeatureStatusAgentRemoving, libsveltosv1beta1.FeatureStatusRemoved:
+			logger.V(logs.LogDebug).Info("proceed deploying")
 		}
 	} else {
 		provisioning := libsveltosv1beta1.SveltosStatusProvisioning
@@ -940,7 +943,7 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 	toDeployEventSource := getEventSourceToDeploy(eventSource)
 	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&toDeployEventSource)
 	if err != nil {
-		logger.V(logsettings.LogDebug).Info(fmt.Sprintf("failed to convert eventSource instance to unstructured: %v", err))
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("failed to convert eventSource instance to unstructured: %v", err))
 	}
 
 	u := &unstructured.Unstructured{}

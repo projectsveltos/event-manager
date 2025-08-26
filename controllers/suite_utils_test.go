@@ -36,7 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -219,9 +219,11 @@ func prepareCluster(version string) *clusterv1.Cluster {
 	Expect(testEnv.Create(context.TODO(), machine)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv.Client, machine)).To(Succeed())
 
+	initialized := true
 	cluster.Status = clusterv1.ClusterStatus{
-		InfrastructureReady: true,
-		ControlPlaneReady:   true,
+		Initialization: clusterv1.ClusterInitializationStatus{
+			ControlPlaneInitialized: &initialized,
+		},
 	}
 	Expect(testEnv.Status().Update(context.TODO(), cluster)).To(Succeed())
 
@@ -242,7 +244,7 @@ func prepareCluster(version string) *clusterv1.Cluster {
 			"value": testEnv.Kubeconfig,
 		},
 	}
-	Expect(testEnv.Client.Create(context.TODO(), secret)).To(Succeed())
+	Expect(testEnv.Create(context.TODO(), secret)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv.Client, secret)).To(Succeed())
 
 	By("Create the ConfigMap with sveltos-agent version")
@@ -255,7 +257,7 @@ func prepareCluster(version string) *clusterv1.Cluster {
 			"version": version,
 		},
 	}
-	Expect(testEnv.Client.Create(context.TODO(), cm)).To(Succeed())
+	Expect(testEnv.Create(context.TODO(), cm)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv.Client, cm)).To(Succeed())
 
 	Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
@@ -277,15 +279,15 @@ func getClusterRef(cluster client.Object) *corev1.ObjectReference {
 // ClusterSummary has provisioned all add-ons
 // Cluster API cluster
 func prepareClient(clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType) client.Client {
+	initialized := true
 	cluster := &clusterv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: clusterNamespace,
 			Name:      clusterName,
 		},
 		Status: clusterv1.ClusterStatus{
-			ControlPlaneReady: true,
-			Conditions: []clusterv1.Condition{
-				{Type: clusterv1.ControlPlaneInitializedCondition, Status: corev1.ConditionTrue},
+			Initialization: clusterv1.ClusterInitializationStatus{
+				ControlPlaneInitialized: &initialized,
 			},
 		},
 	}
