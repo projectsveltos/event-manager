@@ -1155,12 +1155,17 @@ status:
 			},
 		}
 
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
+		}
+
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
 			eventReport, clusterType)
 
-		name, err := controllers.GetClusterProfileName(context.TODO(), c, labels)
+		name, err := controllers.GetClusterProfileName(context.TODO(), c, clusterNamespace, clusterName,
+			eventTrigger, nil, labels, logger)
 		Expect(err).To(BeNil())
 		Expect(name).ToNot(BeEmpty())
 
@@ -1175,7 +1180,82 @@ status:
 		Expect(c.Create(context.TODO(), clusterProfile)).To(Succeed())
 
 		var currentName string
-		currentName, err = controllers.GetClusterProfileName(context.TODO(), c, labels)
+		currentName, err = controllers.GetClusterProfileName(context.TODO(), c, clusterNamespace, clusterName,
+			eventTrigger, nil, labels, logger)
+		Expect(err).To(BeNil())
+		Expect(currentName).To(Equal(name))
+	})
+
+	It("getClusterProfileName use InstantiatedProfileNameFormat when defined", func() {
+		eventTriggerName := randomString()
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+
+		eventSourceName := randomString()
+
+		eventResource := corev1.ObjectReference{Kind: "Secret", APIVersion: corev1.SchemeGroupVersion.String(),
+			Namespace: randomString(), Name: randomString()}
+		eventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: eventSourceName,
+				},
+			},
+			Spec: libsveltosv1beta1.EventReportSpec{
+				MatchingResources: []corev1.ObjectReference{
+					eventResource,
+				},
+			},
+		}
+
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
+			Spec: v1beta1.EventTriggerSpec{
+				InstantiatedProfileNameFormat: "{{ .Cluster.metadata.namespace }}-{{ .Cluster.metadata.name }}-{{ .MatchingResource.Name }}-my-profile",
+				OneForEvent:                   true,
+			},
+		}
+
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName,
+				Namespace: clusterNamespace,
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		initObjects := []client.Object{
+			cluster, eventTrigger, eventReport,
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
+
+		objects, err := controllers.PrepareCurrentObjectList(ctx, c, clusterNamespace, clusterName, clusterType, eventReport, logger)
+		Expect(err).To(BeNil())
+
+		labels := controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
+			eventReport, clusterType)
+
+		name, err := controllers.GetClusterProfileName(context.TODO(), c, clusterNamespace, clusterName,
+			eventTrigger, objects[0], labels, logger)
+		Expect(err).To(BeNil())
+		Expect(name).ToNot(BeEmpty())
+		Expect(name).To(Equal(fmt.Sprintf("%s-%s-%s-my-profile", clusterNamespace, clusterName, eventResource.Name)))
+
+		clusterProfile := &configv1beta1.ClusterProfile{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTriggerName,
+					eventReport, clusterType),
+			},
+		}
+
+		Expect(c.Create(context.TODO(), clusterProfile)).To(Succeed())
+
+		var currentName string
+		currentName, err = controllers.GetClusterProfileName(context.TODO(), c, clusterNamespace, clusterName,
+			eventTrigger, objects[0], labels, logger)
 		Expect(err).To(BeNil())
 		Expect(currentName).To(Equal(name))
 	})
@@ -1887,7 +1967,7 @@ data:
 					{
 						Namespace:                      secretGenerator.Namespace,
 						Name:                           secretGenerator.Name,
-						InstantiatedResourceNameFormat: "{{ .Cluster.metadata.name}}-generated",
+						InstantiatedResourceNameFormat: "{{ .Cluster.metadata.name}}-{{ .MatchingResource.Name }}-generated",
 					},
 				},
 			},
@@ -1900,6 +1980,7 @@ data:
 			clusterNamespace, clusterName, clusterType, logger)
 		Expect(err).To(BeNil())
 		Expect(len(instantiatedSecrets)).To(Equal(1))
+		Expect(instantiatedSecrets[0].Name).To(Equal(fmt.Sprintf("%s-%s-generated", clusterName, secret.Name)))
 	})
 
 	It("getCloudEvents processes collected CloudEvents", func() {
