@@ -81,6 +81,7 @@ spec:
                         - `.Cluster.metadata.namespace`: namespace of the managed cluster
                         - `.Cluster.metadata.name`: name of the managed cluster
                         - `.Cluster.kind`: kind of the managed cluster object
+                        - event data
                       minLength: 1
                       type: string
                     namespace:
@@ -117,6 +118,7 @@ spec:
                   In any managed cluster that matches this ClusterProfile, the add-ons and applications
                   defined in this instance will not be deployed until all add-ons and applications in the
                   ClusterProfiles listed as dependencies are deployed.
+                  This field will be directly transferred to the ClusterProfile Spec
                 items:
                   type: string
                 type: array
@@ -998,6 +1000,15 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
+              profileNameFormat:
+                description: |-
+                  InstantiatedProfileNameFormat defines a template used to generate the name
+                  of the ClusterProfile created in the management cluster. The template can reference:
+                  - `.Cluster.metadata.namespace`: namespace of the managed cluster
+                  - `.Cluster.metadata.name`: name of the managed cluster
+                  - `.Cluster.kind`: kind of the managed cluster object
+                  - event data
+                type: string
               reloader:
                 default: false
                 description: |-
@@ -1032,6 +1043,7 @@ spec:
                         - `.Cluster.metadata.namespace`: namespace of the managed cluster
                         - `.Cluster.metadata.name`: name of the managed cluster
                         - `.Cluster.kind`: kind of the managed cluster object
+                        - event data
                       minLength: 1
                       type: string
                     namespace:
@@ -1144,7 +1156,6 @@ spec:
                   Those resources' values will be used to instantiate templates contained in referenced
                   PolicyRefs and Helm charts
                   This field will be directly transferred to the ClusterProfile Spec
-                  generated in response to events.
                 items:
                   properties:
                     identifier:

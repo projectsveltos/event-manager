@@ -1288,7 +1288,8 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	}
 	labels = appendServiceAccountLabels(eventTrigger, labels)
 
-	clusterProfileName, err := getClusterProfileName(ctx, c, labels)
+	clusterProfileName, err := getClusterProfileName(ctx, c, clusterNamespace, clusterName,
+		eventTrigger, object, labels, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile name: %v", err))
 		return nil, err
@@ -1417,7 +1418,8 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 		eventReport, clusterType)
 	labels = appendServiceAccountLabels(eventTrigger, labels)
 
-	clusterProfileName, err := getClusterProfileName(ctx, c, labels)
+	clusterProfileName, err := getClusterProfileName(ctx, c, clusterNamespace, clusterName,
+		eventTrigger, objects, labels, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile name: %v", err))
 		return nil, err
@@ -2117,25 +2119,87 @@ func getClusterRef(clusterNamespace, clusterName string,
 // getClusterProfileName returns the name for a given ClusterProfile given the labels such ClusterProfile
 // should have. It also returns whether the ClusterProfile must be created (if create a false, ClusterProfile
 // should be simply updated). And an error if any occurs.
-func getClusterProfileName(ctx context.Context, c client.Client, labels map[string]string,
+func getClusterProfileName(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
+	eventTrigger *v1beta1.EventTrigger, data any, labels map[string]string, logger logr.Logger,
 ) (name string, err error) {
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
 	}
 
-	clusterProfileList := &configv1beta1.ClusterProfileList{}
-	err = c.List(ctx, clusterProfileList, listOptions...)
+	if eventTrigger.Spec.InstantiatedProfileNameFormat == "" {
+		clusterProfileList := &configv1beta1.ClusterProfileList{}
+		err = c.List(ctx, clusterProfileList, listOptions...)
+		if err != nil {
+			return "", err
+		}
+
+		objects := make([]client.Object, len(clusterProfileList.Items))
+		for i := range clusterProfileList.Items {
+			objects[i] = &clusterProfileList.Items[i]
+		}
+
+		return getInstantiatedObjectName(ctx, c, objects)
+	}
+
+	templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
+	instantiatedName, err := instantiateSection(templateName, []byte(eventTrigger.Spec.InstantiatedProfileNameFormat),
+		data, funcmap.HasTextTemplateAnnotation(eventTrigger.Annotations), logger)
 	if err != nil {
-		return
+		return "", err
 	}
 
-	objects := make([]client.Object, len(clusterProfileList.Items))
-	for i := range clusterProfileList.Items {
-		objects[i] = &clusterProfileList.Items[i]
+	// If the profile exists, make sure this is owned by this EventTrigger instance. Fail it otherwise
+	clusterProfile := &configv1beta1.ClusterProfile{}
+	err = c.Get(ctx, types.NamespacedName{Name: templateName}, clusterProfile)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return string(instantiatedName), nil
+		}
+		return "", err
 	}
 
-	return getInstantiatedObjectName(ctx, c, objects)
+	err = validateClusterProfileLabels(clusterProfile, eventTrigger.Name, clusterNamespace,
+		clusterName, string(instantiatedName))
+	if err != nil {
+		return "", err
+	}
+
+	return string(instantiatedName), nil
+}
+
+// validateLabels checks if the ClusterProfile has the exact set of expected labels.
+func validateClusterProfileLabels(clusterProfile *configv1beta1.ClusterProfile,
+	eventTriggerName, clusterNamespace, clusterName, instantiatedName string) error {
+
+	expectedLabels := map[string]string{
+		eventTriggerNameLabel: eventTriggerName,
+		clusterNamespaceLabel: clusterNamespace,
+		clusterNameLabel:      clusterName,
+	}
+
+	currentLabels := clusterProfile.Labels
+	if currentLabels == nil {
+		return fmt.Errorf("ClusterProfile %s does not have the expected labels indicating EventTrigger %s owns it",
+			instantiatedName, eventTriggerName)
+	}
+
+	// First, check if the number of labels matches. This is a quick pre-check.
+	if len(currentLabels) != len(expectedLabels) {
+		return fmt.Errorf("ClusterProfile %s has an incorrect number of labels. Expected %d, got %d",
+			instantiatedName, len(expectedLabels), len(currentLabels))
+	}
+
+	// Then, iterate and validate each expected label.
+	for k, v := range expectedLabels {
+		currentV, ok := currentLabels[k]
+		if !ok || currentV != v {
+			return fmt.Errorf("ClusterProfile %s does not have the labels indicating EventTrigger %s owns it",
+				instantiatedName, eventTriggerName)
+		}
+	}
+
+	return nil
 }
 
 func getResourceName(ctx context.Context, c client.Client, ref client.Object,

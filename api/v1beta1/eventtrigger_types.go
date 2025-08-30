@@ -72,6 +72,7 @@ type GeneratorReference struct {
 	// - `.Cluster.metadata.namespace`: namespace of the managed cluster
 	// - `.Cluster.metadata.name`: name of the managed cluster
 	// - `.Cluster.kind`: kind of the managed cluster object
+	// - event data
 	// +kubebuilder:validation:MinLength=1
 	InstantiatedResourceNameFormat string `json:"nameFormat"`
 
@@ -116,6 +117,15 @@ type EventTriggerSpec struct {
 	//+kubebuilder:validation:XValidation:rule="self == oldSelf",message="Value is immutable"
 	// +optional
 	OneForEvent bool `json:"oneForEvent,omitempty"`
+
+	// InstantiatedProfileNameFormat defines a template used to generate the name
+	// of the ClusterProfile created in the management cluster. The template can reference:
+	// - `.Cluster.metadata.namespace`: namespace of the managed cluster
+	// - `.Cluster.metadata.name`: name of the managed cluster
+	// - `.Cluster.kind`: kind of the managed cluster object
+	// - event data
+	// +optional
+	InstantiatedProfileNameFormat string `json:"profileNameFormat,omitempty"`
 
 	// EventSourceName is the name of the referenced EventSource.
 	// Resources contained in the referenced ConfigMaps/Secrets and HelmCharts
@@ -223,6 +233,7 @@ type EventTriggerSpec struct {
 	// In any managed cluster that matches this ClusterProfile, the add-ons and applications
 	// defined in this instance will not be deployed until all add-ons and applications in the
 	// ClusterProfiles listed as dependencies are deployed.
+	// This field will be directly transferred to the ClusterProfile Spec
 	DependsOn []string `json:"dependsOn,omitempty"`
 
 	// TemplateResourceRefs is a list of resource to collect from the management cluster.
@@ -231,7 +242,6 @@ type EventTriggerSpec struct {
 	// +patchMergeKey=identifier
 	// +patchStrategy=merge,retainKeys
 	// This field will be directly transferred to the ClusterProfile Spec
-	// generated in response to events.
 	// +optional
 	TemplateResourceRefs []configv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
 
