@@ -1503,7 +1503,8 @@ func setTemplateResourceRefs(clusterProfileSpec *configv1beta1.Spec,
 	logger logr.Logger) error {
 
 	templateResourceRefs, err := instantiateTemplateResourceRefs(templateName, clusterContent, data,
-		eventTrigger.Spec.TemplateResourceRefs, funcmap.HasTextTemplateAnnotation(eventTrigger.Annotations))
+		eventTrigger.Spec.TemplateResourceRefs, funcmap.HasTextTemplateAnnotation(eventTrigger.Annotations),
+		logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate TemplateResourceRefs: %v", err))
 		return err
@@ -1644,7 +1645,7 @@ func instantiateSection(templateName string, toBeInstantiated []byte, data any,
 	useTxtFuncMap bool, logger logr.Logger) ([]byte, error) {
 
 	tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-		funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(string(toBeInstantiated))
+		getTemplateFuncMap(useTxtFuncMap, logger)).Parse(string(toBeInstantiated))
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse template: %v", err))
 		return nil, err
@@ -1814,7 +1815,7 @@ func instantiateDataSection(templateName string, content map[string]string, data
 
 	for key := range content {
 		tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-			funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(content[key])
+			getTemplateFuncMap(useTxtFuncMap, logger)).Parse(content[key])
 		if err != nil {
 			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse content: %v", err))
 			return nil, err
@@ -1835,7 +1836,7 @@ func instantiateDataSection(templateName string, content map[string]string, data
 
 func instantiateTemplateResourceRefs(templateName string,
 	clusterContent map[string]interface{}, data any, templateResourceRefs []configv1beta1.TemplateResourceRef,
-	useTxtFuncMap bool) ([]configv1beta1.TemplateResourceRef, error) {
+	useTxtFuncMap bool, logger logr.Logger) ([]configv1beta1.TemplateResourceRef, error) {
 
 	var uCluster unstructured.Unstructured
 	uCluster.SetUnstructuredContent(clusterContent)
@@ -1843,7 +1844,7 @@ func instantiateTemplateResourceRefs(templateName string,
 	instantiated := make([]configv1beta1.TemplateResourceRef, len(templateResourceRefs))
 	for i := range templateResourceRefs {
 		tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
-			funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(templateResourceRefs[i].Resource.Name)
+			getTemplateFuncMap(useTxtFuncMap, logger)).Parse(templateResourceRefs[i].Resource.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -1855,7 +1856,7 @@ func instantiateTemplateResourceRefs(templateName string,
 		}
 
 		tmpl, err = template.New(templateName).Option("missingkey=error").Funcs(
-			funcmap.SveltosFuncMap(useTxtFuncMap)).Parse(templateResourceRefs[i].Resource.Namespace)
+			getTemplateFuncMap(useTxtFuncMap, logger)).Parse(templateResourceRefs[i].Resource.Namespace)
 		if err != nil {
 			return nil, err
 		}

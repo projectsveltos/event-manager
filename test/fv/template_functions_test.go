@@ -18,13 +18,13 @@ package fv_test
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,22 +35,25 @@ import (
 )
 
 var (
-	serviceAccount = `kind: ServiceAccount
-apiVersion: v1
-metadata:
-  name: front-{{ .Resource.metadata.name }}
-  namespace: {{ .Resource.metadata.name }}`
+	//nolint: gosec // just a test with no real data
+	configMapWithFunctions = `{{ $configMap := (getResource .Resource ) }}
+{{ $configMap := (chainSetField $configMap "metadata.name" "copied-version") }}
+{{ $configMap := (chainRemoveField $configMap "data" ) }}
+{{ toYaml $configMap }}`
 )
 
-var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
+var _ = Describe("Template functions", func() {
 	const (
-		namePrefix     = "profile-name-"
+		namePrefix     = "function-name-"
 		projectsveltos = "projectsveltos"
 	)
 
-	It("Verifies ClusterProfiles are instantiated with names based on InstantiatedProfileNameFormat", Label("FV", "PULLMODE"),
+	It("Verifies use of extra template functions", Label("FV", "PULLMODE"),
 		func() {
-			Byf("Create a EventSource matching namespaces")
+			cmNamespace := randomString()
+			cmName := randomString()
+
+			Byf("Create a EventSource matching ConfigMap in namespace: %s", cmNamespace)
 			eventSource := libsveltosv1beta1.EventSource{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: randomString(),
@@ -61,9 +64,11 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 				Spec: libsveltosv1beta1.EventSourceSpec{
 					ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 						{
-							Group:   "",
-							Version: "v1",
-							Kind:    "Namespace",
+							Group:     "",
+							Version:   "v1",
+							Kind:      "ConfigMap",
+							Namespace: cmNamespace,
+							Name:      cmName,
 						},
 					},
 					CollectResources: true,
@@ -71,7 +76,7 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 			}
 			Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
-			By("Creating a ConfigMap containing a ServiceAccount")
+			By("Creating a ConfigMap with instantiate annotation and using template functions")
 			cm := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "default",
@@ -83,7 +88,7 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 					},
 				},
 				Data: map[string]string{
-					"sa": serviceAccount,
+					"copy": configMapWithFunctions,
 				},
 			}
 			Expect(k8sClient.Create(context.TODO(), cm)).To(Succeed())
@@ -98,7 +103,6 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 			eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
 				map[string]string{key: value}, []configv1beta1.PolicyRef{policyRef})
 			eventTrigger.Spec.OneForEvent = true
-			eventTrigger.Spec.InstantiatedProfileNameFormat = "{{ .Cluster.metadata.name }}-{{ .Resource.metadata.name }}-test"
 			Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
 
 			Byf("Getting client to access the workload cluster")
@@ -140,6 +144,25 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 				}, timeout, pollingInterval).Should(BeNil())
 			}
 
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: cmNamespace,
+				},
+			}
+			Expect(workloadClient.Create(context.TODO(), ns)).To(Succeed())
+
+			originalConfigMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cmName,
+					Namespace: cmNamespace,
+				},
+				Data: map[string]string{
+					randomString(): randomString(),
+					randomString(): randomString(),
+				},
+			}
+			Expect(workloadClient.Create(context.TODO(), originalConfigMap)).To(Succeed())
+
 			Byf("Verifying EventReports %s is present in the management cluster", getEventReportName(eventSource.Name))
 			Eventually(func() error {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
@@ -153,7 +176,7 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
 				currentEventReport)).To(Succeed())
 
-			By("Verify all ClusterProfile names")
+			By("Verify ClusterProfile is created")
 			Eventually(func() bool {
 				listOptions := []client.ListOption{
 					client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
@@ -161,21 +184,20 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 				clusterProfiles := &configv1beta1.ClusterProfileList{}
 				Expect(k8sClient.List(context.TODO(), clusterProfiles, listOptions...)).To(Succeed())
 
-				profileMap := map[string]*configv1beta1.ClusterProfile{}
-				for i := range clusterProfiles.Items {
-					profileMap[clusterProfiles.Items[i].Name] = &clusterProfiles.Items[i]
-				}
+				return len(clusterProfiles.Items) == 1
+			}, timeout, pollingInterval).Should(BeTrue())
 
-				for i := range currentEventReport.Spec.MatchingResources {
-					expectedName := fmt.Sprintf("%s-%s-test",
-						kindWorkloadCluster.GetName(), currentEventReport.Spec.MatchingResources[i].Name)
-					_, ok := profileMap[expectedName]
-					if !ok {
-						By(fmt.Sprintf("ClusterProfile %s missing", expectedName))
-						return false
-					}
+			// A new ConfigMap is created on the managed cluster. It is in the same namespace
+			// but with name copied-version and no data
+			Eventually(func() bool {
+				currentConfigMap := &corev1.ConfigMap{}
+				err := workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: cmNamespace, Name: "copied-version"},
+					currentConfigMap)
+				if err != nil {
+					return false
 				}
-				return true
+				return len(currentConfigMap.Data) == 0
 			}, timeout, pollingInterval).Should(BeTrue())
 
 			Byf("Deleting EventTrigger %s", eventTrigger.Name)
@@ -190,7 +212,7 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 				currentEventSource)).To(Succeed())
 			Expect(k8sClient.Delete(context.TODO(), currentEventSource)).To(Succeed())
 
-			By("Verifying ClusterProfiles have been removed")
+			By("Verifying ClusterProfile has been removed")
 			Eventually(func() bool {
 				clusterProfiles := &configv1beta1.ClusterProfileList{}
 				listOptions := []client.ListOption{
@@ -207,6 +229,15 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 					}
 				}
 				return true
+			}, timeout, pollingInterval).Should(BeTrue())
+
+			By("Verifying ConfigMap copy has been removed")
+			Eventually(func() bool {
+				currentConfigMap := &corev1.ConfigMap{}
+				err := workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: cmNamespace, Name: "copied-version"},
+					currentConfigMap)
+				return err != nil && apierrors.IsNotFound(err)
 			}, timeout, pollingInterval).Should(BeTrue())
 		})
 })
