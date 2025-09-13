@@ -73,7 +73,7 @@ spec:
               name: {{ .metadata.name }}
               port:
                 {{ range .spec.ports }}
-                {{ if or (eq .port 443 ) (eq .port 8443 ) }}
+                {{if or (eq (int .port) 443) (eq (int .port) 8443) }}
                 number: {{ .port }}
                 {{ end }}
                 {{ end }}
