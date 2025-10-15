@@ -50,13 +50,12 @@ import (
 
 	//+kubebuilder:scaffold:imports
 
+	"github.com/projectsveltos/event-manager/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/crd"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
-
-	"github.com/projectsveltos/event-manager/controllers"
 )
 
 var (
