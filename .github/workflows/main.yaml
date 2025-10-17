@@ -18,7 +18,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
       with:
-        go-version: 1.25.0
+        go-version: 1.25.2
     - name: Build
       run: make build
     - name: FMT
@@ -37,7 +37,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
       with:
-        go-version: 1.25.0
+        go-version: 1.25.2
     - name: ut
       run: make test
       env:
@@ -50,7 +50,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
       with:
-        go-version: 1.25.0
+        go-version: 1.25.2
     - name: fv
       run: make create-cluster fv
       env:
@@ -63,7 +63,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
       with:
-        go-version: 1.25.0
+        go-version: 1.25.2
     - name: fv
       run: make create-cluster fv-sharding
       env:
@@ -76,7 +76,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
       with:
-        go-version: 1.25.0
+        go-version: 1.25.2
     - name: fv
       run: make create-cluster fv-agentless
       env:
@@ -89,7 +89,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
       with:
-        go-version: 1.25.0
+        go-version: 1.25.2
     - name: fv-pullmode
       run: make create-cluster-pullmode fv-pullmode
       env:
