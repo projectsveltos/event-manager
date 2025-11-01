@@ -856,6 +856,8 @@ func deployEventSource(ctx context.Context, c client.Client,
 		return err
 	}
 	if currentEventSource == nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("referenced EventSource %s does not exist",
+			eventTrigger.Spec.EventSourceName))
 		return nil
 	}
 
