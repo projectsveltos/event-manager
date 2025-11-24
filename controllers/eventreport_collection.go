@@ -224,10 +224,11 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 				continue
 			}
 
+			l := logger.WithValues("cluster", fmt.Sprintf("%s/%s", cluster.Namespace, cluster.Name))
 			err = collectAndProcessEventReportsFromCluster(ctx, c, cluster, eventSourceMap, eventTriggerMap,
-				version, logger)
+				version, l)
 			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventReports from cluster: %s/%s %v",
+				l.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventReports from cluster: %s/%s %v",
 					cluster.Namespace, cluster.Name, err))
 			}
 		}
@@ -273,7 +274,6 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 	eventSourceMap map[string][]*v1beta1.EventTrigger, eventTriggerMap map[string]libsveltosset.Set,
 	version string, logger logr.Logger) error {
 
-	logger = logger.WithValues("cluster", fmt.Sprintf("%s/%s", cluster.Namespace, cluster.Name))
 	skipCollecting, err := skipCollecting(ctx, c, cluster, logger)
 	if err != nil {
 		return err
