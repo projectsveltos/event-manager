@@ -39,6 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -1091,7 +1092,12 @@ func proceedRemovingStaleEventSources(ctx context.Context, c client.Client,
 			continue
 		}
 
-		if !util.IsOwnedByObject(es, eventTrigger) {
+		targetGK := schema.GroupKind{
+			Group: v1beta1.GroupVersion.Group,
+			Kind:  v1beta1.EventTriggerKind,
+		}
+
+		if !util.IsOwnedByObject(es, eventTrigger, targetGK) {
 			continue
 		}
 
