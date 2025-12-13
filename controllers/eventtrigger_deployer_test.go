@@ -37,6 +37,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
@@ -580,7 +581,13 @@ status:
 			if err != nil {
 				return false
 			}
-			return util.IsOwnedByObject(eventSource, resource)
+
+			targetGK := schema.GroupKind{
+				Group: v1beta1.GroupVersion.Group,
+				Kind:  v1beta1.EventTriggerKind,
+			}
+
+			return util.IsOwnedByObject(eventSource, resource, targetGK)
 		}, timeout, pollingInterval).Should(BeTrue())
 
 		createSecretWithKubeconfig(clusterNamespace, clusterName)
@@ -713,7 +720,13 @@ status:
 			if err != nil {
 				return false
 			}
-			if !util.IsOwnedByObject(currentEventSource, resource) {
+
+			targetGK := schema.GroupKind{
+				Group: v1beta1.GroupVersion.Group,
+				Kind:  v1beta1.EventTriggerKind,
+			}
+
+			if !util.IsOwnedByObject(currentEventSource, resource, targetGK) {
 				return false
 			}
 			if currentEventSource.Annotations == nil {
@@ -832,10 +845,13 @@ status:
 			if err != nil {
 				return false
 			}
-			if !util.IsOwnedByObject(currentEventSource, resource) {
-				return false
+
+			targetGK := schema.GroupKind{
+				Group: v1beta1.GroupVersion.Group,
+				Kind:  v1beta1.EventTriggerKind,
 			}
-			return true
+
+			return util.IsOwnedByObject(currentEventSource, resource, targetGK)
 		}, timeout, pollingInterval).Should(BeTrue())
 
 		Eventually(func() bool {
