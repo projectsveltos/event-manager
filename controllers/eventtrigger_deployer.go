@@ -1055,7 +1055,14 @@ func removeStaleEventSources(ctx context.Context, c client.Client,
 	}
 
 	if isPullMode {
-		return undeployEventTriggerInPullMode(ctx, c, clusterNamespace, clusterName, eventTrigger, logger)
+		err = undeployEventTriggerInPullMode(ctx, c, clusterNamespace, clusterName, eventTrigger, logger)
+		if err != nil {
+			logger.V(logs.LogInfo).Error(err, "failed to remove EventTrigger in pull mode")
+			return err
+		}
+
+		return removeStaleEventReports(ctx, c, clusterNamespace, clusterName, eventTrigger.Spec.EventSourceName,
+			clusterType, logger)
 	}
 
 	return proceedRemovingStaleEventSources(ctx, c, clusterNamespace, clusterName, clusterType,
