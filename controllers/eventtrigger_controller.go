@@ -43,7 +43,6 @@ import (
 	"github.com/projectsveltos/event-manager/pkg/scope"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
-	"github.com/projectsveltos/libsveltos/lib/deployer"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	predicates "github.com/projectsveltos/libsveltos/lib/predicates"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
@@ -73,8 +72,6 @@ const (
 	// normalRequeueAfter is how long to wait before checking again to see if the cluster can be moved
 	// to ready after or workload features (for instance ingress or reporter) have failed
 	normalRequeueAfter = 20 * time.Second
-
-	configurationHash = "configurationHash"
 )
 
 // EventTriggerReconciler reconciles a EventTrigger object
@@ -82,7 +79,6 @@ type EventTriggerReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme
 	ConcurrentReconciles  int
-	Deployer              deployer.DeployerInterface
 	EventReportMode       ReportMode
 	ShardKey              string
 	CapiOnboardAnnotation string // when set, only capi clusters with this annotation are considered
@@ -277,14 +273,6 @@ func (r *EventTriggerReconciler) reconcileNormal(
 
 	matchingCluster = append(matchingCluster, clusterSetClusters...)
 
-	// Undeploy EventTrigger from every clusters that used to be a match but it is not a match anymore
-	err = r.undeployEvenTriggerFromNonMatchingCluster(ctx, eventTriggerScope, removeDuplicates(matchingCluster),
-		logger)
-	if err != nil {
-		logger.V(logs.LogDebug).Info("failed to undeploy EvenTrigger from clusters that are no longer a match: %v", err)
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
-	}
-
 	eventTriggerScope.SetMatchingClusterRefs(removeDuplicates(matchingCluster))
 
 	err = r.updateClusterInfo(ctx, eventTriggerScope)
@@ -299,8 +287,7 @@ func (r *EventTriggerReconciler) reconcileNormal(
 		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
 
-	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
-	if err := r.deployEventTrigger(ctx, eventTriggerScope, f, logger); err != nil {
+	if err := r.deployEventTrigger(ctx, eventTriggerScope, logger); err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to deploy")
 		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
@@ -687,36 +674,4 @@ func removeDuplicates(references []corev1.ObjectReference) []corev1.ObjectRefere
 	}
 
 	return set.Items()
-}
-
-func (r *EventTriggerReconciler) undeployEvenTriggerFromNonMatchingCluster(ctx context.Context,
-	eventTriggerScope *scope.EventTriggerScope, currentMatchingClusters []corev1.ObjectReference,
-	logger logr.Logger) error {
-
-	matchingClusters := libsveltosset.Set{}
-	for i := range currentMatchingClusters {
-		matchingClusters.Insert(&currentMatchingClusters[i])
-	}
-
-	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
-
-	// At this point we have not update Status yet, so those are the clusters
-	// that used to be a match
-	for i := range eventTriggerScope.EventTrigger.Status.ClusterInfo {
-		oldMatchingCluster := eventTriggerScope.EventTrigger.Status.ClusterInfo[i]
-		if !matchingClusters.Has(&oldMatchingCluster.Cluster) {
-			logger.V(logs.LogDebug).Info(fmt.Sprintf("undeploy EventTrigger from cluster %s:%s/%s",
-				oldMatchingCluster.Cluster.Kind, oldMatchingCluster.Cluster.Namespace,
-				oldMatchingCluster.Cluster.Name))
-			clusterInfo, err := r.removeEventTrigger(ctx, eventTriggerScope, &oldMatchingCluster.Cluster, f, logger)
-			if err != nil {
-				logger.V(logs.LogInfo).Error(err, "failed to undeploy")
-				eventTriggerScope.EventTrigger.Status.ClusterInfo[i].Status = clusterInfo.Status
-				return err
-			}
-			eventTriggerScope.EventTrigger.Status.ClusterInfo[i].Status = libsveltosv1beta1.SveltosStatusRemoved
-		}
-	}
-
-	return nil
 }

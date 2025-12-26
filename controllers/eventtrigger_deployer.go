@@ -81,16 +81,6 @@ const (
 	referencedResourceNameLabel      = "eventtrigger.lib.projectsveltos.io/refname"
 )
 
-type getCurrentHash func(tx context.Context, c client.Client,
-	chc *v1beta1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error)
-
-type feature struct {
-	id          string
-	currentHash getCurrentHash
-	deploy      deployer.RequestHandler
-	undeploy    deployer.RequestHandler
-}
-
 func (r *EventTriggerReconciler) isClusterAShardMatch(ctx context.Context,
 	clusterInfo *libsveltosv1beta1.ClusterInfo) (bool, error) {
 
@@ -109,7 +99,7 @@ func (r *EventTriggerReconciler) isClusterAShardMatch(ctx context.Context,
 
 // deployEventBasedAddon update necessary resources (eventSource) in the managed clusters
 func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
-	f feature, logger logr.Logger) error {
+	logger logr.Logger) error {
 
 	resource := eScope.EventTrigger
 
@@ -145,7 +135,7 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 				clusterInfo.Hash = []byte(str)
 			}
 		} else {
-			clusterInfo, err = r.processEventTrigger(ctx, eScope, &c.Cluster, f, logger)
+			clusterInfo, err = r.processEventTrigger(ctx, eScope, &c.Cluster, logger)
 			if err != nil {
 				errorSeen = err
 			}
@@ -157,6 +147,17 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 			}
 		}
 	}
+
+	// Filter out entries with Statuslibsveltosv1beta1.SveltosStatusRemoved
+	n := 0
+	for i := range resource.Status.ClusterInfo {
+		if resource.Status.ClusterInfo[i].Status != libsveltosv1beta1.SveltosStatusRemoved {
+			resource.Status.ClusterInfo[n] = resource.Status.ClusterInfo[i]
+			n++
+		}
+	}
+	// Truncate the slice to the new length
+	resource.Status.ClusterInfo = resource.Status.ClusterInfo[:n]
 
 	logger.V(logs.LogDebug).Info("set clusterInfo")
 	eScope.SetClusterInfo(resource.Status.ClusterInfo)
@@ -175,8 +176,6 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 // undeployEventBasedAddon clean resources in managed clusters
 func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
 	clusterInfo []libsveltosv1beta1.ClusterInfo, logger logr.Logger) error {
-
-	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
 
 	resource := eScope.EventTrigger
 
@@ -201,7 +200,7 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("undeploy EventTrigger from cluster %s:%s/%s",
 			c.Kind, c.Namespace, c.Name))
-		_, tmpErr = r.removeEventTrigger(ctx, eScope, c, f, logger)
+		_, tmpErr = r.removeEventTrigger(ctx, eScope, c, clusterInfo[i].Hash, logger)
 		if tmpErr != nil {
 			err = tmpErr
 			continue
@@ -215,8 +214,8 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 
 // processEventTriggerForCluster deploys necessary resources in managed cluster.
 func processEventTriggerForCluster(ctx context.Context, c client.Client,
-	clusterNamespace, clusterName, applicant, featureID string,
-	clusterType libsveltosv1beta1.ClusterType, options deployer.Options, logger logr.Logger) error {
+	clusterNamespace, clusterName, applicant string, clusterType libsveltosv1beta1.ClusterType,
+	hash []byte, logger logr.Logger) error {
 
 	logger = logger.WithValues("eventTrigger", applicant)
 	logger = logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s", clusterType, clusterNamespace, clusterName))
@@ -242,19 +241,10 @@ func processEventTriggerForCluster(ctx context.Context, c client.Client,
 		return err
 	}
 
-	err = deployEventSource(ctx, c, clusterNamespace, clusterName, clusterType, resource, options, isPullMode, logger)
+	err = deployEventSource(ctx, c, clusterNamespace, clusterName, clusterType, resource, hash, isPullMode, logger)
 	if err != nil {
 		logger.V(logs.LogDebug).Info("failed to deploy referenced EventSource")
 		return err
-	}
-
-	if !isPullMode {
-		// In pull mode, when deploying an EventSource, automatically all state eventSources are removed
-		err = removeStaleEventSources(ctx, c, clusterNamespace, clusterName, clusterType, resource, false, logger)
-		if err != nil {
-			logger.V(logs.LogDebug).Info("failed to remove stale EventSources")
-			return err
-		}
 	}
 
 	logger.V(logs.LogDebug).Info("Deployed eventTrigger")
@@ -267,8 +257,8 @@ func processEventTriggerForCluster(ctx context.Context, c client.Client,
 // - resources instantiated in the management cluster (ConfigMap/Secrets expressed as templated referenced
 // in PolicyRefs/ValuesFrom sections)
 func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Client,
-	clusterNamespace, clusterName, applicant, featureID string,
-	clusterType libsveltosv1beta1.ClusterType, options deployer.Options, logger logr.Logger) error {
+	clusterNamespace, clusterName, applicant string,
+	clusterType libsveltosv1beta1.ClusterType, logger logr.Logger) error {
 
 	logger = logger.WithValues("eventTrigger", applicant)
 
@@ -345,19 +335,17 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 
 // processEventTrigger detects whether it is needed to deploy EventBasedAddon resources in current passed cluster.
 func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
-	cluster *corev1.ObjectReference, f feature, logger logr.Logger,
-) (*libsveltosv1beta1.ClusterInfo, error) {
-
-	if !isClusterStillMatching(eScope, cluster) {
-		return r.removeEventTrigger(ctx, eScope, cluster, f, logger)
-	}
+	cluster *corev1.ObjectReference, logger logr.Logger) (*libsveltosv1beta1.ClusterInfo, error) {
 
 	resource := eScope.EventTrigger
-
 	// Get EventTrigger Spec hash (at this very precise moment)
 	currentHash, err := eventTriggerHash(ctx, r.Client, resource, cluster, logger)
 	if err != nil {
 		return nil, err
+	}
+
+	if !isClusterStillMatching(eScope, cluster) {
+		return r.removeEventTrigger(ctx, eScope, cluster, currentHash, logger)
 	}
 
 	proceed, err := r.canProceed(ctx, eScope, cluster, logger)
@@ -365,18 +353,6 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		return nil, err
 	} else if !proceed {
 		return nil, nil
-	}
-
-	// Remove any queued entry to cleanup
-	r.Deployer.CleanupEntries(cluster.Namespace, cluster.Name, resource.Name, f.id,
-		clusterproxy.GetClusterType(cluster), true)
-
-	// If undeploying feature is in progress, wait for it to complete.
-	// Otherwise, if we redeploy feature while same feature is still being cleaned up, if two workers process those request in
-	// parallel some resources might end up missing.
-	if r.Deployer.IsInProgress(cluster.Namespace, cluster.Name, resource.Name, f.id, clusterproxy.GetClusterType(cluster), true) {
-		logger.V(logs.LogDebug).Info("cleanup is in progress")
-		return nil, fmt.Errorf("cleanup of %s in cluster still in progress. Wait before redeploying", f.id)
 	}
 
 	// Get the EventTrigger hash when EventTrigger was last deployed/evaluated in this cluster (if ever)
@@ -388,36 +364,36 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 	}
 
 	if isConfigSame {
-		logger.V(logs.LogInfo).Info("EventTrigger has not changed")
+		logger.V(logs.LogDebug).Info("EventTrigger has not changed")
 	}
 
-	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, r.Client, cluster.Namespace,
-		cluster.Name, clusterproxy.GetClusterType(cluster), logger)
+	start := time.Now()
+
+	clusterInfo, err := r.proceedProcessingEventTrigger(ctx, eScope, cluster, isConfigSame, currentHash, logger)
 	if err != nil {
-		msg := fmt.Sprintf("failed to verify if Cluster is in pull mode: %v", err)
-		logger.V(logs.LogDebug).Info(msg)
-		return nil, err
+		return clusterInfo, err
 	}
 
-	return r.proceedProcessingEventTrigger(ctx, eScope, cluster, isPullMode, isConfigSame, currentHash, f, logger)
+	err = removeStaleEventSources(ctx, r.Client, cluster.Namespace, cluster.Name,
+		clusterproxy.GetClusterType(cluster), resource, false, logger)
+	if err != nil {
+		logger.V(logs.LogDebug).Info("failed to remove stale EventSources")
+		return clusterInfo, err
+	}
+
+	elapsed := time.Since(start)
+	programDuration(elapsed, cluster.Namespace, cluster.Name, v1beta1.FeatureEventTrigger,
+		clusterproxy.GetClusterType(cluster), logger)
+
+	return clusterInfo, nil
 }
 
 func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
-	cluster *corev1.ObjectReference, isPullMode, isConfigSame bool, currentHash []byte, f feature, logger logr.Logger,
+	cluster *corev1.ObjectReference, isConfigSame bool, currentHash []byte, logger logr.Logger,
 ) (*libsveltosv1beta1.ClusterInfo, error) {
 
 	resource := eScope.EventTrigger
 	_, currentStatus := r.getClusterHashAndStatus(resource, cluster)
-
-	var deployerStatus *libsveltosv1beta1.SveltosFeatureStatus
-	var result deployer.Result
-
-	if isConfigSame {
-		logger.V(logs.LogInfo).Info("EventTrigger has not changed")
-		result = r.Deployer.GetResult(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id,
-			clusterproxy.GetClusterType(cluster), false)
-		deployerStatus = r.convertResultStatus(result)
-	}
 
 	clusterInfo := &libsveltosv1beta1.ClusterInfo{
 		Cluster:        *cluster,
@@ -427,155 +403,149 @@ func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Conte
 
 	previousError := eScope.GetFailureMessage(cluster)
 	clusterInfo.FailureMessage = previousError
-	if deployerStatus != nil {
-		logger.V(logs.LogDebug).Info(fmt.Sprintf("result is available %q. updating status.", *deployerStatus))
-		var errorMessage string
-		if result.Err != nil {
-			errorMessage = result.Err.Error()
-		}
 
-		clusterInfo = &libsveltosv1beta1.ClusterInfo{
-			Cluster:        *cluster,
-			Status:         *deployerStatus,
-			Hash:           currentHash,
-			FailureMessage: &errorMessage,
-		}
+	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, r.Client, cluster.Namespace,
+		cluster.Name, clusterproxy.GetClusterType(cluster), logger)
+	if err != nil {
+		msg := fmt.Sprintf("failed to verify if Cluster is in pull mode: %v", err)
+		logger.V(logs.LogDebug).Info(msg)
+		return nil, err
+	}
 
-		if *deployerStatus == libsveltosv1beta1.SveltosStatusProvisioned {
-			if isPullMode {
-				// provisioned here means configuration for sveltos-applier has been successufully prepared.
-				// In pull mode, verify now agent has deployed the configuration.
-				return r.proceedDeployingEventTriggerInPullMode(ctx, eScope, cluster, f, isConfigSame,
-					currentHash, logger)
-			}
-			return clusterInfo, nil
-		}
-
-		if *deployerStatus == libsveltosv1beta1.SveltosStatusProvisioning {
-			return clusterInfo, fmt.Errorf("EventTrigger is still being provisioned")
-		}
-	} else if isConfigSame && currentStatus != nil && *currentStatus == libsveltosv1beta1.SveltosStatusProvisioned {
-		logger.V(logs.LogInfo).Info("already deployed")
+	if isConfigSame && currentStatus != nil && *currentStatus == libsveltosv1beta1.SveltosStatusProvisioned {
+		logger.V(logs.LogDebug).Info("already deployed")
 		s := libsveltosv1beta1.SveltosStatusProvisioned
 		clusterInfo.Status = s
 		clusterInfo.FailureMessage = nil
-	} else {
-		logger.V(logs.LogInfo).Info("no result is available. queue job and mark status as provisioning")
-		s := libsveltosv1beta1.SveltosStatusProvisioning
-		clusterInfo.Status = s
+		return clusterInfo, nil
+	}
 
-		options := deployer.Options{HandlerOptions: make(map[string]any)}
-		options.HandlerOptions[configurationHash] = currentHash
-		if err := r.Deployer.Deploy(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id,
-			clusterproxy.GetClusterType(cluster), false, f.deploy, programDuration, options); err != nil {
+	if isConfigSame && isPullMode {
+		agentStatus, err := r.getAgentDeploymentStatusInPullMode(ctx, eScope, cluster, currentHash, logger)
+		if err != nil {
+			msg := fmt.Sprintf("failed to verify sveltos applier status: %v", err)
+			logger.V(logs.LogDebug).Info(msg)
 			return nil, err
 		}
+		if agentStatus != nil && *agentStatus == libsveltosv1beta1.SveltosStatusProvisioned {
+			if err := pullmode.TerminateDeploymentTracking(ctx, r.Client, cluster.Namespace,
+				cluster.Name, v1beta1.EventTriggerKind, eScope.Name(), v1beta1.FeatureEventTrigger, logger); err != nil {
+				logger.V(logs.LogDebug).Info(fmt.Sprintf("failed to terminate tracking: %v", err))
+				return nil, err
+			}
+
+			s := libsveltosv1beta1.SveltosStatusProvisioned
+			clusterInfo.Status = s
+			clusterInfo.FailureMessage = nil
+			return clusterInfo, nil
+		}
+		if agentStatus != nil && *agentStatus == libsveltosv1beta1.SveltosStatusProvisioning {
+			s := libsveltosv1beta1.SveltosStatusProvisioning
+			clusterInfo.Status = s
+			clusterInfo.FailureMessage = nil
+			return clusterInfo, errors.New("agent is still provisioning")
+		}
+	}
+
+	logger.V(logs.LogDebug).Info("provisioning")
+	s := libsveltosv1beta1.SveltosStatusProvisioning
+	clusterInfo.Status = s
+
+	err = processEventTriggerForCluster(ctx, r.Client, cluster.Namespace, cluster.Name, eScope.Name(),
+		clusterproxy.GetClusterType(cluster), currentHash, logger)
+	if err != nil {
+		failureMessage := err.Error()
+		clusterInfo.FailureMessage = &failureMessage
+	} else if isPullMode {
+		clusterInfo.Status = libsveltosv1beta1.SveltosStatusProvisioning
+	} else {
+		clusterInfo.FailureMessage = nil
+		clusterInfo.Status = libsveltosv1beta1.SveltosStatusProvisioned
 	}
 
 	if clusterInfo.Hash == nil {
 		panic(1)
 	}
 
+	if isPullMode {
+		return clusterInfo, errors.New("agent request to deploy")
+	}
+
 	return clusterInfo, nil
 }
 
-func (r *EventTriggerReconciler) proceedDeployingEventTriggerInPullMode(ctx context.Context,
-	eScope *scope.EventTriggerScope, cluster *corev1.ObjectReference, f feature,
-	isConfigSame bool, currentHash []byte, logger logr.Logger) (*libsveltosv1beta1.ClusterInfo, error) {
+func (r *EventTriggerReconciler) getAgentDeploymentStatusInPullMode(ctx context.Context,
+	eScope *scope.EventTriggerScope, cluster *corev1.ObjectReference, currentHash []byte,
+	logger logr.Logger) (*libsveltosv1beta1.SveltosFeatureStatus, error) {
 
 	var pullmodeStatus *libsveltosv1beta1.FeatureStatus
 
 	eventTrigger := eScope.EventTrigger
-	if isConfigSame {
-		pullmodeHash, err := pullmode.GetRequestorHash(ctx, getManagementClusterClient(),
-			cluster.Namespace, cluster.Name, v1beta1.EventTriggerKind, eventTrigger.Name, f.id, logger)
-		if err != nil {
-			if !apierrors.IsNotFound(err) {
-				msg := fmt.Sprintf("failed to get pull mode hash: %v", err)
-				logger.V(logs.LogDebug).Info(msg)
-				return nil, err
-			}
-		} else {
-			isConfigSame = reflect.DeepEqual(pullmodeHash, currentHash)
+	pullmodeHash, err := pullmode.GetRequestorHash(ctx, getManagementClusterClient(),
+		cluster.Namespace, cluster.Name, v1beta1.EventTriggerKind, eventTrigger.Name,
+		v1beta1.FeatureEventTrigger, logger)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			msg := fmt.Sprintf("failed to get pull mode hash: %v", err)
+			logger.V(logs.LogDebug).Info(msg)
+			return nil, err
 		}
 	}
+	isConfigSame := reflect.DeepEqual(pullmodeHash, currentHash)
 
 	if isConfigSame {
 		// only if configuration hash matches, check if feature is deployed
 		logger.V(logs.LogDebug).Info("hash has not changed")
 		var err error
-		pullmodeStatus, err = r.proceesAgentDeploymentStatus(ctx, eventTrigger, cluster, f, logger)
+		pullmodeStatus, err = r.proceesAgentDeploymentStatus(ctx, eventTrigger, cluster, logger)
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	clusterInfo := &libsveltosv1beta1.ClusterInfo{
-		Cluster:        *cluster,
-		Hash:           currentHash,
-		FailureMessage: nil,
 	}
 
 	if pullmodeStatus != nil {
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("agent result is available. updating status: %v", *pullmodeStatus))
 		switch *pullmodeStatus {
 		case libsveltosv1beta1.FeatureStatusProvisioned:
-			if err := pullmode.TerminateDeploymentTracking(ctx, r.Client, cluster.Namespace,
-				cluster.Name, v1beta1.EventTriggerKind, eventTrigger.Name, f.id, logger); err != nil {
-				logger.V(logs.LogDebug).Info(fmt.Sprintf("failed to terminate tracking: %v", err))
-				return nil, err
-			}
 			provisioned := libsveltosv1beta1.SveltosStatusProvisioned
-			clusterInfo.Status = provisioned
-			return clusterInfo, nil
+			return &provisioned, nil
 		case libsveltosv1beta1.FeatureStatusProvisioning:
 			msg := "agent is provisioning the content"
 			logger.V(logs.LogDebug).Info(msg)
 			provisioning := libsveltosv1beta1.SveltosStatusProvisioning
-			clusterInfo.Status = provisioning
-			return clusterInfo, nil
+			return &provisioning, nil
 		case libsveltosv1beta1.FeatureStatusFailed:
 			logger.V(logs.LogDebug).Info("agent failed provisioning the content")
 			failed := libsveltosv1beta1.SveltosStatusFailed
-			clusterInfo.Status = failed
+			return &failed, nil
 		case libsveltosv1beta1.FeatureStatusFailedNonRetriable, libsveltosv1beta1.FeatureStatusRemoving,
 			libsveltosv1beta1.FeatureStatusAgentRemoving, libsveltosv1beta1.FeatureStatusRemoved:
 			logger.V(logs.LogDebug).Info("proceed deploying")
+			failed := libsveltosv1beta1.SveltosStatusFailed
+			return &failed, nil
 		}
-	} else {
-		provisioning := libsveltosv1beta1.SveltosStatusProvisioning
-		clusterInfo.Status = provisioning
 	}
 
-	// Getting here means either agent failed to deploy feature or configuration has changed.
-	// Either way, feature must be (re)deployed. Queue so new configuration for agent is prepared.
-	options := deployer.Options{HandlerOptions: make(map[string]any)}
-	options.HandlerOptions[configurationHash] = currentHash
-
-	logger.V(logs.LogDebug).Info("queueing request to deploy")
-	if err := r.Deployer.Deploy(ctx, cluster.Namespace, cluster.Name,
-		eventTrigger.Name, f.id, clusterproxy.GetClusterType(cluster), false,
-		f.deploy, programDuration, options); err != nil {
-		return nil, err
-	}
-
-	return clusterInfo, fmt.Errorf("request to deploy queued")
+	return nil, nil
 }
 
 // If SveltosCluster is in pull mode, verify whether agent has pulled and successuffly deployed it.
 func (r *EventTriggerReconciler) proceesAgentDeploymentStatus(ctx context.Context,
-	eventTrigger *v1beta1.EventTrigger, cluster *corev1.ObjectReference, f feature, logger logr.Logger,
+	eventTrigger *v1beta1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger,
 ) (*libsveltosv1beta1.FeatureStatus, error) {
 
 	logger.V(logs.LogDebug).Info("Verify if agent has deployed content and process it")
 
 	status, err := pullmode.GetDeploymentStatus(ctx, r.Client, cluster.Namespace, cluster.Name,
-		v1beta1.EventTriggerKind, eventTrigger.Name, f.id, logger)
+		v1beta1.EventTriggerKind, eventTrigger.Name, v1beta1.FeatureEventTrigger, logger)
 
 	if err != nil {
 		if pullmode.IsProcessingMismatch(err) {
 			provisioning := libsveltosv1beta1.FeatureStatusProvisioning
 			return &provisioning, nil
+		} else if pullmode.IsActionNotSetToDeploy(err) {
+			_ = pullmode.TerminateDeploymentTracking(ctx, r.Client, cluster.Namespace,
+				cluster.Name, v1beta1.EventTriggerKind, eventTrigger.Name, v1beta1.FeatureEventTrigger, logger)
 		}
 		return nil, err
 	}
@@ -584,26 +554,13 @@ func (r *EventTriggerReconciler) proceesAgentDeploymentStatus(ctx context.Contex
 }
 
 func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope *scope.EventTriggerScope,
-	cluster *corev1.ObjectReference, f feature, logger logr.Logger) (*libsveltosv1beta1.ClusterInfo, error) {
+	cluster *corev1.ObjectReference, currentHash []byte, logger logr.Logger,
+) (*libsveltosv1beta1.ClusterInfo, error) {
 
 	resource := eScope.EventTrigger
 
 	logger = logger.WithValues("eventTrigger", resource.Name)
 	logger.V(logs.LogDebug).Info("request to undeploy")
-
-	// Remove any queued entry to deploy/evaluate
-	r.Deployer.CleanupEntries(cluster.Namespace, cluster.Name, resource.Name, f.id,
-		clusterproxy.GetClusterType(cluster), false)
-
-	// If deploying feature is in progress, wait for it to complete.
-	// Otherwise, if we cleanup feature while same feature is still being provisioned, if two workers process those request in
-	// parallel some resources might be left over.
-	if r.Deployer.IsInProgress(cluster.Namespace, cluster.Name, resource.Name, f.id,
-		clusterproxy.GetClusterType(cluster), false) {
-
-		logger.V(logs.LogDebug).Info("provisioning is in progress")
-		return nil, fmt.Errorf("deploying %s still in progress. Wait before cleanup", f.id)
-	}
 
 	if r.isClusterEntryRemoved(resource, cluster) {
 		logger.V(logs.LogDebug).Info("feature is removed")
@@ -611,42 +568,23 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 		return nil, nil
 	}
 
-	result := r.Deployer.GetResult(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id,
-		clusterproxy.GetClusterType(cluster), true)
-	status := r.convertResultStatus(result)
-
 	clusterInfo := &libsveltosv1beta1.ClusterInfo{
 		Cluster: *cluster,
 		Status:  libsveltosv1beta1.SveltosStatusRemoving,
-		Hash:    nil,
+		Hash:    currentHash,
 	}
 
-	if status != nil {
-		if *status == libsveltosv1beta1.SveltosStatusRemoving {
-			return clusterInfo, fmt.Errorf("feature is still being removed")
-		}
-
-		if *status == libsveltosv1beta1.SveltosStatusRemoved {
-			logger.V(logs.LogDebug).Info("status is removed")
-			if err := removeClusterInfoEntry(ctx, r.Client, cluster.Namespace, cluster.Name,
-				clusterproxy.GetClusterType(cluster), resource, logger); err != nil {
-				return nil, err
-			}
-			clusterInfo.Status = libsveltosv1beta1.SveltosStatusRemoved
-			return clusterInfo, nil
-		}
+	err := undeployEventTriggerResourcesFromCluster(ctx, r.Client, cluster.Namespace, cluster.Name,
+		eScope.Name(), clusterproxy.GetClusterType(cluster), logger)
+	if err != nil {
+		failureMessage := err.Error()
+		clusterInfo.FailureMessage = &failureMessage
 	} else {
-		logger.V(logs.LogDebug).Info("no result is available. mark status as removing")
+		clusterInfo.Status = libsveltosv1beta1.SveltosStatusRemoved
+		clusterInfo.FailureMessage = nil
 	}
 
-	logger.V(logs.LogDebug).Info("queueing request to un-deploy")
-	if err := r.Deployer.Deploy(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id,
-		clusterproxy.GetClusterType(cluster), true,
-		f.undeploy, programDuration, deployer.Options{}); err != nil {
-		return nil, err
-	}
-
-	return clusterInfo, fmt.Errorf("cleanup request is queued")
+	return clusterInfo, err
 }
 
 func undeployEventTriggerInPullMode(ctx context.Context, c client.Client,
@@ -679,7 +617,7 @@ func undeployEventTriggerInPullMode(ctx context.Context, c client.Client,
 		}
 	}
 
-	logger.V(logs.LogDebug).Info("queueing request to un-deploy")
+	logger.V(logs.LogDebug).Info("pull-mode request to un-deploy")
 	setters := prepareSetters(eventTrigger, nil)
 	err = pullmode.RemoveDeployedResources(ctx, c, clusterNamespace, clusterName, v1beta1.EventTriggerKind, eventTrigger.Name,
 		v1beta1.FeatureEventTrigger, logger, setters...)
@@ -706,27 +644,6 @@ func (r *EventTriggerReconciler) isClusterEntryRemoved(resource *v1beta1.EventTr
 		}
 	}
 	return true
-}
-
-func (r *EventTriggerReconciler) convertResultStatus(result deployer.Result) *libsveltosv1beta1.SveltosFeatureStatus {
-	switch result.ResultStatus {
-	case deployer.Deployed:
-		s := libsveltosv1beta1.SveltosStatusProvisioned
-		return &s
-	case deployer.Failed:
-		s := libsveltosv1beta1.SveltosStatusFailed
-		return &s
-	case deployer.InProgress:
-		s := libsveltosv1beta1.SveltosStatusProvisioning
-		return &s
-	case deployer.Removed:
-		s := libsveltosv1beta1.SveltosStatusRemoved
-		return &s
-	case deployer.Unavailable:
-		return nil
-	}
-
-	return nil
 }
 
 // getClusterHashAndStatus returns the hash of the EventTrigger that was deployed/evaluated in a given
@@ -849,7 +766,7 @@ func remove(s []libsveltosv1beta1.ClusterInfo, i int) []libsveltosv1beta1.Cluste
 // deployEventSource deploys (creates or updates) referenced EventSource.
 func deployEventSource(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
-	eventTrigger *v1beta1.EventTrigger, options deployer.Options, isPullMode bool, logger logr.Logger) error {
+	eventTrigger *v1beta1.EventTrigger, hash []byte, isPullMode bool, logger logr.Logger) error {
 
 	currentEventSource, err := fetchEventSource(ctx, c, clusterNamespace, clusterName,
 		eventTrigger.Spec.EventSourceName, clusterType, logger)
@@ -896,8 +813,7 @@ func deployEventSource(ctx context.Context, c client.Client,
 	}
 
 	if isPullMode {
-		configurationHash, _ := options.HandlerOptions[configurationHash].([]byte)
-		setters := prepareSetters(eventTrigger, configurationHash)
+		setters := prepareSetters(eventTrigger, hash)
 		err = pullmode.CommitStagedResourcesForDeployment(ctx, c, clusterNamespace, clusterName,
 			v1beta1.EventTriggerKind, eventTrigger.Name, v1beta1.FeatureEventTrigger, logger, setters...)
 		if err != nil {
@@ -1310,7 +1226,8 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 		return nil, err
 	}
 
-	logger.V(logs.LogDebug).Info(fmt.Sprintf("instantiateClusterProfileForResource ClusterProfile name: %s", clusterProfileName))
+	logger.V(logs.LogDebug).Info(fmt.Sprintf("instantiateClusterProfileForResource ClusterProfile name: %s",
+		clusterProfileName))
 
 	// It is important to add this label here (after we searched if a ClusterProfile already exists)
 	if er != nil && er.Labels != nil {
