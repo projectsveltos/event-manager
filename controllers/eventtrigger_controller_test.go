@@ -24,7 +24,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2/textlogger"
@@ -79,12 +78,8 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		dep := fakedeployer.GetClient(context.TODO(), logger, c)
-		controllers.RegisterFeatures(dep, logger)
-
 		reconciler := controllers.EventTriggerReconciler{
 			Client:           c,
-			Deployer:         dep,
 			Scheme:           c.Scheme(),
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
@@ -111,95 +106,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 				v1beta1.EventTriggerFinalizer,
 			),
 		).Should(BeTrue())
-	})
-
-	It("Remove finalizer", func() {
-		Expect(controllerutil.AddFinalizer(resource, v1beta1.EventTriggerFinalizer)).To(BeTrue())
-
-		cluster := &clusterv1.Cluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: randomString(),
-				Name:      randomString(),
-			},
-		}
-
-		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
-
-		initObjects := []client.Object{
-			resource,
-			cluster,
-		}
-
-		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
-			WithObjects(initObjects...).Build()
-
-		resourceName := client.ObjectKey{
-			Name: resource.Name,
-		}
-
-		currentResource := &v1beta1.EventTrigger{}
-
-		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
-		Expect(c.Delete(context.TODO(), currentResource)).To(Succeed())
-
-		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
-		currentResource.Status.ClusterInfo = []libsveltosv1beta1.ClusterInfo{
-			{
-				Cluster: corev1.ObjectReference{
-					Namespace:  cluster.Namespace,
-					Name:       cluster.Name,
-					APIVersion: cluster.APIVersion,
-					Kind:       cluster.Kind,
-				},
-				Status: libsveltosv1beta1.SveltosStatusProvisioned,
-				Hash:   []byte(randomString()),
-			},
-		}
-
-		Expect(c.Status().Update(context.TODO(), currentResource)).To(Succeed())
-
-		dep := fakedeployer.GetClient(context.TODO(), logger, c)
-		Expect(dep.RegisterFeatureID(v1beta1.FeatureEventTrigger)).To(Succeed())
-
-		reconciler := controllers.EventTriggerReconciler{
-			Client:           c,
-			Deployer:         dep,
-			Scheme:           c.Scheme(),
-			Mux:              sync.Mutex{},
-			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
-			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
-			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
-			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
-			ClusterSetMap:    make(map[corev1.ObjectReference]*libsveltosset.Set),
-		}
-
-		// Because EventTrigger is currently deployed in a Cluster (Status.ClusterCondition is set
-		// indicating that) Reconcile won't be removed Finalizer
-		_, err := reconciler.Reconcile(context.TODO(), ctrl.Request{
-			NamespacedName: resourceName,
-		})
-		Expect(err).ToNot(HaveOccurred())
-
-		err = c.Get(context.TODO(), resourceName, currentResource)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(controllerutil.ContainsFinalizer(currentResource, v1beta1.EventTriggerFinalizer)).To(BeTrue())
-
-		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
-
-		currentResource.Status.ClusterInfo = []libsveltosv1beta1.ClusterInfo{}
-		Expect(c.Status().Update(context.TODO(), currentResource)).To(Succeed())
-
-		// Because EventTrigger is currently deployed nowhere (Status.ClusterCondition is set
-		// indicating that) Reconcile will be removed Finalizer
-		_, err = reconciler.Reconcile(context.TODO(), ctrl.Request{
-			NamespacedName: resourceName,
-		})
-		Expect(err).ToNot(HaveOccurred())
-
-		err = c.Get(context.TODO(), resourceName, currentResource)
-		Expect(err).To(HaveOccurred())
-		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	})
 
 	It("updateClusterInfo updates EventTrigger Status.ClusterInfo field", func() {
@@ -234,7 +140,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 
 		reconciler := controllers.EventTriggerReconciler{
 			Client:           c,
-			Deployer:         dep,
 			Scheme:           c.Scheme(),
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
@@ -276,7 +181,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 
 		reconciler := controllers.EventTriggerReconciler{
 			Client:           c,
-			Deployer:         dep,
 			Scheme:           c.Scheme(),
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
@@ -345,7 +249,6 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 
 		reconciler := controllers.EventTriggerReconciler{
 			Client:           c,
-			Deployer:         dep,
 			Scheme:           c.Scheme(),
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
