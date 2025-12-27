@@ -39,8 +39,9 @@ var (
 	ProcessEventTrigger           = (*EventTriggerReconciler).processEventTrigger
 	GetClustersFromClusterSets    = (*EventTriggerReconciler).getClustersFromClusterSets
 
-	GetKeyFromObject     = getKeyFromObject
-	GetConsumersForEntry = getConsumersForEntry
+	GetKeyFromObject      = getKeyFromObject
+	GetHandlersForFeature = getHandlersForFeature
+	GetConsumersForEntry  = getConsumersForEntry
 
 	GetCloudEvents = getCloudEvents
 	GetResources   = getResources
