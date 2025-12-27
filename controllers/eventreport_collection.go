@@ -475,9 +475,8 @@ func updateAllClusterProfiles(ctx context.Context, mgmtClient client.Client, clu
 		err := updateClusterProfiles(ctx, mgmtClient, cluster.Namespace, cluster.Name, clusterType,
 			eventTriggers[i], er, l)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update ClusterProfile for EventTrigger %s: %v",
+			l.V(logs.LogInfo).Info(fmt.Sprintf("failed to update ClusterProfile for EventTrigger %s: %v",
 				eventTriggers[i].GetName(), err))
-
 			return err
 		}
 	}

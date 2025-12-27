@@ -160,10 +160,10 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/projectsveltos/addon-controller v1.3.0 h1:qPcmcY5xbqNxy4KfnXkHZjV8CTvSpy24O93tS7Sqowc=
-github.com/projectsveltos/addon-controller v1.3.0/go.mod h1:vMvqrDbK/RoFo27gsvsDJwaMkKVZJLnf/PZEK1zh0Z8=
-github.com/projectsveltos/libsveltos v1.3.0 h1:m0AEG+HqTSkl93Wa9rizedH6nqTwUbrCeBdz4VGloNc=
-github.com/projectsveltos/libsveltos v1.3.0/go.mod h1:At1G0itHPdELlMuQh+v2rLtA/Kji9xMV8K1k0l/sQ1Q=
+github.com/projectsveltos/addon-controller v1.3.1-0.20251224111613-7f58db8142d8 h1:Lzhg3feLEbhCpHt8kijoWp2/l8JoSRob9QAqQGRICik=
+github.com/projectsveltos/addon-controller v1.3.1-0.20251224111613-7f58db8142d8/go.mod h1:tO54dG6aHhRkw+arPQEWEI3WrYMTcZ+MAEiuUX5ws0g=
+github.com/projectsveltos/libsveltos v1.3.1 h1:uUQ7YRwhWnxxBUjBmf6WJprwSsHJDJAPyHkUmQ+DyXI=
+github.com/projectsveltos/libsveltos v1.3.1/go.mod h1:At1G0itHPdELlMuQh+v2rLtA/Kji9xMV8K1k0l/sQ1Q=
 github.com/prometheus/client_golang v1.23.2 h1:Je96obch5RDVy3FDMndoUsjAhG5Edi49h0RJWRi/o0o=
 github.com/prometheus/client_golang v1.23.2/go.mod h1:Tb1a6LWHB3/SPIzCoaDXI4I8UHKeFTEQ1YCr+0Gyqmg=
 github.com/prometheus/client_model v0.6.2 h1:oBsgwpGs7iVziMvrGhE53c/GrLUsZdHnqNwqPLxwZyk=
@@ -335,8 +335,8 @@ k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 h1:SjGebBtkBqHFOli+05xYbK8YF1Dzk
 k8s.io/utils v0.0.0-20251002143259-bc988d571ff4/go.mod h1:OLgZIPagt7ERELqWJFomSt595RzquPNLL48iOWgYOg0=
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 h1:jpcvIRr3GLoUoEKRkHKSmGjxb6lWwrBlJsXc+eUYQHM=
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2/go.mod h1:Ve9uj1L+deCXFrPOk1LpFXqTg7LCFzFso6PA48q/XZw=
-sigs.k8s.io/cluster-api v1.12.0 h1:iFOz8b0LdrMJS5Df1Eb7wyvTkWqlTUM2LHFEHCeI6vA=
-sigs.k8s.io/cluster-api v1.12.0/go.mod h1:+S6WJdi8UPdqv5q9nka5al3ed/Qa0zAcSBgzTaa9VKA=
+sigs.k8s.io/cluster-api v1.12.1 h1:s3DivSZjXdu2HPyOtV/n6XwSZBaIycZdKNs4y8X+3lY=
+sigs.k8s.io/cluster-api v1.12.1/go.mod h1:+S6WJdi8UPdqv5q9nka5al3ed/Qa0zAcSBgzTaa9VKA=
 sigs.k8s.io/controller-runtime v0.22.4 h1:GEjV7KV3TY8e+tJ2LCTxUTanW4z/FmNB7l327UfMq9A=
 sigs.k8s.io/controller-runtime v0.22.4/go.mod h1:+QX1XUpTXN4mLoblf4tqr5CQcyHPAki2HLXqQMY6vh8=
 sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 h1:gBQPwqORJ8d8/YNZWEjoZs7npUVDpVXUUOFfW6CgAqE=

@@ -43,6 +43,7 @@ import (
 	"github.com/projectsveltos/event-manager/pkg/scope"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
+	"github.com/projectsveltos/libsveltos/lib/deployer"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	predicates "github.com/projectsveltos/libsveltos/lib/predicates"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
@@ -72,6 +73,8 @@ const (
 	// normalRequeueAfter is how long to wait before checking again to see if the cluster can be moved
 	// to ready after or workload features (for instance ingress or reporter) have failed
 	normalRequeueAfter = 20 * time.Second
+
+	configurationHash = "configurationHash"
 )
 
 // EventTriggerReconciler reconciles a EventTrigger object
@@ -79,6 +82,7 @@ type EventTriggerReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme
 	ConcurrentReconciles  int
+	Deployer              deployer.DeployerInterface
 	EventReportMode       ReportMode
 	ShardKey              string
 	CapiOnboardAnnotation string // when set, only capi clusters with this annotation are considered
@@ -287,7 +291,8 @@ func (r *EventTriggerReconciler) reconcileNormal(
 		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
 
-	if err := r.deployEventTrigger(ctx, eventTriggerScope, logger); err != nil {
+	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
+	if err := r.deployEventTrigger(ctx, eventTriggerScope, f, logger); err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to deploy")
 		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
