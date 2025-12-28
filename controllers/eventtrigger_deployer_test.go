@@ -1370,6 +1370,16 @@ status:
 			return len(configMaps.Items) == 1
 		}, timeout, pollingInterval).Should(BeTrue())
 
+		Eventually(func() bool {
+			secrets := &corev1.SecretList{}
+			err := testEnv.List(context.TODO(), secrets, listOptions...)
+			if err != nil {
+				return false
+			}
+
+			return len(secrets.Items) == 1
+		}, timeout, pollingInterval).Should(BeTrue())
+
 		configMaps := &corev1.ConfigMapList{}
 		Expect(testEnv.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
 		Expect(len(configMaps.Items)).To(Equal(1))

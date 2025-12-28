@@ -122,6 +122,9 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 	for i := range resource.Status.ClusterInfo {
 		c := &resource.Status.ClusterInfo[i]
 
+		l := logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s",
+			c.Cluster.Kind, c.Cluster.Namespace, c.Cluster.Name))
+
 		shardMatch, err := r.isClusterAShardMatch(ctx, c)
 		if err != nil {
 			return err
@@ -129,8 +132,6 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 
 		var clusterInfo *libsveltosv1beta1.ClusterInfo
 		if !shardMatch {
-			l := logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s",
-				c.Cluster.Kind, c.Cluster.Namespace, c.Cluster.Name))
 			l.V(logs.LogDebug).Info("cluster is not a shard match")
 			// Since cluster is not a shard match, another deployment will deploy and update
 			// this specific clusterInfo status. Here we simply return current status.
@@ -145,7 +146,7 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 				clusterInfo.Hash = []byte(str)
 			}
 		} else {
-			clusterInfo, err = r.processEventTrigger(ctx, eScope, &c.Cluster, f, logger)
+			clusterInfo, err = r.processEventTrigger(ctx, eScope, &c.Cluster, f, l)
 			if err != nil {
 				errorSeen = err
 			}
@@ -196,6 +197,9 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 
 	var err error
 	for i := range clusterInfo {
+		l := logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s",
+			clusterInfo[i].Cluster.Kind, clusterInfo[i].Cluster.Namespace, clusterInfo[i].Cluster.Name))
+
 		shardMatch, tmpErr := r.isClusterAShardMatch(ctx, &clusterInfo[i])
 		if tmpErr != nil {
 			err = tmpErr
@@ -208,10 +212,9 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 			continue
 		}
 
-		logger.V(logs.LogDebug).Info(fmt.Sprintf("undeploy EventTrigger from cluster %s:%s/%s",
-			clusterInfo[i].Cluster.Kind, clusterInfo[i].Cluster.Namespace, clusterInfo[i].Cluster.Name))
+		l.V(logs.LogDebug).Info("undeploy EventTrigger")
 		newInfo, tmpErr := r.removeEventTrigger(ctx, eScope, &clusterInfo[i].Cluster, clusterInfo[i].Hash,
-			f, logger)
+			f, l)
 
 		// Always update the slice with the returned state if it exists
 		if newInfo != nil {
@@ -288,6 +291,7 @@ func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Clie
 	clusterType libsveltosv1beta1.ClusterType, options deployer.Options, logger logr.Logger) error {
 
 	logger = logger.WithValues("eventTrigger", applicant)
+	logger = logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s", clusterType, clusterNamespace, clusterName))
 
 	eventTrigger := &v1beta1.EventTrigger{}
 	err := c.Get(ctx, types.NamespacedName{Name: applicant}, eventTrigger)
@@ -298,8 +302,6 @@ func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Clie
 		}
 		return err
 	}
-
-	logger = logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s", clusterType, clusterNamespace, clusterName))
 
 	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, c, clusterNamespace, clusterName,
 		clusterType, logger)
@@ -445,7 +447,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("EventTrigger has changed. Current hash %x. Previous hash %x",
 			currentHash, hash))
 	} else {
-		logger.V(logs.LogInfo).Info("EventTrigger has not changed")
+		logger.V(logs.LogDebug).Info("EventTrigger has not changed")
 	}
 
 	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, r.Client, cluster.Namespace,
@@ -478,7 +480,7 @@ func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Conte
 	var result deployer.Result
 
 	if isConfigSame {
-		logger.V(logs.LogInfo).Info("EventTrigger has not changed")
+		logger.V(logs.LogDebug).Info("EventTrigger has not changed")
 		result = r.Deployer.GetResult(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id,
 			clusterproxy.GetClusterType(cluster), false)
 		deployerStatus = r.convertResultStatus(result)
@@ -489,12 +491,7 @@ func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Conte
 	if deployerStatus != nil {
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("result is available %q. updating status.", *deployerStatus))
 
-		clusterInfo = &libsveltosv1beta1.ClusterInfo{
-			Cluster:        *cluster,
-			Status:         *deployerStatus,
-			Hash:           currentHash,
-			FailureMessage: nil,
-		}
+		clusterInfo.Status = *deployerStatus
 
 		if result.Err != nil {
 			errorMessage := result.Err.Error()
@@ -519,7 +516,7 @@ func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Conte
 		clusterInfo.Status = libsveltosv1beta1.SveltosStatusProvisioned
 		clusterInfo.FailureMessage = nil
 	} else {
-		logger.V(logs.LogInfo).Info("no result is available. queue job and mark status as provisioning")
+		logger.V(logs.LogDebug).Info("no result is available. queue job and mark status as provisioning")
 		clusterInfo.Status = libsveltosv1beta1.SveltosStatusProvisioning
 		options := deployer.Options{HandlerOptions: make(map[string]any)}
 		options.HandlerOptions[configurationHash] = currentHash
@@ -561,6 +558,8 @@ func (r *EventTriggerReconciler) proceedDeployingEventTriggerInPullMode(ctx cont
 				logger.V(logs.LogDebug).Info(msg)
 				clusterInfo.FailureMessage = &msg
 				return clusterInfo, err
+			} else {
+				isConfigSame = false
 			}
 		} else {
 			isConfigSame = reflect.DeepEqual(pullmodeHash, currentHash)
@@ -641,7 +640,7 @@ func (r *EventTriggerReconciler) proceesAgentDeploymentStatus(ctx context.Contex
 			return &provisioning, nil
 		} else if pullmode.IsActionNotSetToDeploy(err) {
 			_ = pullmode.TerminateDeploymentTracking(ctx, r.Client, cluster.Namespace,
-				cluster.Name, v1beta1.EventTriggerKind, eventTrigger.Name, v1beta1.FeatureEventTrigger, logger)
+				cluster.Name, v1beta1.EventTriggerKind, eventTrigger.Name, f.id, logger)
 		}
 		return nil, err
 	}
@@ -662,6 +661,18 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 		Cluster: *cluster,
 		Status:  libsveltosv1beta1.SveltosStatusRemoving,
 		Hash:    currentHash,
+	}
+
+	isPresent, isDeleted, err := r.isClusterPresent(ctx, cluster)
+	if err != nil {
+		failureMessage := err.Error()
+		clusterInfo.FailureMessage = &failureMessage
+		return clusterInfo, err
+	}
+
+	if !isPresent || isDeleted {
+		clusterInfo.Status = libsveltosv1beta1.SveltosStatusRemoved
+		return clusterInfo, nil
 	}
 
 	// Remove any queued entry to deploy/evaluate
@@ -840,7 +851,7 @@ func (r *EventTriggerReconciler) canProceed(ctx context.Context, eScope *scope.E
 	}
 
 	if !ready {
-		logger.V(logs.LogInfo).Info("Cluster is not ready yet")
+		logger.V(logs.LogDebug).Info("Cluster is not ready yet")
 		return false, nil
 	}
 
@@ -942,7 +953,7 @@ func deployEventSource(ctx context.Context, c client.Client,
 	remoteClient, err = clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
 		"", "", clusterType, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get managed cluster client: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get managed cluster client")
 		return err
 	}
 
@@ -952,7 +963,7 @@ func deployEventSource(ctx context.Context, c client.Client,
 	err = createOrUpdateEventSource(ctx, remoteClient, eventTrigger, currentEventSource,
 		clusterNamespace, clusterName, isPullMode, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to create/update EventSource: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to create/update EventSource")
 		return err
 	}
 
@@ -1056,14 +1067,14 @@ func removeStaleEventReports(ctx context.Context, c client.Client,
 	eventReportList := &libsveltosv1beta1.EventReportList{}
 	err := c.List(ctx, eventReportList, listOptions...)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to list EventReports. Err: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to list EventReports.")
 		return err
 	}
 
 	for i := range eventReportList.Items {
 		err = c.Delete(ctx, &eventReportList.Items[i])
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to delete EventReport. Err: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to delete EventReport")
 			return err
 		}
 	}
@@ -1123,30 +1134,17 @@ func proceedRemovingStaleEventSources(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
 	eventTrigger *v1beta1.EventTrigger, removeAll bool, logger logr.Logger) error {
 
-	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, c, clusterNamespace, clusterName,
-		clusterType, logger)
-	if err != nil {
-		msg := fmt.Sprintf("failed to verify if Cluster is in pull mode: %v", err)
-		logger.V(logs.LogDebug).Info(msg)
-		return err
-	}
-
-	if isPullMode {
-		// Sveltos-applier automatically remove stale EventSources on the managed cluster
-		return nil
-	}
-
 	remoteClient, err := clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
 		"", "", clusterType, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get managed cluster client: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get managed cluster client")
 		return err
 	}
 
 	eventSources := &libsveltosv1beta1.EventSourceList{}
 	err = remoteClient.List(ctx, eventSources)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get list eventSources: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get list eventSources")
 		return err
 	}
 
@@ -1179,7 +1177,7 @@ func proceedRemovingStaleEventSources(ctx context.Context, c client.Client,
 			// Other EventTrigger are still deploying this very same policy
 			err = remoteClient.Update(ctx, es)
 			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get update EventSource: %v", err))
+				logger.V(logs.LogInfo).Error(err, "failed to get update EventSource")
 				return err
 			}
 			continue
@@ -1195,7 +1193,7 @@ func proceedRemovingStaleEventSources(ctx context.Context, c client.Client,
 		l.V(logs.LogDebug).Info("deleting EventSource from managed cluster")
 		err = remoteClient.Delete(ctx, es)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get delete EventSource: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to get delete EventSource")
 			return err
 		}
 	}
@@ -1266,15 +1264,15 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 		clusterProfiles, err = instantiateOneClusterProfilePerResource(ctx, c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, er, logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(
-				fmt.Sprintf("failed to create one clusterProfile instance per matching resource: %v", err))
+			logger.V(logs.LogInfo).Error(err,
+				"failed to create one clusterProfile instance per matching resource")
 			return err
 		}
 		// Instantiate ConfigMap/Secrets from ConfigMapGenerator/SecretGenerator
 		fromGenerators, err = instantiateFromGeneratorsPerResource(ctx, c, eventTrigger, er, clusterNamespace,
 			clusterName, clusterType, logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate from generators: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to instantiate from generators")
 			return err
 		}
 	} else {
@@ -1282,14 +1280,14 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 		clusterProfiles, err = instantiateOneClusterProfilePerAllResource(ctx, c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, er, logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(
-				fmt.Sprintf("failed to create one clusterProfile instance per matching resource: %v", err))
+			logger.V(logs.LogInfo).Error(err,
+				"failed to create one clusterProfile instance per matching resource")
 			return err
 		}
 		fromGenerators, err = instantiateFromGeneratorsPerAllResource(ctx, c, eventTrigger, er, clusterNamespace,
 			clusterName, clusterType, logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate from generators: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to instantiate from generators")
 			return err
 		}
 	}
@@ -1323,7 +1321,7 @@ func instantiateOneClusterProfilePerResource(ctx context.Context, c client.Clien
 	clusterProfiles := make([]*configv1beta1.ClusterProfile, 0)
 	objects, err := prepareCurrentObjectList(ctx, c, clusterNamespace, clusterName, clusterType, eventReport, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to prepare currentObject list %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to prepare currentObject list")
 		return nil, err
 	}
 
@@ -1369,11 +1367,12 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	clusterProfileName, err := getClusterProfileName(ctx, c, clusterNamespace, clusterName,
 		eventTrigger, object, labels, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile name: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get ClusterProfile name")
 		return nil, err
 	}
 
-	logger.V(logs.LogDebug).Info(fmt.Sprintf("instantiateClusterProfileForResource ClusterProfile name: %s", clusterProfileName))
+	logger.V(logs.LogDebug).Info(fmt.Sprintf(
+		"instantiateClusterProfileForResource ClusterProfile name: %s", clusterProfileName))
 
 	// It is important to add this label here (after we searched if a ClusterProfile already exists)
 	if er != nil && er.Labels != nil {
@@ -1413,7 +1412,7 @@ func instantiateClusterProfileForResource(ctx context.Context, c client.Client, 
 	dr, err := k8s_utils.GetDynamicResourceInterface(mgmtClusterConfig,
 		clusterProfile.GetObjectKind().GroupVersionKind(), clusterProfile.GetNamespace())
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get dynamic client: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get dynamic client")
 		return nil, err
 	}
 
@@ -1488,7 +1487,7 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	objects, err := prepareCurrentObjects(ctx, c, clusterNamespace, clusterName, clusterType,
 		eventReport, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to prepare currentObjects %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to prepare currentObjects")
 		return nil, err
 	}
 
@@ -1499,7 +1498,7 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	clusterProfileName, err := getClusterProfileName(ctx, c, clusterNamespace, clusterName,
 		eventTrigger, objects, labels, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get ClusterProfile name: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get ClusterProfile name")
 		return nil, err
 	}
 
@@ -1525,7 +1524,7 @@ func instantiateOneClusterProfilePerAllResource(ctx context.Context, c client.Cl
 	dr, err := k8s_utils.GetDynamicResourceInterface(mgmtClusterConfig,
 		clusterProfile.GetObjectKind().GroupVersionKind(), clusterProfile.GetNamespace())
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get dynamic client: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get dynamic client")
 		return nil, err
 	}
 
@@ -1584,7 +1583,7 @@ func setTemplateResourceRefs(clusterProfileSpec *configv1beta1.Spec,
 		eventTrigger.Spec.TemplateResourceRefs, funcmap.HasTextTemplateAnnotation(eventTrigger.Annotations),
 		logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate TemplateResourceRefs: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to instantiate TemplateResourceRefs")
 		return err
 	}
 	clusterProfileSpec.TemplateResourceRefs = templateResourceRefs
@@ -1725,13 +1724,13 @@ func instantiateSection(templateName string, toBeInstantiated []byte, data any,
 	tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
 		getTemplateFuncMap(useTxtFuncMap, logger)).Parse(string(toBeInstantiated))
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse template: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to parse template")
 		return nil, err
 	}
 
 	var buffer bytes.Buffer
 	if err = tmpl.Execute(&buffer, data); err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute template: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to execute template")
 		return nil, err
 	}
 
@@ -1744,21 +1743,21 @@ func instantiateHelmCharts(ctx context.Context, c client.Client, e *v1beta1.Even
 
 	helmChartJson, err := json.Marshal(helmCharts)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to marshel helmCharts: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to marshel helmCharts")
 		return nil, err
 	}
 
 	instantiatedData, err := instantiateSection(templateName, helmChartJson, data,
 		funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute template: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to execute template")
 		return nil, err
 	}
 
 	instantiatedHelmCharts := make([]configv1beta1.HelmChart, 0)
 	err = json.Unmarshal(instantiatedData, &instantiatedHelmCharts)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to unmarshal helmCharts: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to unmarshal helmCharts")
 		return nil, err
 	}
 
@@ -1779,21 +1778,21 @@ func instantiateKustomizationRefs(ctx context.Context, c client.Client, e *v1bet
 
 	kustomizationRefsJson, err := json.Marshal(kustomizationRefs)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to marshel kustomizationRefs: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to marshel kustomizationRefs")
 		return nil, err
 	}
 
 	instantiatedData, err := instantiateSection(templateName, kustomizationRefsJson, data,
 		funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute template: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to execute template")
 		return nil, err
 	}
 
 	instantiatedKustomizationRefs := make([]configv1beta1.KustomizationRef, 0)
 	err = json.Unmarshal(instantiatedData, &instantiatedKustomizationRefs)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to unmarshal kustomizationRefs: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to unmarshal kustomizationRefs")
 		return nil, err
 	}
 
@@ -1822,7 +1821,7 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, e *v1beta1.Even
 			instantiantedNamespace, err := instantiateSection(templateName, []byte(ref.Namespace), data,
 				funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate name: %v", err))
+				logger.V(logs.LogInfo).Error(err, "failed to instantiate name")
 				return err
 			}
 			namespace = string(instantiantedNamespace)
@@ -1831,7 +1830,7 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, e *v1beta1.Even
 		name, err := instantiateSection(templateName, []byte(ref.Name), data,
 			funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate name: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to instantiate name")
 			return err
 		}
 
@@ -1863,7 +1862,7 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, e *v1beta1.Even
 		} else {
 			name, err := getResourceName(ctx, c, resource, labels)
 			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get %s name: %v", resource.GetObjectKind(), err))
+				logger.V(logs.LogInfo).Error(err, fmt.Sprintf("failed to get %s name", resource.GetObjectKind()))
 				return err
 			}
 			// If referenced resource is a template, assume it needs to be instantiated using
@@ -1874,7 +1873,7 @@ func instantiateValuesFrom(ctx context.Context, c client.Client, e *v1beta1.Even
 			if err != nil {
 				msg := fmt.Sprintf("failed to instantiate content for ValuesFrom: %s/%s",
 					resource.GetNamespace(), resource.GetName())
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("%s. Error: %v", msg, err))
+				logger.V(logs.LogInfo).Error(err, msg)
 				return errors.Wrapf(err, "%s", msg)
 			}
 		}
@@ -1895,13 +1894,13 @@ func instantiateDataSection(templateName string, content map[string]string, data
 		tmpl, err := template.New(templateName).Option("missingkey=error").Funcs(
 			getTemplateFuncMap(useTxtFuncMap, logger)).Parse(content[key])
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse content: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to parse content")
 			return nil, err
 		}
 
 		var buffer bytes.Buffer
 		if err = tmpl.Execute(&buffer, data); err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to execute content: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to execute content")
 			return nil, err
 		}
 
@@ -2039,7 +2038,7 @@ func instantiateResources(ctx context.Context, c client.Client, e *v1beta1.Event
 		} else {
 			name, err := getResourceName(ctx, c, ref, labels)
 			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get %s name: %v", ref.GetObjectKind(), err))
+				logger.V(logs.LogInfo).Error(err, fmt.Sprintf("failed to get %s name", ref.GetObjectKind()))
 				return nil, err
 			}
 			// If referenced resource is a template, assume it needs to be instantiated using
@@ -2073,7 +2072,7 @@ func instantiateReferencedPolicy(ctx context.Context, e *v1beta1.EventTrigger, r
 	instantiatedContent, err := instantiateDataSection(templateName, content, objects,
 		funcmap.HasTextTemplateAnnotation(e.Annotations), l)
 	if err != nil {
-		l.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiated referenced resource content: %v", err))
+		l.V(logs.LogInfo).Error(err, "failed to instantiated referenced resource content")
 		return nil, err
 	}
 	content = instantiatedContent
@@ -2101,7 +2100,7 @@ func instantiateReferencedPolicy(ctx context.Context, e *v1beta1.EventTrigger, r
 	dr, err := k8s_utils.GetDynamicResourceInterface(mgmtClusterConfig,
 		instantiatedObject.GetObjectKind().GroupVersionKind(), instantiatedObject.GetNamespace())
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get dynamic client: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get dynamic client")
 		return nil, err
 	}
 
@@ -2110,8 +2109,8 @@ func instantiateReferencedPolicy(ctx context.Context, e *v1beta1.EventTrigger, r
 
 	err = updateResource(ctx, dr, instantiatedObject, logger)
 	if err != nil {
-		logger.V(logs.LogDebug).Info(fmt.Sprintf("failed to patch resource %s %s:%s: %v",
-			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName(), err))
+		logger.V(logs.LogInfo).Error(err, fmt.Sprintf("failed to patch resource %s %s:%s",
+			ref.GetObjectKind().GroupVersionKind().Kind, ref.GetNamespace(), ref.GetName()))
 		return nil, err
 	}
 
@@ -2488,7 +2487,7 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 
 	if err := removeClusterProfiles(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger, er,
 		clusterProfiles, logger); err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to remove stale clusterProfiles: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to remove stale clusterProfiles")
 		return err
 	}
 
@@ -2513,13 +2512,13 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 
 	if err := removeConfigMaps(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 		er, policyRefs, logger); err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to remove stale configMaps: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to remove stale configMaps")
 		return err
 	}
 
 	if err := removeSecrets(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger,
 		er, policyRefs, logger); err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to remove stale secrets: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to remove stale secrets")
 		return err
 	}
 
@@ -2592,7 +2591,7 @@ func removeConfigMaps(ctx context.Context, c client.Client, clusterNamespace, cl
 		}
 
 		if _, ok := policyRefs[*getPolicyRef(cm)]; !ok {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("deleting configMap %s", cm.Name))
+			logger.V(logs.LogDebug).Info(fmt.Sprintf("deleting configMap %s", cm.Name))
 			err = c.Delete(ctx, cm)
 			if err != nil {
 				return err
@@ -2636,7 +2635,7 @@ func removeSecrets(ctx context.Context, c client.Client, clusterNamespace, clust
 			continue
 		}
 		if _, ok := policyRefs[*getPolicyRef(secret)]; !ok {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("deleting secret %s", secret.Name))
+			logger.V(logs.LogDebug).Info(fmt.Sprintf("deleting secret %s", secret.Name))
 			err = c.Delete(ctx, secret)
 			if err != nil {
 				return err
@@ -2680,7 +2679,7 @@ func removeClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 	for i := range clusterProfileList.Items {
 		cp := &clusterProfileList.Items[i]
 		if _, ok := currentClusterProfiles[cp.Name]; !ok {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("deleting clusterProfile %s", cp.Name))
+			logger.V(logs.LogDebug).Info(fmt.Sprintf("deleting clusterProfile %s", cp.Name))
 			err = c.Delete(ctx, cp)
 			if err != nil {
 				return err
@@ -2713,12 +2712,12 @@ func fecthClusterObjects(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
 	logger logr.Logger) (map[string]interface{}, error) {
 
-	logger.V(logs.LogInfo).Info(fmt.Sprintf("Fetch cluster %s: %s/%s",
+	logger.V(logs.LogDebug).Info(fmt.Sprintf("Fetch cluster %s: %s/%s",
 		clusterType, clusterNamespace, clusterName))
 
 	genericCluster, err := clusterproxy.GetCluster(ctx, c, clusterNamespace, clusterName, clusterType)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to fetch cluster %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to fetch cluster")
 		return nil, err
 	}
 	return runtime.DefaultUnstructuredConverter.ToUnstructured(genericCluster)
@@ -3296,4 +3295,20 @@ func waitForClusterProfile(ctx context.Context, c client.Client, clusterProfileN
 			// Continue retrying on error
 		}
 	}
+}
+
+func (r *EventTriggerReconciler) isClusterPresent(ctx context.Context,
+	clusterRef *corev1.ObjectReference) (present, deleted bool, err error) {
+
+	var cluster client.Object
+
+	cluster, err = clusterproxy.GetCluster(ctx, r.Client, clusterRef.Namespace,
+		clusterRef.Name, clusterproxy.GetClusterType(clusterRef))
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, false, nil
+		}
+	}
+
+	return true, !cluster.GetDeletionTimestamp().IsZero(), err
 }

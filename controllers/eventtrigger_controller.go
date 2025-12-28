@@ -107,7 +107,7 @@ type EventTriggerReconciler struct {
 	// we need Cluster labels to know which EventTrigger to reconcile
 	ClusterLabels map[corev1.ObjectReference]map[string]string
 
-	// key: ClusterSet: value ClusterProfiles currently referencing the ClusterSet
+	// key: ClusterSet: value EventTriggers currently referencing the ClusterSet
 	ClusterSetMap map[corev1.ObjectReference]*libsveltosset.Set
 
 	// Reason for the two maps:
@@ -174,7 +174,7 @@ type EventTriggerReconciler struct {
 
 func (r *EventTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	logger := ctrl.LoggerFrom(ctx)
-	logger.V(logs.LogInfo).Info("Reconciling")
+	logger.V(logs.LogDebug).Info("Reconciling")
 
 	// Fecth the EventTrigger instance
 	eventTrigger := &v1beta1.EventTrigger{}
@@ -209,7 +209,7 @@ func (r *EventTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// changes.
 	defer func() {
 		if err := eventTriggerScope.Close(ctx); err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to update")
 			reterr = err
 		}
 	}()
@@ -229,7 +229,7 @@ func (r *EventTriggerReconciler) reconcileDelete(
 ) reconcile.Result {
 
 	logger := eventTriggerScope.Logger
-	logger.V(logs.LogInfo).Info("Reconciling EventTrigger delete")
+	logger.V(logs.LogDebug).Info("Reconciling EventTrigger delete")
 
 	eventTriggerScope.SetMatchingClusterRefs(nil)
 
@@ -245,7 +245,7 @@ func (r *EventTriggerReconciler) reconcileDelete(
 		controllerutil.RemoveFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer)
 	}
 
-	logger.V(logs.LogInfo).Info("Reconcile delete success")
+	logger.V(logs.LogDebug).Info("Reconcile delete success")
 	return reconcile.Result{}
 }
 
@@ -255,7 +255,7 @@ func (r *EventTriggerReconciler) reconcileNormal(
 ) reconcile.Result {
 
 	logger := eventTriggerScope.Logger
-	logger.V(logs.LogInfo).Info("Reconciling EventTrigger")
+	logger.V(logs.LogDebug).Info("Reconciling EventTrigger")
 
 	if !controllerutil.ContainsFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer) {
 		if err := r.addFinalizer(ctx, eventTriggerScope); err != nil {
@@ -287,7 +287,7 @@ func (r *EventTriggerReconciler) reconcileNormal(
 
 	err = r.updateMaps(eventTriggerScope, logger)
 	if err != nil {
-		logger.V(logs.LogDebug).Info("failed to update maps")
+		logger.V(logs.LogInfo).Error(err, "failed to update maps")
 		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
 
@@ -297,7 +297,7 @@ func (r *EventTriggerReconciler) reconcileNormal(
 		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
 	}
 
-	logger.V(logs.LogInfo).Info("Reconcile success")
+	logger.V(logs.LogDebug).Info("Reconcile success")
 	return reconcile.Result{}
 }
 
@@ -659,7 +659,7 @@ func (r *EventTriggerReconciler) getClustersFromClusterSets(ctx context.Context,
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get clusterset %s", clusterSetRefs[i]))
+			logger.V(logs.LogInfo).Error(err, fmt.Sprintf("failed to get clusterset %s", clusterSetRefs[i]))
 			return nil, err
 		}
 
