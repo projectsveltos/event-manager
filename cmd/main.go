@@ -52,6 +52,7 @@ import (
 
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/crd"
+	"github.com/projectsveltos/libsveltos/lib/deployer"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 
@@ -134,8 +135,12 @@ func main() {
 
 	controllers.SetVersion(version)
 
+	d := deployer.GetClient(ctx, ctrl.Log.WithName("deployer"), mgr.GetClient(), workers)
+	controllers.RegisterFeatures(d, setupLog)
+
 	var eventTriggerController controller.Controller
 	eventTriggerReconciler := getEventTriggerReconciler(mgr)
+	eventTriggerReconciler.Deployer = d
 
 	eventTriggerController, err = eventTriggerReconciler.SetupWithManager(mgr)
 	if err != nil {
