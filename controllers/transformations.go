@@ -247,10 +247,10 @@ func (r *EventTriggerReconciler) requeueEventTriggerForClusterSet(
 		Name:       clusterSet.GetName(),
 	}
 
-	// Get list of (Cluster)Profiles currently referencing the (Cluster)Set
+	// Get list of EventTriggers currently referencing the (Cluster)Set
 	currentConsumers := getConsumersForEntry(r.ClusterSetMap, &setInfo)
 
-	// Get all (Cluster)Profiles previously matching this cluster and reconcile those
+	// Get all EventTriggers previously matching this cluster and reconcile those
 	requests := make([]ctrl.Request, currentConsumers.Len())
 	consumers := currentConsumers.Items()
 
