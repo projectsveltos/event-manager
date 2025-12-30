@@ -52,7 +52,6 @@ type (
 )
 
 var (
-	RemoveClusterInfoEntry          = removeClusterInfoEntry
 	EventTriggerHash                = eventTriggerHash
 	RemoveStaleEventSources         = removeStaleEventSources
 	RemoveStaleEventReports         = removeStaleEventReports

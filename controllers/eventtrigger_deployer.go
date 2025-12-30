@@ -44,7 +44,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
@@ -498,7 +497,7 @@ func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Conte
 	clusterInfo := &libsveltosv1beta1.ClusterInfo{
 		Cluster:        *cluster,
 		Hash:           currentHash,
-		FailureMessage: nil,
+		FailureMessage: stringPtr(""),
 		Status:         libsveltosv1beta1.SveltosStatusProvisioning,
 	}
 
@@ -534,6 +533,7 @@ func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Conte
 				return r.proceedDeployingEventTriggerInPullMode(ctx, eScope, cluster, f, isConfigSame,
 					currentHash, logger)
 			}
+
 			return clusterInfo, nil
 		}
 
@@ -907,36 +907,6 @@ func isClusterInfoForCluster(clusterInfo *libsveltosv1beta1.ClusterInfo, cluster
 	return clusterInfo.Cluster.Namespace == clusterNamespace &&
 		clusterInfo.Cluster.Name == clusterName &&
 		clusterproxy.GetClusterType(&clusterInfo.Cluster) == clusterType
-}
-
-func removeClusterInfoEntry(ctx context.Context, c client.Client,
-	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
-	resource *v1beta1.EventTrigger, logger logr.Logger) error {
-
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		currentResource := &v1beta1.EventTrigger{}
-		err := c.Get(ctx, types.NamespacedName{Name: resource.Name}, currentResource)
-		if err != nil {
-			return err
-		}
-
-		for i := range currentResource.Status.ClusterInfo {
-			cc := &currentResource.Status.ClusterInfo[i]
-			if isClusterInfoForCluster(cc, clusterNamespace, clusterName, clusterType) {
-				currentResource.Status.ClusterInfo = remove(currentResource.Status.ClusterInfo, i)
-				return c.Status().Update(context.TODO(), currentResource)
-			}
-		}
-
-		return nil
-	})
-
-	return err
-}
-
-func remove(s []libsveltosv1beta1.ClusterInfo, i int) []libsveltosv1beta1.ClusterInfo {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
 }
 
 // deployEventSource deploys (creates or updates) referenced EventSource.

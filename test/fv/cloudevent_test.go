@@ -143,6 +143,35 @@ var _ = Describe("CloudEvents", func() {
 				currentEventReport)
 		}, timeout, pollingInterval).Should(BeNil())
 
+		if isAgentLessMode() {
+			erName := getEventReportName(eventSource.Name)
+			Byf("Verifying EventReports %s status is processed", erName)
+			Eventually(func() bool {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				err := k8sClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: erName},
+					currentEventReport)
+				if err != nil {
+					return false
+				}
+				return currentEventReport.Status.Phase != nil &&
+					*currentEventReport.Status.Phase == libsveltosv1beta1.ReportProcessed
+			}, timeout, pollingInterval).Should(BeTrue())
+		} else {
+			erName := eventSource.Name
+			Eventually(func() bool {
+				currentEventReport := &libsveltosv1beta1.EventReport{}
+				err := workloadClient.Get(context.TODO(),
+					types.NamespacedName{Namespace: projectsveltos, Name: erName},
+					currentEventReport)
+				if err != nil {
+					return false
+				}
+				return currentEventReport.Status.Phase != nil &&
+					*currentEventReport.Status.Phase == libsveltosv1beta1.ReportProcessed
+			}, timeout, pollingInterval).Should(BeTrue())
+		}
+
 		subject := randomString()
 		//nolint: lll // line with cloudEvent
 		jsonString := fmt.Sprintf(`{"specversion":"1.0","id":"10001","source":"my.source","type":"my.type","subject":%q,"datacontenttype":"application/json","data":{"message":"hello"}}`, subject)
