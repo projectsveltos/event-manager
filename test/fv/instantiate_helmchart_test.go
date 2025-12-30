@@ -45,7 +45,6 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 	It("Verifies ClusterProfiles with helmChart and ValuesFrom is instantiated", Label("FV", "PULLMODE"), func() {
 		serviceNamespace := randomString()
 
-		Byf("Create a EventSource matching in namespace: %s", serviceNamespace)
 		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
@@ -65,9 +64,10 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 				CollectResources: true,
 			},
 		}
+		Byf("Create a EventSource %s matching in namespace: %s",
+			eventSource.Name, serviceNamespace)
 		Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
-		By("Creating a ConfigMap containing helm chart values")
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
@@ -82,9 +82,9 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 				"values.yaml": `nameOverride: "{{ .Resource.metadata.name }}"`,
 			},
 		}
+		Byf("Creating a ConfigMap %s/%s containing helm chart values", cm.Namespace, cm.Name)
 		Expect(k8sClient.Create(context.TODO(), cm)).To(Succeed())
 
-		Byf("Create a EventTrigger referencing EventSource %s", eventSource.Name)
 		eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
 			map[string]string{key: value}, []configv1beta1.PolicyRef{})
 		eventTrigger.Spec.OneForEvent = true
@@ -106,6 +106,8 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 				},
 			},
 		}
+		Byf("Create a EventTrigger %s referencing EventSource %s",
+			eventTrigger.Name, eventSource.Name)
 		Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
 
 		Byf("Getting client to access the workload cluster")

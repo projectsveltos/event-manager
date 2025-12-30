@@ -53,7 +53,6 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 		nsKey := randomString()
 		nsValue := randomString()
 
-		Byf("Create a EventSource matching a namespace with label %s=%s", nsKey, nsValue)
 		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
@@ -72,10 +71,11 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 				CollectResources: true,
 			},
 		}
+		Byf("Create a EventSource %s matching a namespace with label %s=%s",
+			eventSource.Name, nsKey, nsValue)
 		Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
 		cmName := randomString()
-		By("Creating a ConfigMap containing a ConfigMap")
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
@@ -85,6 +85,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 				"configmap": fmt.Sprintf(configMap, cmName),
 			},
 		}
+		Byf("Creating a ConfigMap %s/%s containing a ConfigMap", cm.Namespace, cm.Name)
 		Expect(k8sClient.Create(context.TODO(), cm)).To(Succeed())
 
 		policyRef := configv1beta1.PolicyRef{
@@ -94,11 +95,12 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 			DeploymentType: configv1beta1.DeploymentTypeLocal,
 		}
 
-		Byf("Create a EventTrigger referencing EventSource %s", eventSource.Name)
 		eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
 			map[string]string{key: value}, []configv1beta1.PolicyRef{policyRef})
 		eventTrigger.Spec.OneForEvent = false
 		eventTrigger.Spec.HelmCharts = nil
+		Byf("Create a EventTrigger %s referencing EventSource %s",
+			eventTrigger.Name, eventSource.Name)
 		Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
 
 		Byf("Getting client to access the workload cluster")

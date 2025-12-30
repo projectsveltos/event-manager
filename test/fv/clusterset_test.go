@@ -38,8 +38,9 @@ var _ = Describe("Reference ClusterSet", func() {
 	)
 
 	It("Verifies EventTrigger reacts to ClusterSet changes", Label("FV", "PULLMODE"), func() {
-		Byf("Create a ClusterSet matching Cluster %s/%s", kindWorkloadCluster.GetNamespace(), kindWorkloadCluster.GetName())
 		clusterSet := getClusterSet(namePrefix, map[string]string{key: value})
+		Byf("Create a ClusterSet %s matching Cluster %s/%s",
+			clusterSet.Name, kindWorkloadCluster.GetNamespace(), kindWorkloadCluster.GetName())
 		clusterSet.Spec.MaxReplicas = 1
 		Expect(k8sClient.Create(context.TODO(), clusterSet)).To(Succeed())
 		verifyClusterSetMatches(clusterSet)
@@ -60,7 +61,6 @@ var _ = Describe("Reference ClusterSet", func() {
 
 		serviceNamespace := randomString()
 
-		Byf("Create a EventSource matching Services in namespace: %s", serviceNamespace)
 		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
@@ -80,9 +80,10 @@ var _ = Describe("Reference ClusterSet", func() {
 				CollectResources: true,
 			},
 		}
+		Byf("Create a EventSource %s matching Services in namespace: %s",
+			eventSource.Name, serviceNamespace)
 		Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
-		Byf("Create a EventTrigger referencing EventSource %s and referencing the ClusterSet %s", eventSource.Name, clusterSet.Name)
 		eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
 			map[string]string{key: value}, []configv1beta1.PolicyRef{})
 		eventTrigger.Spec.OneForEvent = false
@@ -104,8 +105,9 @@ var _ = Describe("Reference ClusterSet", func() {
 				},
 			},
 		}
-
 		eventTrigger.Spec.ClusterSetRefs = []string{clusterSet.Name}
+		Byf("Create a EventTrigger %s referencing EventSource %s and referencing the ClusterSet %s",
+			eventTrigger.Name, eventSource.Name, clusterSet.Name)
 		Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
 
 		verifyEventTriggerMatches(eventTrigger)

@@ -86,7 +86,6 @@ var _ = Describe("Generators", func() {
 	It("Configures Generators and have ClusterProfile consume those", Label("FV", "PULLMODE"), func() {
 		secretNamespace := randomString()
 
-		Byf("Create a EventSource matching Secrets in namespace: %s", secretNamespace)
 		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: randomString(),
@@ -106,6 +105,8 @@ var _ = Describe("Generators", func() {
 				CollectResources: true,
 			},
 		}
+		Byf("Create a EventSource %s matching Secrets in namespace: %s",
+			eventSource.Name, secretNamespace)
 		Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
 		u, err := k8s_utils.GetUnstructured([]byte(toDeployConfigMap))
@@ -123,13 +124,13 @@ var _ = Describe("Generators", func() {
 			Name:      u.GetName(),
 		}
 
-		Byf("Create a EventTrigger referencing EventSource %s", eventSource.Name)
 		eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
 			map[string]string{key: value}, []configv1beta1.PolicyRef{policyRef})
 		eventTrigger.Spec.OneForEvent = true
-
 		u, err = k8s_utils.GetUnstructured([]byte(tokenConfigMap))
 		Expect(err).To(BeNil())
+		Byf("Create a EventTrigger %s referencing EventSource %s",
+			u.GetName(), eventSource.Name)
 		err = k8sClient.Create(context.TODO(), u)
 		if err != nil {
 			Expect(apierrors.IsAlreadyExists(err)).To(BeTrue())

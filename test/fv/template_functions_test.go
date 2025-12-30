@@ -53,7 +53,6 @@ var _ = Describe("Template functions", func() {
 			cmNamespace := randomString()
 			cmName := randomString()
 
-			Byf("Create a EventSource matching ConfigMap in namespace: %s", cmNamespace)
 			eventSource := libsveltosv1beta1.EventSource{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: randomString(),
@@ -74,9 +73,10 @@ var _ = Describe("Template functions", func() {
 					CollectResources: true,
 				},
 			}
+			Byf("Create a EventSource %s matching ConfigMap in namespace: %s",
+				eventSource.Name, cmNamespace)
 			Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
-			By("Creating a ConfigMap with instantiate annotation and using template functions")
 			cm := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "default",
@@ -91,6 +91,8 @@ var _ = Describe("Template functions", func() {
 					"copy": configMapWithFunctions,
 				},
 			}
+			Byf("Creating a ConfigMap %s/%s with instantiate annotation and using template functions",
+				cm.Namespace, cm.Name)
 			Expect(k8sClient.Create(context.TODO(), cm)).To(Succeed())
 
 			policyRef := configv1beta1.PolicyRef{
@@ -99,10 +101,11 @@ var _ = Describe("Template functions", func() {
 				Name:      cm.Name,
 			}
 
-			Byf("Create a EventTrigger referencing EventSource %s", eventSource.Name)
 			eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
 				map[string]string{key: value}, []configv1beta1.PolicyRef{policyRef})
 			eventTrigger.Spec.OneForEvent = true
+			Byf("Create a EventTrigger %s referencing EventSource %s",
+				eventTrigger.Name, eventSource.Name)
 			Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
 
 			Byf("Getting client to access the workload cluster")
