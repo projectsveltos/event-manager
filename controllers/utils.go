@@ -124,3 +124,7 @@ func SetVersion(v string) {
 func getVersion() string {
 	return version
 }
+
+func stringPtr(s string) *string {
+	return &s
+}

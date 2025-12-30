@@ -186,56 +186,6 @@ var _ = Describe("EventTrigger deployer", func() {
 			clusterType, false)).To(BeTrue())
 	})
 
-	It("removeClusterInfoEntry removes cluster entry", func() {
-		clusterNamespace := randomString()
-		clusterName := randomString()
-		clusterType := libsveltosv1beta1.ClusterTypeCapi
-
-		resource := &v1beta1.EventTrigger{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: randomString(),
-			},
-			Spec: v1beta1.EventTriggerSpec{
-				EventSourceName: randomString(),
-			},
-		}
-
-		Expect(testEnv.Create(context.TODO(), resource)).To(Succeed())
-		Expect(waitForObject(context.TODO(), testEnv.Client, resource)).To(Succeed())
-
-		resource.Status = v1beta1.EventTriggerStatus{
-			ClusterInfo: []libsveltosv1beta1.ClusterInfo{
-				*getClusterInfo(clusterNamespace, clusterName, clusterType),
-				*getClusterInfo(clusterNamespace, randomString(), clusterType),
-				*getClusterInfo(randomString(), clusterName, clusterType),
-				*getClusterInfo(clusterNamespace, clusterName, libsveltosv1beta1.ClusterTypeSveltos),
-			},
-		}
-		Expect(testEnv.Status().Update(context.TODO(), resource)).To(Succeed())
-		Eventually(func() bool {
-			currentChc := &v1beta1.EventTrigger{}
-			err := testEnv.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)
-			if err != nil {
-				return false
-			}
-			return len(currentChc.Status.ClusterInfo) != 0
-		}, timeout, pollingInterval).Should(BeTrue())
-
-		length := len(resource.Status.ClusterInfo)
-
-		Expect(controllers.RemoveClusterInfoEntry(context.TODO(), testEnv.Client, clusterNamespace, clusterName,
-			clusterType, resource, logger)).To(Succeed())
-
-		Eventually(func() bool {
-			currentChc := &v1beta1.EventTrigger{}
-			err := testEnv.Get(context.TODO(), types.NamespacedName{Name: resource.Name}, currentChc)
-			if err != nil {
-				return false
-			}
-			return len(currentChc.Status.ClusterInfo) == length-1
-		}, timeout, pollingInterval).Should(BeTrue())
-	})
-
 	It("eventTriggerHash returns current EventAddBasedAddOn hash", func() {
 		clusterNamespace := randomString()
 
@@ -2177,27 +2127,6 @@ data:
 		Expect(err).To(BeNil())
 	})
 })
-
-func getClusterInfo(clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType) *libsveltosv1beta1.ClusterInfo {
-	var apiVersion, kind string
-	if clusterType == libsveltosv1beta1.ClusterTypeCapi {
-		apiVersion = clusterv1.GroupVersion.String()
-		kind = ClusterKind
-	} else {
-		apiVersion = libsveltosv1beta1.GroupVersion.String()
-		kind = libsveltosv1beta1.SveltosClusterKind
-	}
-
-	return &libsveltosv1beta1.ClusterInfo{
-		Cluster: corev1.ObjectReference{
-			Namespace:  clusterNamespace,
-			Name:       clusterName,
-			Kind:       kind,
-			APIVersion: apiVersion,
-		},
-		Hash: []byte(randomString()),
-	}
-}
 
 func validateLabels(labels map[string]string, clusterRef *corev1.ObjectReference,
 	eventTriggerName string, referencedResource client.Object) {

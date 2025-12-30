@@ -25,6 +25,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/projectsveltos/event-manager/api/v1beta1"
@@ -73,33 +74,36 @@ func addEventSourceToConfigMap(ctx context.Context, c client.Client, clusterName
 	configMapName := mgmtagent.GetConfigMapName(clusterName, clusterType)
 	eventSourceEntryKey := mgmtagent.GetKeyForEventSource(et.Name, es.Name)
 
-	currentConfigMap := &corev1.ConfigMap{}
-	err := c.Get(ctx, types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}, currentConfigMap)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			currentConfigMap = &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: configMapNamespace,
-					Name:      configMapName,
-				},
-				Data: map[string]string{
-					eventSourceEntryKey: es.Name,
-				},
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		currentConfigMap := &corev1.ConfigMap{}
+		err := c.Get(ctx, types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}, currentConfigMap)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				currentConfigMap = &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: configMapNamespace,
+						Name:      configMapName,
+					},
+					Data: map[string]string{
+						eventSourceEntryKey: es.Name,
+					},
+				}
+				logger.V(logs.LogDebug).Info(fmt.Sprintf("creating entry %s in ConfigMap %s/%s",
+					eventSourceEntryKey, configMapNamespace, configMapName))
+				return c.Create(ctx, currentConfigMap)
 			}
-			logger.V(logs.LogDebug).Info(fmt.Sprintf("creating entry %s in ConfigMap %s/%s",
-				eventSourceEntryKey, configMapNamespace, configMapName))
-			return c.Create(ctx, currentConfigMap)
+			return err
 		}
-		return err
-	}
 
-	if currentConfigMap.Data == nil {
-		currentConfigMap.Data = map[string]string{}
-	}
-	currentConfigMap.Data[eventSourceEntryKey] = es.Name
-	logger.V(logs.LogDebug).Info(fmt.Sprintf("creating entry %s in ConfigMap %s/%s",
-		eventSourceEntryKey, configMapNamespace, configMapName))
-	return c.Update(ctx, currentConfigMap)
+		if currentConfigMap.Data == nil {
+			currentConfigMap.Data = map[string]string{}
+		}
+		currentConfigMap.Data[eventSourceEntryKey] = es.Name
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("creating entry %s in ConfigMap %s/%s",
+			eventSourceEntryKey, configMapNamespace, configMapName))
+		return c.Update(ctx, currentConfigMap)
+	})
+	return err
 }
 
 // When sveltos-agent is running in the management cluster, EventSources are not copied to the managed cluster.
@@ -111,27 +115,30 @@ func removeEventSourceFromConfigMap(ctx context.Context, c client.Client, cluste
 	configMapNamespace := clusterNamespace
 	configMapName := mgmtagent.GetConfigMapName(clusterName, clusterType)
 
-	currentConfigMap := &corev1.ConfigMap{}
-	err := c.Get(ctx, types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}, currentConfigMap)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-
-		return err
-	}
-
 	logger.V(logs.LogDebug).Info(fmt.Sprintf("removing entries for eventTrigger %s in ConfigMap %s/%s execpt %q",
 		et.Name, configMapNamespace, configMapName, leaveEntry))
 
-	for k, v := range currentConfigMap.Data {
-		if v == leaveEntry {
-			continue
-		}
-		if mgmtagent.IsEventSourceEntryForEventTrigger(k, et.Name) {
-			delete(currentConfigMap.Data, k)
-		}
-	}
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		currentConfigMap := &corev1.ConfigMap{}
+		err := c.Get(ctx, types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}, currentConfigMap)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
 
-	return c.Update(ctx, currentConfigMap)
+			return err
+		}
+
+		for k, v := range currentConfigMap.Data {
+			if v == leaveEntry {
+				continue
+			}
+			if mgmtagent.IsEventSourceEntryForEventTrigger(k, et.Name) {
+				delete(currentConfigMap.Data, k)
+			}
+		}
+
+		return c.Update(ctx, currentConfigMap)
+	})
+	return err
 }
