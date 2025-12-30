@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -343,18 +344,46 @@ func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Clie
 		nil, nil, nil, logger)
 }
 
+func sortResources(resources []client.Object) {
+	sort.Slice(resources, func(i, j int) bool {
+		a, b := resources[i], resources[j]
+
+		// 1. Sort by APIVersion
+		if a.GetObjectKind().GroupVersionKind().GroupVersion().String() !=
+			b.GetObjectKind().GroupVersionKind().GroupVersion().String() {
+
+			return a.GetObjectKind().GroupVersionKind().GroupVersion().String() <
+				b.GetObjectKind().GroupVersionKind().GroupVersion().String()
+		}
+
+		// 2. Sort by Kind
+		if a.GetObjectKind().GroupVersionKind().Kind != b.GetObjectKind().GroupVersionKind().Kind {
+			return a.GetObjectKind().GroupVersionKind().Kind < b.GetObjectKind().GroupVersionKind().Kind
+		}
+
+		// 3. Sort by Namespace
+		if a.GetNamespace() != b.GetNamespace() {
+			return a.GetNamespace() < b.GetNamespace()
+		}
+
+		// 4. Sort by Name
+		return a.GetName() < b.GetName()
+	})
+}
+
 // eventTriggerHash returns the EventTrigger hash
 func eventTriggerHash(ctx context.Context, c client.Client,
 	e *v1beta1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error) {
+
+	config := getVersion()
+	config += render.AsCode(e.Spec)
+	config += render.AsCode(e.Labels)
 
 	resources, err := fetchReferencedResources(ctx, c, e, cluster, logger)
 	if err != nil {
 		return nil, err
 	}
-
-	config := getVersion()
-	config += render.AsCode(e.Spec)
-	config += render.AsCode(e.Labels)
+	sortResources(resources)
 
 	for i := range resources {
 		switch r := resources[i].(type) {

@@ -59,7 +59,6 @@ var _ = Describe("CloudEvents", func() {
 	)
 
 	It("EventTrigger using matching CloudEvents", Label("FV", "PULLMODE"), func() {
-		Byf("Create a EventSource matching CloudEvents")
 		eventSource := libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namePrefix + randomString(),
@@ -75,6 +74,7 @@ var _ = Describe("CloudEvents", func() {
 				},
 			},
 		}
+		Byf("Create a EventSource %s matching CloudEvents", eventSource.Name)
 		Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
 		u, err := k8s_utils.GetUnstructured([]byte(cm))
@@ -92,10 +92,10 @@ var _ = Describe("CloudEvents", func() {
 			Name:      u.GetName(),
 		}
 
-		Byf("Create a EventTrigger referencing EventSource %s", eventSource.Name)
 		eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
 			map[string]string{key: value}, []configv1beta1.PolicyRef{policyRef})
 		eventTrigger.Spec.OneForEvent = true
+		Byf("Create a EventTrigger %s referencing EventSource %s", eventTrigger.Name, eventSource.Name)
 		Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
 
 		u, err = k8s_utils.GetUnstructured([]byte(tokenConfigMap))

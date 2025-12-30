@@ -50,7 +50,6 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 
 	It("Verifies ClusterProfiles are instantiated with names based on InstantiatedProfileNameFormat", Label("FV", "PULLMODE"),
 		func() {
-			Byf("Create a EventSource matching namespaces")
 			eventSource := libsveltosv1beta1.EventSource{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: randomString(),
@@ -69,9 +68,9 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 					CollectResources: true,
 				},
 			}
+			Byf("Create a EventSource %s matching namespaces", eventSource.Name)
 			Expect(k8sClient.Create(context.TODO(), &eventSource)).To(Succeed())
 
-			By("Creating a ConfigMap containing a ServiceAccount")
 			cm := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "default",
@@ -86,6 +85,7 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 					"sa": serviceAccount,
 				},
 			}
+			Byf("Creating a ConfigMap %s/%s containing a ServiceAccount", cm.Namespace, cm.Name)
 			Expect(k8sClient.Create(context.TODO(), cm)).To(Succeed())
 
 			policyRef := configv1beta1.PolicyRef{
@@ -94,11 +94,12 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 				Name:      cm.Name,
 			}
 
-			Byf("Create a EventTrigger referencing EventSource %s", eventSource.Name)
 			eventTrigger := getEventTrigger(namePrefix, eventSource.Name,
 				map[string]string{key: value}, []configv1beta1.PolicyRef{policyRef})
 			eventTrigger.Spec.OneForEvent = true
 			eventTrigger.Spec.InstantiatedProfileNameFormat = "{{ .Cluster.metadata.name }}-{{ .Resource.metadata.name }}-test"
+			Byf("Create a EventTrigger %s referencing EventSource %s",
+				eventTrigger.Name, eventSource.Name)
 			Expect(k8sClient.Create(context.TODO(), eventTrigger)).To(Succeed())
 
 			Byf("Getting client to access the workload cluster")
