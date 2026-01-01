@@ -179,22 +179,29 @@ var _ = Describe("CloudEvents", func() {
 
 		currentEventReport := &libsveltosv1beta1.EventReport{}
 		if isAgentLessMode() {
-			Byf("Updating EventReports in the management cluster adding a matching CloudEvent")
+			eventReportName := getEventReportName(eventSource.Name)
+			Byf("Updating EventReport %s/%s in the management cluster adding a matching CloudEvent",
+				kindWorkloadCluster.GetNamespace(), eventReportName)
 			Expect(k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: eventReportName},
 				currentEventReport)).To(Succeed())
 			currentEventReport.Spec.CloudEvents = [][]byte{jsonData}
 			Expect(k8sClient.Update(context.TODO(), currentEventReport)).To(Succeed())
+			Byf("Updated EventReport %s/%s in the management cluster adding a matching CloudEvent: %d",
+				kindWorkloadCluster.GetNamespace(), eventReportName, len(currentEventReport.Spec.CloudEvents))
 			waitingForDelivery := libsveltosv1beta1.ReportWaitingForDelivery
 			currentEventReport.Status.Phase = &waitingForDelivery
 			Expect(k8sClient.Status().Update(context.TODO(), currentEventReport)).To(Succeed())
 		} else {
-			Byf("Updating EventReports in the managed cluster adding a matching CloudEvent")
+			Byf("Updating EventReports %s/%s in the managed cluster adding a matching CloudEvent",
+				projectsveltos, eventSource.Name)
 			Expect(workloadClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
 				currentEventReport)).To(Succeed())
 			currentEventReport.Spec.CloudEvents = [][]byte{jsonData}
 			Expect(workloadClient.Update(context.TODO(), currentEventReport)).To(Succeed())
+			Byf("Updated EventReport %s/%s in the management cluster adding a matching CloudEvent: %d",
+				projectsveltos, eventSource.Name, len(currentEventReport.Spec.CloudEvents))
 			waitingForDelivery := libsveltosv1beta1.ReportWaitingForDelivery
 			currentEventReport.Status.Phase = &waitingForDelivery
 			Expect(workloadClient.Status().Update(context.TODO(), currentEventReport)).To(Succeed())
