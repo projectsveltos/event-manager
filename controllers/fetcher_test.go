@@ -464,6 +464,6 @@ var _ = Describe("Fetcher", func() {
 
 		result, err := controllers.FetchReferencedResources(context.TODO(), c, e, getClusterRef(cluster), logger)
 		Expect(err).To(BeNil())
-		Expect(len(result)).To(Equal(4)) // EventSource + EventReport + Referenced Resources
+		Expect(len(result)).To(Equal(3)) // EventSource + Referenced Resources
 	})
 })

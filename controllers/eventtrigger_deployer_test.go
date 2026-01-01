@@ -18,7 +18,6 @@ package controllers_test
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -29,7 +28,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/gdexlab/go-render/render"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -189,7 +187,28 @@ var _ = Describe("EventTrigger deployer", func() {
 	It("eventTriggerHash returns current EventAddBasedAddOn hash", func() {
 		clusterNamespace := randomString()
 
-		configMap := &corev1.ConfigMap{
+		configMap1 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: randomString(),
+			},
+		}
+
+		configMap2 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: randomString(),
+			},
+		}
+
+		secret1 := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      randomString(),
+				Namespace: randomString(),
+			},
+		}
+
+		secret2 := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      randomString(),
 				Namespace: randomString(),
@@ -226,8 +245,31 @@ var _ = Describe("EventTrigger deployer", func() {
 				PolicyRefs: []configv1beta1.PolicyRef{
 					{
 						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
-						Name:      configMap.Name,
-						Namespace: configMap.Namespace,
+						Name:      configMap1.Name,
+						Namespace: configMap1.Namespace,
+					},
+					{
+						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+						Name:      configMap2.Name,
+						Namespace: configMap2.Namespace,
+					},
+				},
+				TemplateResourceRefs: []configv1beta1.TemplateResourceRef{
+					{
+						Resource: corev1.ObjectReference{
+							Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+							Name:      secret1.Name,
+							Namespace: secret1.Namespace,
+						},
+						Identifier: randomString(),
+					},
+					{
+						Resource: corev1.ObjectReference{
+							Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+							Name:      secret2.Name,
+							Namespace: secret2.Namespace,
+						},
+						Identifier: randomString(),
 					},
 				},
 				EventSourceName: eventSource.Name,
@@ -237,27 +279,54 @@ var _ = Describe("EventTrigger deployer", func() {
 		initObjects := []client.Object{
 			cluster,
 			e,
-			configMap,
+			configMap1, configMap2,
+			secret1, secret2,
 			eventSource,
 			eventReport,
 		}
-
-		config := render.AsCode(e.Spec)
-		config += render.AsCode(e.Labels)
-		config += render.AsCode(eventSource.Spec)
-		config += render.AsCode(eventReport.Spec)
-		config += render.AsCode(configMap.Data)
-		h := sha256.New()
-		h.Write([]byte(config))
-		expectedHash := h.Sum(nil)
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 		Expect(addTypeInformationToObject(c.Scheme(), cluster)).To(Succeed())
 
+		expectedHash, err := controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
+		Expect(err).To(BeNil())
+		Expect(expectedHash).ToNot(BeNil())
+
+		// hash must be idempotent
+		for range 10 {
+			hash, err := controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
+			Expect(err).To(BeNil())
+			Expect(reflect.DeepEqual(hash, expectedHash)).To(BeTrue())
+		}
+
+		// change the spec now
+		e.Spec.DependsOn = []string{randomString()}
 		hash, err := controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
 		Expect(err).To(BeNil())
-		Expect(hash).ToNot(BeNil())
+		Expect(reflect.DeepEqual(hash, expectedHash)).To(BeFalse())
+
+		expectedHash = hash
+		currentEvenReport := &libsveltosv1beta1.EventReport{}
+		Expect(c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+			currentEvenReport)).To(Succeed())
+		// changing the EventReport does not change the hash
+		currentEvenReport.Spec = libsveltosv1beta1.EventReportSpec{
+			MatchingResources: []corev1.ObjectReference{
+				{
+					APIVersion: randomString(),
+					Kind:       randomString(),
+					Name:       randomString(),
+					Namespace:  randomString(),
+				},
+			},
+		}
+
+		Expect(c.Update(context.TODO(), currentEvenReport)).To(Succeed())
+
+		hash, err = controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
+		Expect(err).To(BeNil())
 		Expect(reflect.DeepEqual(hash, expectedHash)).To(BeTrue())
 	})
 

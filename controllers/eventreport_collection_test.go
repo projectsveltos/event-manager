@@ -178,7 +178,7 @@ var _ = Describe("EventSource Deployer", func() {
 		eventTriggerMap := map[string]libsveltosset.Set{}
 
 		Expect(controllers.CollectAndProcessEventReportsFromCluster(context.TODO(), testEnv.Client, getClusterRef(cluster),
-			eventSourceMap, eventTriggerMap, version, logger)).To(Succeed())
+			eventSourceMap, eventTriggerMap, version, false, logger)).To(Succeed())
 
 		clusterType := libsveltosv1beta1.ClusterTypeCapi
 
@@ -186,7 +186,7 @@ var _ = Describe("EventSource Deployer", func() {
 
 		// Update EventReports and validate again
 		Expect(controllers.CollectAndProcessEventReportsFromCluster(context.TODO(), testEnv.Client, getClusterRef(cluster),
-			eventSourceMap, eventTriggerMap, version, logger)).To(Succeed())
+			eventSourceMap, eventTriggerMap, version, false, logger)).To(Succeed())
 
 		validateEventReports(eventSourceName, cluster, &clusterType)
 	})
