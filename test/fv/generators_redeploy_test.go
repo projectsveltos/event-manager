@@ -177,7 +177,7 @@ data:
 		// This configuration will instruct Sveltos to:
 		// 1. watch for namespace with label imagepullsecret: required
 		// 2. copy the regcred Secret created above to this namespace
-		By("Deploy Sveltos configuration")
+		Byf("Deploy Sveltos configuration (EventTrigger: %s)", eventTriggerName)
 		configuration := fmt.Sprintf(sveltosConfig, configMapGeneratorName, namespaceLabel,
 			eventTriggerName, key, value, configMapGeneratorName)
 		objects, err := customSplit(configuration)

@@ -52,26 +52,14 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 	}
 
 	logger.V(logs.LogDebug).Info("fetch EventSource")
-	resource, err := fetchEventSource(ctx, c, cluster.Namespace, cluster.Name, e.Spec.EventSourceName,
+	eventSource, err := fetchEventSource(ctx, c, cluster.Namespace, cluster.Name, e.Spec.EventSourceName,
 		clusterproxy.GetClusterType(cluster), logger)
 	if err != nil {
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("Failed to fetch EventSource during hash evaluation: %v",
 			err))
 	}
-	if resource != nil {
-		result = append(result, resource)
-
-		logger.V(logs.LogDebug).Info("fetch EventReports")
-		var eventReports *libsveltosv1beta1.EventReportList
-		eventReports, err = fetchEventReports(ctx, c, cluster.Namespace, cluster.Name, resource.Name,
-			clusterproxy.GetClusterType(cluster))
-		if err != nil {
-			return nil, err
-		}
-
-		for i := range eventReports.Items {
-			result = append(result, &eventReports.Items[i])
-		}
+	if eventSource != nil {
+		result = append(result, eventSource)
 	}
 
 	clusterType := clusterproxy.GetClusterType(cluster)

@@ -330,7 +330,8 @@ func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Clie
 
 	logger.V(logs.LogDebug).Info("Undeploy eventTrigger. Removing EventReports")
 	// Remove all EventReports pulled from this managed cluster because of this EventSource
-	err = removeStaleEventReports(ctx, c, clusterNamespace, clusterName, "", clusterType, logger)
+	err = removeStaleEventReports(ctx, c, clusterNamespace, clusterName,
+		eventTrigger.Spec.EventSourceName, clusterType, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to remove stale EventReports")
 		return err
@@ -370,13 +371,45 @@ func sortResources(resources []client.Object) {
 	})
 }
 
-// eventTriggerHash returns the EventTrigger hash
+func getSortedSpec(spec *v1beta1.EventTriggerSpec) *v1beta1.EventTriggerSpec {
+	specCopy := spec.DeepCopy()
+
+	specCopy.PolicyRefs = getSortedPolicyRefs(spec.PolicyRefs)
+
+	specCopy.TemplateResourceRefs = getSortedTemplateResourceRefs(spec.TemplateResourceRefs)
+
+	specCopy.DriftExclusions = getSortedDriftExclusions(spec.DriftExclusions)
+
+	specCopy.KustomizationRefs = getSortedKustomizationRefs(spec.KustomizationRefs)
+
+	specCopy.HelmCharts = getSortedHelmCharts(spec.HelmCharts)
+
+	specCopy.Patches = getSortedPatches(spec.Patches)
+
+	specCopy.ValidateHealths = getSortedValidateHealths(spec.ValidateHealths)
+
+	sort.Strings(specCopy.ClusterSetRefs)
+	sort.Strings(specCopy.DependsOn)
+	return specCopy
+}
+
 func eventTriggerHash(ctx context.Context, c client.Client,
 	e *v1beta1.EventTrigger, cluster *corev1.ObjectReference, logger logr.Logger) ([]byte, error) {
 
-	config := getVersion()
-	config += render.AsCode(e.Spec)
-	config += render.AsCode(e.Labels)
+	var config strings.Builder
+	config.WriteString(getVersion())
+
+	specCopy := getSortedSpec(&e.Spec)
+	config.WriteString(render.AsCode(specCopy))
+
+	keys := make([]string, 0, len(e.Labels))
+	for k := range e.Labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		config.WriteString(fmt.Sprintf("%s:%s", k, e.Labels[k]))
+	}
 
 	resources, err := fetchReferencedResources(ctx, c, e, cluster, logger)
 	if err != nil {
@@ -387,32 +420,47 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 	for i := range resources {
 		switch r := resources[i].(type) {
 		case *corev1.ConfigMap:
-			config += render.AsCode(r.Data)
+			config.WriteString(render.AsCode(getSortedMap(r.Data)))
 		case *corev1.Secret:
-			config += render.AsCode(r.Data)
+			config.WriteString(render.AsCode(getSortedMapBinary(r.Data)))
+			config.WriteString(render.AsCode(getSortedMap(r.StringData)))
 		case *sourcev1b2.Bucket:
-			config += render.AsCode(r.Status.Artifact)
+			config.WriteString(render.AsCode(r.Status.Artifact))
 		case *sourcev1b2.OCIRepository:
-			config += render.AsCode(r.Status.Artifact)
+			config.WriteString(render.AsCode(r.Status.Artifact))
 		case *sourcev1.GitRepository:
-			config += render.AsCode(r.Status.Artifact)
+			config.WriteString(render.AsCode(r.Status.Artifact))
 		case *libsveltosv1beta1.EventSource:
-			config += render.AsCode(r.Spec)
+			config.WriteString(render.AsCode(r.Spec))
 		case *libsveltosv1beta1.EventReport:
-			config += render.AsCode(r.Spec)
+			reportCopy := r.DeepCopy()
+			sort.Slice(reportCopy.Spec.MatchingResources, func(i, j int) bool {
+				mi := reportCopy.Spec.MatchingResources[i]
+				mj := reportCopy.Spec.MatchingResources[j]
+				if mi.Kind != mj.Kind {
+					return mi.Kind < mj.Kind
+				}
+				if mi.Namespace != mj.Namespace {
+					return mi.Namespace < mj.Namespace
+				}
+				return mi.Name < mj.Name
+			})
+			sort.Slice(reportCopy.Spec.CloudEvents, func(i, j int) bool {
+				return string(reportCopy.Spec.CloudEvents[i]) < string(reportCopy.Spec.CloudEvents[j])
+			})
+			config.WriteString(render.AsCode(reportCopy.Spec))
 		default:
+			logger.Info("unsupported resource type in hash calculation", "type", fmt.Sprintf("%T", r))
 			panic(1)
 		}
 	}
 
-	// When in agentless mode, EventSources instances are not copued to managed cluster anymore.
-	// This addition ensures the EvenTrigger is redeployed due to the change in deployment location.
 	if getAgentInMgmtCluster() {
-		config += ("agentless")
+		config.WriteString("agentless")
 	}
 
 	h := sha256.New()
-	h.Write([]byte(config))
+	h.Write([]byte(config.String()))
 	return h.Sum(nil), nil
 }
 
@@ -474,6 +522,18 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 	if !isConfigSame {
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("EventTrigger has changed. Current hash %x. Previous hash %x",
 			currentHash, hash))
+		// Reset EventReport Status in the management cluster. This will cause ClusterProfiles to be updated. Deployment
+		// of ClusterProfiles happen when EventReport instances are collected. And only EventReport instances marked as non
+		// processed, are redeployed.
+		// Since something has changed in the EventTrigger configuration, this make sures ClusterProfiles are properly updated.
+		// Without this, only EventReport update (in the eventReport collection code) will trigger a ClusterProfile update.
+		err := r.resetEventReportStatusInMgmtCluster(ctx, eventTrigger, cluster, logger)
+		if err != nil {
+			msg := err.Error()
+			clusterInfo.FailureMessage = &msg
+			logger.V(logs.LogDebug).Error(err, "failed resetting EventReport status")
+			return clusterInfo, err
+		}
 	} else {
 		logger.V(logs.LogDebug).Info("EventTrigger has not changed")
 	}
@@ -1054,13 +1114,8 @@ func removeStaleEventReports(ctx context.Context, c client.Client,
 		client.MatchingLabels{
 			libsveltosv1beta1.EventReportClusterNameLabel: clusterName,
 			libsveltosv1beta1.EventReportClusterTypeLabel: strings.ToLower(string(clusterType)),
+			libsveltosv1beta1.EventSourceNameLabel:        eventSourceName,
 		},
-	}
-
-	if eventSourceName != "" {
-		listOptions = append(listOptions,
-			client.MatchingLabels{libsveltosv1beta1.EventSourceNameLabel: eventSourceName},
-		)
 	}
 
 	eventReportList := &libsveltosv1beta1.EventReportList{}
@@ -1238,6 +1293,7 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 	var err error
 	// If no resource is currently matching, clear all
 	if !er.DeletionTimestamp.IsZero() || !hasMatchingResources(er) {
+		logger.V(logs.LogDebug).Info("EventReport is deleted or has no matching resources")
 		// ClusterProfiles created because of CloudEvents are removed when CloudEventAction is set to Delete.
 		// Fetch all ClusterProfiles created because of CloudEvents by this eventTrigger and append to list
 		// of ClusterProfiles that are not stale
@@ -3310,4 +3366,34 @@ func (r *EventTriggerReconciler) isClusterPresent(ctx context.Context,
 	}
 
 	return true, !cluster.GetDeletionTimestamp().IsZero(), err
+}
+
+func (r *EventTriggerReconciler) resetEventReportStatusInMgmtCluster(ctx context.Context,
+	eventTrigger *v1beta1.EventTrigger, clusterRef *corev1.ObjectReference, logger logr.Logger) error {
+
+	clusterType := clusterproxy.GetClusterType(clusterRef)
+	eventReportName := libsveltosv1beta1.GetEventReportName(eventTrigger.Spec.EventSourceName,
+		clusterRef.Name, &clusterType)
+
+	currentEventReport := &libsveltosv1beta1.EventReport{}
+	err := r.Get(ctx,
+		types.NamespacedName{Namespace: clusterRef.Namespace, Name: eventReportName},
+		currentEventReport)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	if currentEventReport.Status.Phase == nil ||
+		*currentEventReport.Status.Phase != libsveltosv1beta1.ReportProcessed {
+
+		return nil
+	}
+	delivering := libsveltosv1beta1.ReportDelivering
+	currentEventReport.Status.Phase = &delivering
+	logger.V(logs.LogDebug).Info(fmt.Sprintf("Reset EventReport %s/%s Status.Phase",
+		currentEventReport.Namespace, currentEventReport.Name))
+	return r.Status().Update(ctx, currentEventReport)
 }

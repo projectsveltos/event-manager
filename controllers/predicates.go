@@ -46,10 +46,8 @@ func EventReportPredicates(logger logr.Logger) predicate.Funcs {
 				return true
 			}
 
-			// return true if EventReport Spec has changed
-			if !reflect.DeepEqual(oldER.Spec, newER.Spec) {
-				log.V(logs.LogVerbose).Info(
-					"EventReport changed. Will attempt to reconcile associated EventTriggers.")
+			if !reflect.DeepEqual(oldER, newER) {
+				log.V(logs.LogVerbose).Info("EventReport Spec changed")
 				return true
 			}
 

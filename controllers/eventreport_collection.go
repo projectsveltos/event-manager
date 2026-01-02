@@ -1,5 +1,5 @@
 /*
-Copyright 2023. projectsveltos.io. All rights reserved.
+Copyright 2023-2026. projectsveltos.io. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -68,8 +68,8 @@ func removeEventReports(ctx context.Context, c client.Client, eventSourceName st
 	}
 
 	for i := range eventReportList.Items {
-		cr := &eventReportList.Items[i]
-		err = c.Delete(ctx, cr)
+		er := &eventReportList.Items[i]
+		err = c.Delete(ctx, er)
 		if err != nil {
 			return err
 		}
@@ -184,6 +184,7 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 		// Make sharded controllers more aggressive in fetching
 		interval = 5 * time.Second
 	}
+	firstCollection := true
 
 	mgmtClusterSchema = s
 	mgmtClusterConfig = config
@@ -212,6 +213,8 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 			continue
 		}
 
+		allSuccessfull := true
+
 		for i := range clusterList {
 			cluster := &clusterList[i]
 
@@ -221,16 +224,23 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 			eventSourceMap, err := buildEventTriggersForEventSourceMap(ctx, cluster, eventTriggers)
 			if err != nil {
 				time.Sleep(interval)
+				allSuccessfull = false
 				continue
 			}
 
 			l := logger.WithValues("cluster", fmt.Sprintf("%s %s/%s", cluster.Kind, cluster.Namespace, cluster.Name))
 			err = collectAndProcessEventReportsFromCluster(ctx, c, cluster, eventSourceMap, eventTriggerMap,
-				version, l)
+				version, firstCollection, l)
 			if err != nil {
 				l.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventReports from cluster: %s/%s %v",
 					cluster.Namespace, cluster.Name, err))
+				allSuccessfull = false
 			}
+		}
+
+		if firstCollection && allSuccessfull {
+			// Keep track of the first time we were able to successfully collect from all clusters
+			firstCollection = false
 		}
 
 		time.Sleep(interval)
@@ -272,7 +282,7 @@ func skipCollecting(ctx context.Context, c client.Client, cluster *corev1.Object
 
 func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
 	eventSourceMap map[string][]*v1beta1.EventTrigger, eventTriggerMap map[string]libsveltosset.Set,
-	version string, logger logr.Logger) error {
+	version string, firstCollection bool, logger logr.Logger) error {
 
 	skipCollecting, err := skipCollecting(ctx, c, cluster, logger)
 	if err != nil {
@@ -339,12 +349,12 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 			continue
 		}
 
-		reprocessing := false
+		reprocessing := firstCollection
 		l := logger.WithValues("eventReport", er.Name)
 		// First update/delete eventReports in managemnent cluster
 		var mgmtClusterEventReport *libsveltosv1beta1.EventReport
 		if !er.DeletionTimestamp.IsZero() {
-			logger.V(logs.LogDebug).Info("deleting from management cluster")
+			l.V(logs.LogDebug).Info("deleting from management cluster")
 			err = deleteEventReport(ctx, c, cluster, er, l)
 			if err != nil {
 				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to delete EventReport in management cluster. Err: %v", err))
@@ -352,18 +362,19 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 			}
 			reprocessing = true
 		} else if shouldReprocess(er) {
-			logger.V(logs.LogDebug).Info("updating in management cluster")
+			l.V(logs.LogDebug).Info("updating in management cluster")
 			mgmtClusterEventReport, err = updateEventReport(ctx, c, cluster, er, isPullMode, l)
 			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to update EventReport in management cluster. Err: %v", err))
+				l.V(logs.LogInfo).Info(fmt.Sprintf("failed to update EventReport in management cluster. Err: %v", err))
 				continue
 			}
 			reprocessing = true
 		}
+
 		if !reprocessing {
 			continue
 		}
-
+		l.V(logs.LogDebug).Info("processing EventReport")
 		if getAgentInMgmtCluster() {
 			if mgmtClusterEventReport != nil {
 				// After ClusterProfiles are updated, EventReport status is updated to Processed.
@@ -373,18 +384,21 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 			}
 		}
 
-		err = updateAllClusterProfiles(ctx, c, cluster, er, eventSourceMap, eventTriggerMap, logger)
+		err = updateAllClusterProfiles(ctx, c, cluster, er, eventSourceMap, eventTriggerMap, l)
 		if err == nil {
-			updateEventReportStatus(ctx, clusterClient, er, logger)
+			updateEventReportStatus(ctx, clusterClient, er, l)
 		}
 	}
 	return nil
 }
 
-func updateEventReportStatus(ctx context.Context, clusterClient client.Client, er *libsveltosv1beta1.EventReport, logger logr.Logger) {
+func updateEventReportStatus(ctx context.Context, clusterClient client.Client, er *libsveltosv1beta1.EventReport,
+	logger logr.Logger) {
+
 	logger.V(logs.LogDebug).Info("updating EventReport")
 	// Update EventReport Status in managed cluster
 	if er.Spec.CloudEvents != nil {
+		logger.V(logs.LogDebug).Info(fmt.Sprintf("resetting CloudEvents (%d) in EventReport", len(er.Spec.CloudEvents)))
 		// Once a cloudEvent is processed, forget about it. This means CloudEvent is never stored in the
 		// management cluster and it is removed from the EventReport in the managed cluster. In other words
 		// CloudEvents are stored in the EventReport instances in the managed clusters till those are successfully
@@ -520,22 +534,6 @@ func updateEventReport(ctx context.Context, c client.Client, cluster *corev1.Obj
 	eventReport *libsveltosv1beta1.EventReport, isPullMode bool, logger logr.Logger,
 ) (*libsveltosv1beta1.EventReport, error) {
 
-	// In agentless mode, eventReports are directly created in the management cluster.
-	if getAgentInMgmtCluster() {
-		return eventReport, nil
-	}
-
-	// When Sveltos operates in pull mode, event reports are managed as follows:
-	// The sveltos-applier, running within the managed cluster, is responsible for copying EventReports
-	// to the management cluster. Consequently, the event-manager, located in the management cluster,
-	// retrieves these EventReports directly from the management cluster, anticipating that the sveltos-applier
-	// has already placed them there.
-	// Following logic copies the fetched EventReport to the management cluster. So it is not needed
-	// in pull mode.
-	if isPullMode {
-		return eventReport, nil
-	}
-
 	if eventReport.Labels == nil {
 		logger.V(logs.LogInfo).Info(eventReportMalformedLabelError)
 		return eventReport, errors.New(eventReportMalformedLabelError)
@@ -557,6 +555,22 @@ func updateEventReport(ctx context.Context, c client.Client, cluster *corev1.Obj
 		return nil, err
 	}
 	if !currentEventSource.DeletionTimestamp.IsZero() {
+		return eventReport, nil
+	}
+
+	// In agentless mode, eventReports are directly created in the management cluster.
+	if getAgentInMgmtCluster() {
+		return eventReport, nil
+	}
+
+	// When Sveltos operates in pull mode, event reports are managed as follows:
+	// The sveltos-applier, running within the managed cluster, is responsible for copying EventReports
+	// to the management cluster. Consequently, the event-manager, located in the management cluster,
+	// retrieves these EventReports directly from the management cluster, anticipating that the sveltos-applier
+	// has already placed them there.
+	// Following logic copies the fetched EventReport to the management cluster. So it is not needed
+	// in pull mode.
+	if isPullMode {
 		return eventReport, nil
 	}
 
