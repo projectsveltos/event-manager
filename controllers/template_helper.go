@@ -44,7 +44,7 @@ func getTemplateFuncMap(useTextTemplate bool, logger logr.Logger) template.FuncM
 		data, err := yaml.Marshal(uObject.UnstructuredContent())
 		if err != nil {
 			// Swallow errors inside of a template.
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed with err %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed")
 			return ""
 		}
 
@@ -54,7 +54,7 @@ func getTemplateFuncMap(useTextTemplate bool, logger logr.Logger) template.FuncM
 		v, isPresent, err := unstructured.NestedFieldCopy(u, strings.Split(fields, ".")...)
 		if err != nil {
 			// Swallow errors inside of a template.
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed with err %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed")
 			return ""
 		}
 
@@ -72,7 +72,7 @@ func getTemplateFuncMap(useTextTemplate bool, logger logr.Logger) template.FuncM
 		data, err := yaml.Marshal(uObject.UnstructuredContent())
 		if err != nil {
 			// Swallow errors inside of a template.
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed with err %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed")
 			return ""
 		}
 
@@ -82,7 +82,7 @@ func getTemplateFuncMap(useTextTemplate bool, logger logr.Logger) template.FuncM
 		err := unstructured.SetNestedField(u, value, strings.Split(fields, ".")...)
 		if err != nil {
 			// Swallow errors inside of a template.
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed with err %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed")
 			return ""
 		}
 
@@ -91,7 +91,7 @@ func getTemplateFuncMap(useTextTemplate bool, logger logr.Logger) template.FuncM
 		data, err := yaml.Marshal(uObject.UnstructuredContent())
 		if err != nil {
 			// Swallow errors inside of a template.
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed with err %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed")
 			return ""
 		}
 
@@ -106,7 +106,7 @@ func getTemplateFuncMap(useTextTemplate bool, logger logr.Logger) template.FuncM
 		err := unstructured.SetNestedField(u, value, strings.Split(fields, ".")...)
 		if err != nil {
 			// Swallow errors inside of a template.
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed with err %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed")
 			return nil
 		}
 

@@ -79,7 +79,7 @@ func newEventTriggerHistogram(clusterNamespace, clusterName string, clusterType 
 }
 
 func logCollectorError(err error, logger logr.Logger) {
-	logger.V(logs.LogVerbose).Info(fmt.Sprintf("failed to register collector: %v", err))
+	logger.V(logs.LogInfo).Error(err, "failed to register collector")
 }
 
 func programDuration(elapsed time.Duration, clusterNamespace, clusterName, featureID string,

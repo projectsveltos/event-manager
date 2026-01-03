@@ -850,7 +850,7 @@ func undeployEventTriggerInPullMode(ctx context.Context, c client.Client,
 	err = pullmode.RemoveDeployedResources(ctx, c, clusterNamespace, clusterName, v1beta1.EventTriggerKind, eventTrigger.Name,
 		v1beta1.FeatureEventTrigger, logger, setters...)
 	if err != nil {
-		logger.V(logs.LogDebug).Info(fmt.Sprintf("removeDeployedResources failed: %v", err))
+		logger.V(logs.LogDebug).Error(err, "removeDeployedResources failed")
 		return err
 	}
 
@@ -1077,7 +1077,7 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 	toDeployEventSource := getEventSourceToDeploy(eventSource)
 	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&toDeployEventSource)
 	if err != nil {
-		logger.V(logs.LogDebug).Info(fmt.Sprintf("failed to convert eventSource instance to unstructured: %v", err))
+		logger.V(logs.LogDebug).Error(err, "failed to convert eventSource instance to unstructured")
 	}
 
 	u := &unstructured.Unstructured{}
@@ -1763,7 +1763,7 @@ func getCloudEvents(eventReport *libsveltosv1beta1.EventReport, logger logr.Logg
 		var data map[string]interface{}
 		err := json.Unmarshal(eventReport.Spec.CloudEvents[i], &data)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to parse cloudEvent %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to parse cloudEvent")
 			return nil, err
 		}
 
@@ -2796,13 +2796,13 @@ func prepareCurrentObjects(ctx context.Context, c client.Client, clusterNamespac
 
 	resources, err := getResources(eventReport, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching resources %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get matching resources")
 		return nil, err
 	}
 
 	cloudEvents, err := getCloudEvents(eventReport, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching cloudEvents %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get matching cloudEvents")
 		return nil, err
 	}
 
@@ -2812,7 +2812,7 @@ func prepareCurrentObjects(ctx context.Context, c client.Client, clusterNamespac
 	}
 	cluster, err := fecthClusterObjects(ctx, c, clusterNamespace, clusterName, clusterType, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get cluster %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get cluster")
 		return nil, err
 	}
 
@@ -2830,13 +2830,13 @@ func prepareCurrentObjectList(ctx context.Context, c client.Client, clusterNames
 
 	cluster, err := fecthClusterObjects(ctx, c, clusterNamespace, clusterName, clusterType, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get cluster %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get cluster")
 		return nil, err
 	}
 
 	resources, err := getResources(eventReport, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching resources %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get matching resources")
 		return nil, err
 	}
 
@@ -2867,7 +2867,7 @@ func prepareCurrentObjectList(ctx context.Context, c client.Client, clusterNames
 
 	cloudEvents, err := getCloudEvents(eventReport, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get matching cloudEvents %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to get matching cloudEvents")
 		return nil, err
 	}
 	for i := range cloudEvents {
@@ -2936,7 +2936,7 @@ func instantiateFromGeneratorsPerResource(ctx context.Context, c client.Client, 
 
 	objects, err := prepareCurrentObjectList(ctx, c, clusterNamespace, clusterName, clusterType, er, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to prepare currentObject list %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to prepare currentObject list")
 		return nil, err
 	}
 
@@ -2993,7 +2993,7 @@ func instantiateFromGeneratorsPerAllResource(ctx context.Context, c client.Clien
 
 	objects, err := prepareCurrentObjects(ctx, c, clusterNamespace, clusterName, clusterType, er, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to prepare currentObjects %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to prepare currentObjects")
 		return nil, err
 	}
 
@@ -3125,7 +3125,8 @@ func instantiateResourceFromGenerator(ctx context.Context, c client.Client, gene
 	instantiatedName, err := instantiateSection(templateName, []byte(generator.InstantiatedResourceNameFormat), data,
 		funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate %q: %v", generator.InstantiatedResourceNameFormat, err))
+		logger.V(logs.LogInfo).Error(err,
+			fmt.Sprintf("failed to instantiate %q", generator.InstantiatedResourceNameFormat))
 		return nil, err
 	}
 
@@ -3280,7 +3281,7 @@ func instantiateCloudEventAction(clusterNamespace, clusterName string, eventTrig
 	instantiatedData, err := instantiateSection(templateName, []byte(eventTrigger.Spec.CloudEventAction), data,
 		funcmap.HasTextTemplateAnnotation(eventTrigger.Annotations), logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to instantiate CloudEventAction template: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to instantiate CloudEventAction template")
 		return nil, err
 	}
 

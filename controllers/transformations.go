@@ -152,7 +152,7 @@ func (r *EventTriggerReconciler) requeueEventTriggerForACluster(
 
 		clusterSelector, err := metav1.LabelSelectorAsSelector(&eventTriggerSelector.LabelSelector)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to convert selector %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to convert selector")
 			continue
 		}
 
@@ -211,7 +211,7 @@ func (r *EventTriggerReconciler) requeueEventTriggerForMachine(
 			eventTriggerSelector := r.EventTriggers[k]
 			clusterSelector, err := metav1.LabelSelectorAsSelector(&eventTriggerSelector.LabelSelector)
 			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to convert selector %v", err))
+				logger.V(logs.LogInfo).Error(err, "failed to convert selector")
 				continue
 			}
 			if clusterSelector.Matches(labels.Set(clusterLabels)) {
