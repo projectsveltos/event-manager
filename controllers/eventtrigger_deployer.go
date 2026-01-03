@@ -485,7 +485,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 	clusterInfo := &libsveltosv1beta1.ClusterInfo{
 		Cluster:        *cluster,
 		Hash:           currentHash,
-		FailureMessage: nil,
+		FailureMessage: stringPtr(""),
 		Status:         libsveltosv1beta1.SveltosStatusProvisioning,
 	}
 
@@ -603,7 +603,7 @@ func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Conte
 	} else if isConfigSame && currentStatus != nil && *currentStatus == libsveltosv1beta1.SveltosStatusProvisioned {
 		logger.V(logs.LogDebug).Info("already deployed")
 		clusterInfo.Status = libsveltosv1beta1.SveltosStatusProvisioned
-		clusterInfo.FailureMessage = nil
+		clusterInfo.FailureMessage = stringPtr("")
 	} else {
 		logger.V(logs.LogDebug).Info("no result is available. queue job and mark status as provisioning")
 		clusterInfo.Status = libsveltosv1beta1.SveltosStatusProvisioning
@@ -633,7 +633,7 @@ func (r *EventTriggerReconciler) proceedDeployingEventTriggerInPullMode(ctx cont
 	clusterInfo := &libsveltosv1beta1.ClusterInfo{
 		Cluster:        *cluster,
 		Hash:           currentHash,
-		FailureMessage: nil,
+		FailureMessage: stringPtr(""),
 		Status:         libsveltosv1beta1.SveltosStatusProvisioning,
 	}
 

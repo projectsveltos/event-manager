@@ -357,7 +357,7 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 			l.V(logs.LogDebug).Info("deleting from management cluster")
 			err = deleteEventReport(ctx, c, cluster, er, l)
 			if err != nil {
-				logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to delete EventReport in management cluster. Err: %v", err))
+				logger.V(logs.LogInfo).Error(err, "failed to delete EventReport in management cluster")
 				continue
 			}
 			reprocessing = true
@@ -365,7 +365,7 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 			l.V(logs.LogDebug).Info("updating in management cluster")
 			mgmtClusterEventReport, err = updateEventReport(ctx, c, cluster, er, isPullMode, l)
 			if err != nil {
-				l.V(logs.LogInfo).Info(fmt.Sprintf("failed to update EventReport in management cluster. Err: %v", err))
+				l.V(logs.LogInfo).Error(err, "failed to update EventReport in management cluster")
 				continue
 			}
 			reprocessing = true
