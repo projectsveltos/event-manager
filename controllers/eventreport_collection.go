@@ -63,7 +63,7 @@ func removeEventReports(ctx context.Context, c client.Client, eventSourceName st
 	eventReportList := &libsveltosv1beta1.EventReportList{}
 	err := c.List(ctx, eventReportList, listOptions...)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to list EventReports. Err: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to list EventReports")
 		return err
 	}
 
@@ -92,7 +92,7 @@ func removeEventReportsFromCluster(ctx context.Context, c client.Client, cluster
 	eventReportList := &libsveltosv1beta1.EventReportList{}
 	err := c.List(ctx, eventReportList, listOptions...)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to list EventReports. Err: %v", err))
+		logger.V(logs.LogInfo).Error(err, "failed to list EventReports.")
 		return err
 	}
 
@@ -196,7 +196,7 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 		eventTriggers := &v1beta1.EventTriggerList{}
 		err := c.List(ctx, eventTriggers)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get eventTriggers: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to get eventTriggers")
 			time.Sleep(interval)
 			continue
 		}
@@ -208,7 +208,7 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 		clusterList, err := clusterproxy.GetListOfClustersForShardKey(ctx, c, "", capiOnboardAnnotation,
 			shardKey, logger)
 		if err != nil {
-			logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get clusters: %v", err))
+			logger.V(logs.LogInfo).Error(err, "failed to get clusters")
 			time.Sleep(interval)
 			continue
 		}
@@ -232,8 +232,9 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 			err = collectAndProcessEventReportsFromCluster(ctx, c, cluster, eventSourceMap, eventTriggerMap,
 				version, firstCollection, l)
 			if err != nil {
-				l.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventReports from cluster: %s/%s %v",
-					cluster.Namespace, cluster.Name, err))
+				l.V(logs.LogInfo).Error(err,
+					fmt.Sprintf("failed to collect EventReports from cluster: %s/%s",
+						cluster.Namespace, cluster.Name))
 				allSuccessfull = false
 			}
 		}
@@ -493,8 +494,8 @@ func updateAllClusterProfiles(ctx context.Context, mgmtClient client.Client, clu
 		err := updateClusterProfiles(ctx, mgmtClient, cluster.Namespace, cluster.Name, clusterType,
 			eventTriggers[i], er, l)
 		if err != nil {
-			l.V(logs.LogInfo).Info(fmt.Sprintf("failed to update ClusterProfile for EventTrigger %s: %v",
-				eventTriggers[i].GetName(), err))
+			l.V(logs.LogInfo).Error(err, fmt.Sprintf("failed to update ClusterProfile for EventTrigger %s",
+				eventTriggers[i].GetName()))
 			return err
 		}
 	}

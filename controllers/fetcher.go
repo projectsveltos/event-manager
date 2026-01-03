@@ -55,8 +55,7 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 	eventSource, err := fetchEventSource(ctx, c, cluster.Namespace, cluster.Name, e.Spec.EventSourceName,
 		clusterproxy.GetClusterType(cluster), logger)
 	if err != nil {
-		logger.V(logs.LogDebug).Info(fmt.Sprintf("Failed to fetch EventSource during hash evaluation: %v",
-			err))
+		logger.V(logs.LogDebug).Error(err, "failed to fetch EventSource during hash evaluation")
 	}
 	if eventSource != nil {
 		result = append(result, eventSource)
@@ -74,8 +73,7 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 		referencedResources, err := collectResourcesFromConfigMapGenerators(ctx, c, object, e,
 			templateName, cluster, logger)
 		if err != nil {
-			logger.V(logs.LogDebug).Info(fmt.Sprintf("Failed to fetch ConfigMapGenerators during hash evaluation: %v",
-				err))
+			logger.V(logs.LogInfo).Error(err, "failed to fetch ConfigMapGenerators during hash evaluation")
 		} else {
 			result = append(result, referencedResources...)
 		}
@@ -83,16 +81,14 @@ func fetchReferencedResources(ctx context.Context, c client.Client,
 		referencedResources, err = collectResourcesFromSecretGenerators(ctx, c, object, e,
 			templateName, cluster, logger)
 		if err != nil {
-			logger.V(logs.LogDebug).Info(fmt.Sprintf("Failed to fetch SecretGenerators during hash evaluation: %v",
-				err))
+			logger.V(logs.LogInfo).Error(err, "failed to fetch SecretGenerators during hash evaluation")
 		} else {
 			result = append(result, referencedResources...)
 		}
 
 		local, remote, err := fetchPolicyRefs(ctx, c, e, cluster, object, templateName, logger)
 		if err != nil {
-			logger.V(logs.LogDebug).Info(fmt.Sprintf("Failed to fetch PolicyRefs during hash evaluation: %v",
-				err))
+			logger.V(logs.LogInfo).Error(err, "failed to fetch PolicyRefs during hash evaluation")
 		} else {
 			result = appendToResult(result, local)
 			result = appendToResult(result, remote)
@@ -223,16 +219,16 @@ func fetchEventSource(ctx context.Context, c client.Client,
 	instantiatedEventSourceName, err := libsveltostemplate.GetReferenceResourceName(ctx, c,
 		clusterNamespace, clusterName, eventSourceName, clusterType)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get EventSource Name %s: %v",
-			eventSourceName, err))
+		logger.V(logs.LogInfo).Error(err, fmt.Sprintf("failed to get EventSource Name %s",
+			eventSourceName))
 		return nil, err
 	}
 
 	eventSource := &libsveltosv1beta1.EventSource{}
 	err = c.Get(ctx, types.NamespacedName{Name: instantiatedEventSourceName}, eventSource)
 	if err != nil {
-		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventSource %s: %v",
-			instantiatedEventSourceName, err))
+		logger.V(logs.LogInfo).Error(err, fmt.Sprintf("failed to collect EventSource %s",
+			instantiatedEventSourceName))
 
 		if apierrors.IsNotFound(err) {
 			return nil, nil

@@ -273,7 +273,7 @@ func capiWatchers(ctx context.Context, mgr ctrl.Manager, eventTriggerReconciler 
 		capiPresent, err := isCAPIInstalled(ctx, mgr.GetClient())
 		if err != nil {
 			if retries < maxRetries {
-				logger.Info(fmt.Sprintf("failed to verify if CAPI is present: %v", err))
+				logger.V(logs.LogInfo).Error(err, "failed to verify if CAPI is present")
 				time.Sleep(time.Second)
 			}
 			retries++
