@@ -43,11 +43,11 @@ type ClusterReconciler struct {
 
 func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
-	logger.V(logs.LogInfo).Info("Reconciling Cluster")
+	logger.V(logs.LogDebug).Info("Reconciling Cluster")
 
 	// Fecth the Cluster instance
 	cluster := &clusterv1.Cluster{}
-	return processCluster(ctx, r.Client, cluster, req, logger)
+	return processCluster(ctx, r.Client, cluster, req, libsveltosv1beta1.ClusterTypeCapi, logger)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -57,13 +57,13 @@ func (r *ClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func processCluster(ctx context.Context, c client.Client, cluster client.Object, req ctrl.Request,
-	logger logr.Logger) (ctrl.Result, error) {
+func processCluster(ctx context.Context, c client.Client, cluster client.Object,
+	req ctrl.Request, clusterType libsveltosv1beta1.ClusterType, logger logr.Logger) (ctrl.Result, error) {
 
 	if err := c.Get(ctx, req.NamespacedName, cluster); err != nil {
 		if apierrors.IsNotFound(err) {
 			err = removeEventReportsFromCluster(ctx, c, req.Namespace, req.Name,
-				libsveltosv1beta1.ClusterTypeCapi, map[string]bool{}, logger)
+				clusterType, map[string]bool{}, logger)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -80,7 +80,7 @@ func processCluster(ctx context.Context, c client.Client, cluster client.Object,
 	// Handle deleted cluster
 	if !cluster.GetDeletionTimestamp().IsZero() {
 		err := removeEventReportsFromCluster(ctx, c, req.Namespace, req.Name,
-			libsveltosv1beta1.ClusterTypeCapi, map[string]bool{}, logger)
+			clusterType, map[string]bool{}, logger)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

@@ -41,7 +41,7 @@ type EventSourceReconciler struct {
 // +kubebuilder:rbac:groups=lib.projectsveltos.io,resources=eventsources/finalizers,verbs=update
 func (r *EventSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
-	logger.V(logs.LogInfo).Info("Reconciling EventSource")
+	logger.V(logs.LogDebug).Info("Reconciling EventSource")
 
 	// Fecth the EventSource instance
 	eventSource := &libsveltosv1beta1.EventSource{}
