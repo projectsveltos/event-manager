@@ -38,11 +38,11 @@ type SveltosClusterReconciler struct {
 
 func (r *SveltosClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
-	logger.V(logs.LogInfo).Info("Reconciling SveltosCluster")
+	logger.V(logs.LogDebug).Info("Reconciling SveltosCluster")
 
 	// Fecth the SveltosCluster instance
 	sveltosCluster := &libsveltosv1beta1.SveltosCluster{}
-	return processCluster(ctx, r.Client, sveltosCluster, req, logger)
+	return processCluster(ctx, r.Client, sveltosCluster, req, libsveltosv1beta1.ClusterTypeSveltos, logger)
 }
 
 // SetupWithManager sets up the controller with the Manager.
