@@ -39,7 +39,6 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
@@ -273,74 +272,6 @@ func getClusterRef(cluster client.Object) *corev1.ObjectReference {
 		APIVersion: apiVersion,
 		Kind:       kind,
 	}
-}
-
-// prepareClient creates a client with a ClusterSummary, CAPI Cluster and a EventTrigger matching such cluster.
-// ClusterSummary has provisioned all add-ons
-// Cluster API cluster
-func prepareClient(clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType) client.Client {
-	initialized := true
-	cluster := &clusterv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: clusterNamespace,
-			Name:      clusterName,
-		},
-		Status: clusterv1.ClusterStatus{
-			Initialization: clusterv1.ClusterInitializationStatus{
-				ControlPlaneInitialized: &initialized,
-			},
-		},
-	}
-
-	clusterSummary := &configv1beta1.ClusterSummary{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: clusterNamespace,
-			Name:      randomString(),
-			Labels: map[string]string{
-				configv1beta1.ClusterTypeLabel: string(clusterType),
-				configv1beta1.ClusterNameLabel: clusterName,
-			},
-		},
-		Status: configv1beta1.ClusterSummaryStatus{
-			FeatureSummaries: []configv1beta1.FeatureSummary{
-				{
-					FeatureID: libsveltosv1beta1.FeatureHelm,
-					Status:    libsveltosv1beta1.FeatureStatusProvisioned,
-				},
-				{
-					FeatureID: libsveltosv1beta1.FeatureResources,
-					Status:    libsveltosv1beta1.FeatureStatusProvisioned,
-				},
-			},
-		},
-	}
-
-	resource := &v1beta1.EventTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: randomString(),
-		},
-		Spec: v1beta1.EventTriggerSpec{
-			EventSourceName: randomString(),
-		},
-		Status: v1beta1.EventTriggerStatus{
-			MatchingClusterRefs: []corev1.ObjectReference{
-				{
-					Kind: "Cluster", APIVersion: clusterv1.GroupVersion.String(), Namespace: clusterNamespace, Name: clusterName,
-				},
-			},
-			ClusterInfo: []libsveltosv1beta1.ClusterInfo{},
-		},
-	}
-
-	initObjects := []client.Object{
-		clusterSummary,
-		resource,
-		cluster,
-	}
-
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
-		WithObjects(initObjects...).Build()
-	return c
 }
 
 // createSecretWithKubeconfig creates a secret containing kubeconfig to access CAPI cluster.
