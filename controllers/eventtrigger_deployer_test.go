@@ -119,38 +119,80 @@ var _ = Describe("EventTrigger deployer", func() {
 		clusterName := randomString()
 		clusterType := libsveltosv1beta1.ClusterTypeCapi
 
-		// Following creates a ClusterSummary and an EventTrigger
-		c := prepareClient(clusterNamespace, clusterName, clusterType)
-
-		// Add machine to mark Cluster ready
-		cpMachine := &clusterv1.Machine{
+		eventSource := &libsveltosv1beta1.EventSource{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: clusterNamespace,
-				Name:      randomString(),
-				Labels: map[string]string{
-					clusterv1.ClusterNameLabel:         clusterName,
-					clusterv1.MachineControlPlaneLabel: "ok",
+				Name: randomString(),
+			},
+			Spec: libsveltosv1beta1.EventSourceSpec{
+				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
+					{
+						Kind:    randomString(),
+						Group:   randomString(),
+						Version: randomString(),
+					},
 				},
 			},
 		}
-		cpMachine.Status.SetTypedPhase(clusterv1.MachinePhaseRunning)
 
-		Expect(c.Create(context.TODO(), cpMachine)).To(Succeed())
+		Expect(testEnv.Create(context.TODO(), eventSource)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventSource)).To(Succeed())
 
-		// Verify eventTrigger has been created
-		resources := &v1beta1.EventTriggerList{}
-		Expect(c.List(context.TODO(), resources)).To(Succeed())
-		Expect(len(resources.Items)).To(Equal(1))
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: eventSource.Name,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), eventTrigger)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, eventTrigger)).To(Succeed())
 
-		resource := resources.Items[0]
+		eventTrigger.Status = v1beta1.EventTriggerStatus{
+			MatchingClusterRefs: []corev1.ObjectReference{
+				{
+					Kind: "Cluster", APIVersion: clusterv1.GroupVersion.String(),
+					Namespace: clusterNamespace, Name: clusterName,
+				},
+			},
+			ClusterInfo: []libsveltosv1beta1.ClusterInfo{},
+		}
+		Expect(testEnv.Status().Update(context.TODO(), eventTrigger)).To(Succeed())
 
-		dep := fakedeployer.GetClient(context.TODO(), logger, testEnv.Client)
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: clusterNamespace,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, ns)).To(Succeed())
+
+		initialized := true
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: clusterNamespace,
+				Name:      clusterName,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), cluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, cluster)).To(Succeed())
+
+		cluster.Status = clusterv1.ClusterStatus{
+			Initialization: clusterv1.ClusterInitializationStatus{
+				ControlPlaneInitialized: &initialized,
+			},
+		}
+		Expect(testEnv.Status().Update(context.TODO(), cluster)).To(Succeed())
+
+		createSecretWithKubeconfig(clusterNamespace, clusterName)
+
+		dep := fakedeployer.GetClient(context.TODO(), logger, testEnv)
 		controllers.RegisterFeatures(dep, logger)
 
 		reconciler := controllers.EventTriggerReconciler{
-			Client:           c,
+			Client:           testEnv,
 			Deployer:         dep,
-			Scheme:           c.Scheme(),
+			Scheme:           testEnv.Scheme(),
 			Mux:              sync.Mutex{},
 			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
 			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
@@ -160,27 +202,27 @@ var _ = Describe("EventTrigger deployer", func() {
 		}
 
 		eScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
-			Client:         c,
+			Client:         testEnv,
 			Logger:         logger,
-			EventTrigger:   &resource,
+			EventTrigger:   eventTrigger,
 			ControllerName: "eventTrigger",
 		})
 		Expect(err).To(BeNil())
 
 		currentCluster := &clusterv1.Cluster{}
-		Expect(c.Get(context.TODO(), types.NamespacedName{Namespace: clusterNamespace, Name: clusterName}, currentCluster)).To(Succeed())
-		Expect(addTypeInformationToObject(c.Scheme(), currentCluster)).To(Succeed())
+		Expect(testEnv.Get(context.TODO(), types.NamespacedName{Namespace: clusterNamespace, Name: clusterName}, currentCluster)).To(Succeed())
+		Expect(addTypeInformationToObject(testEnv.Scheme(), currentCluster)).To(Succeed())
 
 		f := controllers.GetHandlersForFeature(v1beta1.FeatureEventTrigger)
 		clusterInfo, err := controllers.ProcessEventTrigger(&reconciler, context.TODO(), eScope,
-			controllers.GetKeyFromObject(c.Scheme(), currentCluster), f, logger)
+			controllers.GetKeyFromObject(testEnv.Scheme(), currentCluster), f, logger)
 		Expect(err).To(BeNil())
 
 		Expect(clusterInfo).ToNot(BeNil())
 		Expect(clusterInfo.Status).To(Equal(libsveltosv1beta1.SveltosStatusProvisioning))
 
 		// Expect job to be queued
-		Expect(dep.IsInProgress(clusterNamespace, clusterName, resource.Name, v1beta1.FeatureEventTrigger,
+		Expect(dep.IsInProgress(clusterNamespace, clusterName, eventTrigger.Name, v1beta1.FeatureEventTrigger,
 			clusterType, false)).To(BeTrue())
 	})
 

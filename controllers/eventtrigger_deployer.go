@@ -516,18 +516,27 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		return clusterInfo, fmt.Errorf("cleanup of %s in cluster still in progress. Wait before redeploying", f.id)
 	}
 
+	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, r.Client, cluster.Namespace,
+		cluster.Name, clusterproxy.GetClusterType(cluster), logger)
+	if err != nil {
+		msg := fmt.Sprintf("failed to verify if Cluster is in pull mode: %v", err)
+		logger.V(logs.LogDebug).Info(msg)
+		clusterInfo.FailureMessage = &msg
+		return clusterInfo, err
+	}
+
 	// Get the EventTrigger hash when EventTrigger was last deployed/evaluated in this cluster (if ever)
 	hash, _ := r.getClusterHashAndStatus(eventTrigger, cluster)
 	isConfigSame := reflect.DeepEqual(hash, currentHash)
 	if !isConfigSame {
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("EventTrigger has changed. Current hash %x. Previous hash %x",
 			currentHash, hash))
-		// Reset EventReport Status in the management cluster. This will cause ClusterProfiles to be updated. Deployment
-		// of ClusterProfiles happen when EventReport instances are collected. And only EventReport instances marked as non
-		// processed, are redeployed.
+		// Reset EventReport Status in the management cluster or managed cluster. This will cause ClusterProfiles to be updated.
+		// Deployment of ClusterProfiles happen when EventReport instances are collected. And only EventReport instances marked
+		// as non processed, are redeployed.
 		// Since something has changed in the EventTrigger configuration, this make sures ClusterProfiles are properly updated.
 		// Without this, only EventReport update (in the eventReport collection code) will trigger a ClusterProfile update.
-		err := r.resetEventReportStatusInMgmtCluster(ctx, eventTrigger, cluster, logger)
+		err := r.resetEventReportStatus(ctx, eventTrigger, cluster, isPullMode, logger)
 		if err != nil {
 			msg := err.Error()
 			clusterInfo.FailureMessage = &msg
@@ -536,15 +545,6 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		}
 	} else {
 		logger.V(logs.LogDebug).Info("EventTrigger has not changed")
-	}
-
-	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, r.Client, cluster.Namespace,
-		cluster.Name, clusterproxy.GetClusterType(cluster), logger)
-	if err != nil {
-		msg := fmt.Sprintf("failed to verify if Cluster is in pull mode: %v", err)
-		logger.V(logs.LogDebug).Info(msg)
-		clusterInfo.FailureMessage = &msg
-		return clusterInfo, err
 	}
 
 	return r.proceedProcessingEventTrigger(ctx, eScope, cluster, isPullMode, isConfigSame, currentHash, f, logger)
@@ -3369,16 +3369,35 @@ func (r *EventTriggerReconciler) isClusterPresent(ctx context.Context,
 	return true, !cluster.GetDeletionTimestamp().IsZero(), err
 }
 
-func (r *EventTriggerReconciler) resetEventReportStatusInMgmtCluster(ctx context.Context,
-	eventTrigger *v1beta1.EventTrigger, clusterRef *corev1.ObjectReference, logger logr.Logger) error {
+func (r *EventTriggerReconciler) resetEventReportStatus(ctx context.Context,
+	eventTrigger *v1beta1.EventTrigger, clusterRef *corev1.ObjectReference, isPullMode bool,
+	logger logr.Logger) error {
 
 	clusterType := clusterproxy.GetClusterType(clusterRef)
-	eventReportName := libsveltosv1beta1.GetEventReportName(eventTrigger.Spec.EventSourceName,
-		clusterRef.Name, &clusterType)
+	var kubernetesClient client.Client
+	var err error
+	var eventReportNamespace, eventReportName string
+	if getAgentInMgmtCluster() || isPullMode {
+		// Reset EventReport in the management cluster
+
+		eventReportName = libsveltosv1beta1.GetEventReportName(eventTrigger.Spec.EventSourceName,
+			clusterRef.Name, &clusterType)
+		eventReportNamespace = clusterRef.Namespace
+		kubernetesClient = r.Client
+	} else {
+		eventReportName = eventTrigger.Spec.EventSourceName
+		eventReportNamespace = "projectsveltos"
+		kubernetesClient, err = clusterproxy.GetKubernetesClient(ctx, r.Client, clusterRef.Namespace,
+			clusterRef.Name, "", "", clusterType, logger)
+		if err != nil {
+			logger.V(logs.LogInfo).Error(err, "failed to get client")
+			return err
+		}
+	}
 
 	currentEventReport := &libsveltosv1beta1.EventReport{}
-	err := r.Get(ctx,
-		types.NamespacedName{Namespace: clusterRef.Namespace, Name: eventReportName},
+	err = kubernetesClient.Get(ctx,
+		types.NamespacedName{Namespace: eventReportNamespace, Name: eventReportName},
 		currentEventReport)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -3396,5 +3415,5 @@ func (r *EventTriggerReconciler) resetEventReportStatusInMgmtCluster(ctx context
 	currentEventReport.Status.Phase = &delivering
 	logger.V(logs.LogDebug).Info(fmt.Sprintf("Reset EventReport %s/%s Status.Phase",
 		currentEventReport.Namespace, currentEventReport.Name))
-	return r.Status().Update(ctx, currentEventReport)
+	return kubernetesClient.Status().Update(ctx, currentEventReport)
 }
