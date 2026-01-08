@@ -484,6 +484,15 @@ func updateAllClusterProfiles(ctx context.Context, mgmtClient client.Client, clu
 	for i := range eventTriggers {
 		l := logger.WithValues("eventTrigger", eventTriggers[i].Name)
 
+		exist, err := isEventTriggerExist(ctx, mgmtClient, eventTriggers[i].Name)
+		if err != nil {
+			l.V(logs.LogInfo).Error(err, "failed to verify if EventTrigger exist")
+			return err
+		}
+		if !exist {
+			continue
+		}
+
 		// If EventTrigger is currently not matching this cluster, ignore this EventReports
 		if !isEventTriggerMatchingTheCluster(eventTriggers[i], cluster, eventTriggerMap) {
 			l.V(logs.LogDebug).Info("cluster is not a match anymore. Ignore.")
@@ -491,7 +500,7 @@ func updateAllClusterProfiles(ctx context.Context, mgmtClient client.Client, clu
 		}
 
 		l.V(logs.LogDebug).Info("updating ClusterProfile")
-		err := updateClusterProfiles(ctx, mgmtClient, cluster.Namespace, cluster.Name, clusterType,
+		err = updateClusterProfiles(ctx, mgmtClient, cluster.Namespace, cluster.Name, clusterType,
 			eventTriggers[i], er, l)
 		if err != nil {
 			l.V(logs.LogInfo).Error(err, fmt.Sprintf("failed to update ClusterProfile for EventTrigger %s",
@@ -624,4 +633,18 @@ func updateEventReport(ctx context.Context, c client.Client, cluster *corev1.Obj
 		currentEventReport.Spec.CloudEvents = eventReport.Spec.CloudEvents
 	}
 	return currentEventReport, err
+}
+
+func isEventTriggerExist(ctx context.Context, c client.Client, eventTriggerName string,
+) (bool, error) {
+
+	eventTrigger := &v1beta1.EventTrigger{}
+	if err := c.Get(ctx, types.NamespacedName{Name: eventTriggerName}, eventTrigger); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return eventTrigger.DeletionTimestamp.IsZero(), nil
 }
