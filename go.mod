@@ -8,8 +8,8 @@ require (
 	github.com/fluxcd/source-controller/api v1.7.4
 	github.com/gdexlab/go-render v1.0.1
 	github.com/go-logr/logr v1.4.3
-	github.com/onsi/ginkgo/v2 v2.27.3
-	github.com/onsi/gomega v1.38.3
+	github.com/onsi/ginkgo/v2 v2.27.4
+	github.com/onsi/gomega v1.39.0
 	github.com/pkg/errors v0.9.1
 	github.com/projectsveltos/addon-controller v1.3.1-0.20260103154745-aaa98e292937
 	github.com/projectsveltos/libsveltos v1.3.2-0.20260107142311-5c80e592c04c
