@@ -1,4 +1,4 @@
-module github.com/projectsveltos/addon-controller/hack/tools
+module github.com/projectsveltos/event-manager/hack/tools
 
 go 1.25.5
 
