@@ -1581,6 +1581,13 @@ func instantiateClusterProfileSpecForResource(ctx context.Context, c client.Clie
 	}
 	clusterProfileSpec.KustomizationRefs = instantiateKustomizeRefsWithResource
 
+	instantiatedPatchesFrom, err := instantiatePatchesFromWithResource(ctx, c, eventTrigger,
+		clusterNamespace, templateName, object, labels, logger)
+	if err != nil {
+		return nil, err
+	}
+	clusterProfileSpec.PatchesFrom = instantiatedPatchesFrom
+
 	err = setPolicyRefs(ctx, c, &clusterProfileSpec, templateName, clusterNamespace, clusterName, clusterType,
 		object, eventTrigger, labels, logger)
 	if err != nil {
@@ -1680,6 +1687,13 @@ func instantiateClusterProfileSpecPerAllResource(ctx context.Context, c client.C
 		return nil, err
 	}
 	clusterProfileSpec.KustomizationRefs = instantiateKustomizeRefsWithResource
+
+	instantiatePatchesFromWithResource, err := instantiatePatchesFromWithAllResources(ctx, c, eventTrigger,
+		clusterNamespace, templateName, objects, labels, logger)
+	if err != nil {
+		return nil, err
+	}
+	clusterProfileSpec.PatchesFrom = instantiatePatchesFromWithResource
 
 	clusterProfileSpec.DriftExclusions = eventTrigger.Spec.DriftExclusions
 
@@ -2067,6 +2081,38 @@ func instantiateTemplateResourceRefs(templateName string,
 	}
 
 	return instantiated, nil
+}
+
+// instantiatePatchesFromWithResource instantiate eventTrigger.Spec.PatchesFrom using information from passed
+// in object which represents one of the resource matching referenced EventSource in the managed cluster.
+func instantiatePatchesFromWithResource(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	clusterNamespace, templateName string, data any, labels map[string]string, logger logr.Logger,
+) ([]configv1beta1.ValueFrom, error) {
+
+	var valuesFrom []configv1beta1.ValueFrom
+	copy(valuesFrom, e.Spec.PatchesFrom)
+	err := instantiateValuesFrom(ctx, c, e, valuesFrom, clusterNamespace, templateName, data, labels, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return valuesFrom, nil
+}
+
+// instantiatePatchesFromWithAllResources instantiate eventTrigger.Spec.PatchesFrom using information from passed
+// in objects which represent all of the resources matching referenced EventSource in the managed cluster.
+func instantiatePatchesFromWithAllResources(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
+	clusterNamespace, templateName string, data any, labels map[string]string, logger logr.Logger,
+) ([]configv1beta1.ValueFrom, error) {
+
+	var valuesFrom []configv1beta1.ValueFrom
+	copy(valuesFrom, e.Spec.PatchesFrom)
+	err := instantiateValuesFrom(ctx, c, e, valuesFrom, clusterNamespace, templateName, data, labels, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return valuesFrom, nil
 }
 
 // instantiateHelmChartsWithResource instantiate eventTrigger.Spec.HelmCharts using information from passed in object
