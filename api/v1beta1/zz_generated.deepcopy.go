@@ -161,6 +161,11 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.PatchesFrom != nil {
+		in, out := &in.PatchesFrom, &out.PatchesFrom
+		*out = make([]apiv1beta1.ValueFrom, len(*in))
+		copy(*out, *in)
+	}
 	if in.DriftExclusions != nil {
 		in, out := &in.DriftExclusions, &out.DriftExclusions
 		*out = make([]libsveltosapiv1beta1.DriftExclusion, len(*in))
