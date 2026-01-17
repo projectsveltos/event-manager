@@ -383,19 +383,6 @@ func (r *EventTriggerReconciler) WatchForCAPI(mgr ctrl.Manager, c controller.Con
 		return err
 	}
 
-	machineCluster := source.Kind[*clusterv1.Machine](
-		mgr.GetCache(),
-		&clusterv1.Machine{},
-		handler.TypedEnqueueRequestsFromMapFunc(r.requeueEventTriggerForMachine),
-		predicates.MachinePredicate{Logger: mgr.GetLogger().WithValues("predicate", "machinepredicate")},
-	)
-
-	// When cluster-api cluster changes, according to ClusterPredicates,
-	// one or more EventTriggers need to be reconciled.
-	if err := c.Watch(machineCluster); err != nil {
-		return err
-	}
-
 	return nil
 }
 

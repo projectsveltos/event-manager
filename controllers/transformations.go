@@ -170,65 +170,6 @@ func (r *EventTriggerReconciler) requeueEventTriggerForACluster(
 	return requests
 }
 
-func (r *EventTriggerReconciler) requeueEventTriggerForMachine(
-	ctx context.Context, machine *clusterv1.Machine,
-) []reconcile.Request {
-
-	logger := r.Logger.WithValues("machine", fmt.Sprintf("%s/%s", machine.GetNamespace(), machine.GetName()))
-
-	addTypeInformationToObject(r.Scheme, machine)
-
-	logger.V(logs.LogDebug).Info("reacting to CAPI Machine change")
-
-	clusterLabelName, ok := machine.Labels[clusterv1.ClusterNameLabel]
-	if !ok {
-		logger.V(logs.LogVerbose).Info("Machine has not ClusterNameLabel")
-		return nil
-	}
-
-	r.Mux.Lock()
-	defer r.Mux.Unlock()
-
-	clusterInfo := corev1.ObjectReference{APIVersion: machine.APIVersion, Kind: "Cluster", Namespace: machine.Namespace, Name: clusterLabelName}
-
-	// Get all EventTrigger previously matching this cluster and reconcile those
-	requests := make([]ctrl.Request, getConsumersForEntry(r.ClusterMap, &clusterInfo).Len())
-	consumers := getConsumersForEntry(r.ClusterMap, &clusterInfo).Items()
-
-	for i := range consumers {
-		requests[i] = ctrl.Request{
-			NamespacedName: client.ObjectKey{
-				Name: consumers[i].Name,
-			},
-		}
-	}
-
-	// Get Cluster labels
-	if clusterLabels, ok := r.ClusterLabels[clusterInfo]; ok {
-		// Iterate over all current EventTrigger and reconcile the EventTrigger now
-		// matching the Cluster
-		for k := range r.EventTriggers {
-			eventTriggerSelector := r.EventTriggers[k]
-			clusterSelector, err := metav1.LabelSelectorAsSelector(&eventTriggerSelector.LabelSelector)
-			if err != nil {
-				logger.V(logs.LogInfo).Error(err, "failed to convert selector")
-				continue
-			}
-			if clusterSelector.Matches(labels.Set(clusterLabels)) {
-				l := logger.WithValues("eventTrigger", k.Name)
-				l.V(logs.LogDebug).Info("queuing EventTrigger")
-				requests = append(requests, ctrl.Request{
-					NamespacedName: client.ObjectKey{
-						Name: k.Name,
-					},
-				})
-			}
-		}
-	}
-
-	return requests
-}
-
 func (r *EventTriggerReconciler) requeueEventTriggerForClusterSet(
 	ctx context.Context, o client.Object,
 ) []reconcile.Request {
