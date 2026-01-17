@@ -31,7 +31,6 @@ var (
 
 var (
 	RequeueEventTriggerForCluster = (*EventTriggerReconciler).requeueEventTriggerForCluster
-	RequeueEventTriggerForMachine = (*EventTriggerReconciler).requeueEventTriggerForMachine
 	UpdateClusterInfo             = (*EventTriggerReconciler).updateClusterInfo
 	CleanMaps                     = (*EventTriggerReconciler).cleanMaps
 	UpdateMaps                    = (*EventTriggerReconciler).updateMaps
