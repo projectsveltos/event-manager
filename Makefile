@@ -489,6 +489,7 @@ deploy-sveltos-agent:
 	$(KUBECTL) ${KUBECONFIG} apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_eventsources.lib.projectsveltos.io.yaml
 	$(KUBECTL) ${KUBECONFIG} apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_eventreports.lib.projectsveltos.io.yaml
 	$(KUBECTL) ${KUBECONFIG} apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_reloaders.lib.projectsveltos.io.yaml
+	$(KUBECTL) ${KUBECONFIG} apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_reloaderreports.lib.projectsveltos.io.yaml
 	$(KUBECTL) ${KUBECONFIG} apply -f test/sveltos-agent.yaml.m
 
 define get-digest-sveltos-applier

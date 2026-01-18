@@ -188,6 +188,15 @@ spec:
         - --run-mode=do-not-send-reports
         command:
         - /manager
+        env:
+        - name: TOTAL_MEMORY_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+        - name: GOMAXPROCS
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.cpu
         image: docker.io/projectsveltos/sveltos-agent:main
         livenessProbe:
           failureThreshold: 3
@@ -218,7 +227,7 @@ spec:
             cpu: 500m
             memory: 512Mi
           requests:
-            cpu: 10m
+            cpu: 100m
             memory: 128Mi
         securityContext:
           allowPrivilegeEscalation: false
