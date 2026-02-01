@@ -154,6 +154,20 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.PreDeleteChecks != nil {
+		in, out := &in.PreDeleteChecks, &out.PreDeleteChecks
+		*out = make([]libsveltosapiv1beta1.ValidateHealth, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.PostDeleteChecks != nil {
+		in, out := &in.PostDeleteChecks, &out.PostDeleteChecks
+		*out = make([]libsveltosapiv1beta1.ValidateHealth, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.Patches != nil {
 		in, out := &in.Patches, &out.Patches
 		*out = make([]libsveltosapiv1beta1.Patch, len(*in))
