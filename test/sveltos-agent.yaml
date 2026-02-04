@@ -186,6 +186,7 @@ spec:
         - --version=main
         - --current-cluster=managed-cluster
         - --run-mode=do-not-send-reports
+        - --discard-managed-fields=true
         command:
         - /manager
         env:
