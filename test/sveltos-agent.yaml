@@ -183,7 +183,7 @@ spec:
         - --cluster-namespace=
         - --cluster-name=
         - --cluster-type=
-        - --version=main
+        - --version=v1.5.0
         - --current-cluster=managed-cluster
         - --run-mode=do-not-send-reports
         - --discard-managed-fields=true
@@ -198,7 +198,7 @@ spec:
           valueFrom:
             resourceFieldRef:
               resource: limits.cpu
-        image: docker.io/projectsveltos/sveltos-agent:main
+        image: docker.io/projectsveltos/sveltos-agent:v1.5.0
         livenessProbe:
           failureThreshold: 3
           httpGet:
