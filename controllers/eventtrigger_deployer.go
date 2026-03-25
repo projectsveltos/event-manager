@@ -418,7 +418,7 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		config.WriteString(fmt.Sprintf("%s:%s", k, e.Labels[k]))
+		fmt.Fprintf(&config, "%s:%s", k, e.Labels[k])
 	}
 
 	resources, err := fetchReferencedResources(ctx, c, e, cluster, logger)

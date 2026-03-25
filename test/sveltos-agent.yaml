@@ -187,6 +187,7 @@ spec:
         - --current-cluster=managed-cluster
         - --run-mode=do-not-send-reports
         - --discard-managed-fields=true
+        - --enable-nats-watcher=false
         command:
         - /manager
         env:

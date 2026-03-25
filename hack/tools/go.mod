@@ -1,6 +1,6 @@
 module github.com/projectsveltos/event-manager/hack/tools
 
-go 1.25.6
+go 1.26.1
 
 require (
 	github.com/a8m/envsubst v1.4.3
