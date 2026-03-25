@@ -175,7 +175,7 @@ func getSortedMap(m map[string]string) string {
 	sort.Strings(keys)
 	var res strings.Builder
 	for _, k := range keys {
-		res.WriteString(fmt.Sprintf("%s:%s", k, m[k]))
+		fmt.Fprintf(&res, "%s:%s", k, m[k])
 	}
 	return res.String()
 }
@@ -188,7 +188,7 @@ func getSortedMapBinary(m map[string][]byte) string {
 	sort.Strings(keys)
 	var res strings.Builder
 	for _, k := range keys {
-		res.WriteString(fmt.Sprintf("%s:%s", k, string(m[k])))
+		fmt.Fprintf(&res, "%s:%s", k, string(m[k]))
 	}
 	return res.String()
 }
