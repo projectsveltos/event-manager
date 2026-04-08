@@ -40,20 +40,14 @@ import (
 // - Management cluster's client if sveltos-agent is deployed there.
 // - A managed cluster's client (obtained via clusterproxy) if sveltos-agent is in a managed cluster.
 func getEventReportClient(ctx context.Context, clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
-	logger logr.Logger) (client.Client, error) {
-
-	if getAgentInMgmtCluster() {
-		return getManagementClusterClient(), nil
-	}
-
-	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, getManagementClusterClient(), clusterNamespace, clusterName,
-		clusterType, logger)
-	if err != nil {
-		return nil, err
-	}
+	isPullMode bool, logger logr.Logger) (client.Client, error) {
 
 	if isPullMode {
 		// In pull mode the applier copies the EventReports to the management cluster.
+		return getManagementClusterClient(), nil
+	}
+
+	if getAgentInMgmtCluster() {
 		return getManagementClusterClient(), nil
 	}
 
