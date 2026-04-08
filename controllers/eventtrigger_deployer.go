@@ -1068,7 +1068,7 @@ func deployEventSource(ctx context.Context, c client.Client,
 		}
 	}
 
-	if getAgentInMgmtCluster() {
+	if getAgentInMgmtCluster() && !isPullMode {
 		return addEventSourceToConfigMap(ctx, c, clusterNamespace, clusterName, clusterType,
 			eventTrigger, currentEventSource, logger)
 	}

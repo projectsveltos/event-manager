@@ -318,7 +318,7 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 	// otherwise managed cluster.
 	// For cluster in pull mode, the sveltos-applier copies the EventReports here
 	clusterClient, err := getEventReportClient(ctx, cluster.Namespace, cluster.Name,
-		clusterproxy.GetClusterType(clusterRef), logger)
+		clusterproxy.GetClusterType(clusterRef), isPullMode, logger)
 	if err != nil {
 		return err
 	}
