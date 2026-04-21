@@ -2237,6 +2237,210 @@ data:
 			types.NamespacedName{Namespace: configMap2.Namespace, Name: configMap2.Name}, currentConfigMap)
 		Expect(err).To(BeNil())
 	})
+
+	It("removeClusterProfiles deletes ClusterProfiles from a previously referenced EventSource", func() {
+		eventTriggerName := randomString()
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeSveltos
+
+		oldEventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: randomString(),
+				},
+			},
+		}
+
+		newEventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: randomString(),
+				},
+			},
+		}
+
+		// ClusterProfile created when old EventSource was referenced
+		staleClusterProfile := &configv1beta1.ClusterProfile{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
+					eventTriggerName, oldEventReport, clusterType),
+			},
+		}
+
+		// ClusterProfile created for the current (new) EventSource
+		currentClusterProfile := &configv1beta1.ClusterProfile{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
+					eventTriggerName, newEventReport, clusterType),
+			},
+		}
+
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
+		}
+
+		initObjects := []client.Object{staleClusterProfile, currentClusterProfile, eventTrigger}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		Expect(controllers.RemoveClusterProfiles(context.TODO(), c, clusterNamespace, clusterName,
+			clusterType, eventTrigger, newEventReport,
+			[]*configv1beta1.ClusterProfile{currentClusterProfile}, logger)).To(Succeed())
+
+		clusterProfileList := &configv1beta1.ClusterProfileList{}
+		Expect(c.List(context.TODO(), clusterProfileList)).To(Succeed())
+		Expect(len(clusterProfileList.Items)).To(Equal(1))
+		Expect(clusterProfileList.Items[0].Name).To(Equal(currentClusterProfile.Name))
+	})
+
+	It("removeConfigMaps deletes ConfigMaps from a previously referenced EventSource", func() {
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+		eventTriggerName := randomString()
+
+		oldEventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: randomString(),
+				},
+			},
+		}
+
+		newEventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: randomString(),
+				},
+			},
+		}
+
+		// ConfigMap created when old EventSource was referenced
+		staleConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: controllers.ReportNamespace,
+				Name:      randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
+					eventTriggerName, oldEventReport, clusterType),
+			},
+			Data: map[string]string{randomString(): randomString()},
+		}
+
+		// ConfigMap created for the current (new) EventSource
+		currentConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: controllers.ReportNamespace,
+				Name:      randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
+					eventTriggerName, newEventReport, clusterType),
+			},
+			Data: map[string]string{randomString(): randomString()},
+		}
+
+		initObjects := []client.Object{staleConfigMap, currentConfigMap}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		eventTrigger := v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
+		}
+		policyRefs := map[libsveltosv1beta1.PolicyRef]bool{
+			{
+				Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+				Namespace: currentConfigMap.Namespace,
+				Name:      currentConfigMap.Name,
+			}: true,
+		}
+
+		Expect(controllers.RemoveConfigMaps(context.TODO(), c, clusterNamespace, clusterName,
+			clusterType, &eventTrigger, newEventReport, policyRefs, logger)).To(Succeed())
+
+		configMapList := &corev1.ConfigMapList{}
+		Expect(c.List(context.TODO(), configMapList,
+			client.InNamespace(controllers.ReportNamespace))).To(Succeed())
+		Expect(len(configMapList.Items)).To(Equal(1))
+		Expect(configMapList.Items[0].Name).To(Equal(currentConfigMap.Name))
+	})
+
+	It("removeSecrets deletes Secrets from a previously referenced EventSource", func() {
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+		eventTriggerName := randomString()
+
+		oldEventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: randomString(),
+				},
+			},
+		}
+
+		newEventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: map[string]string{
+					libsveltosv1beta1.EventSourceNameLabel: randomString(),
+				},
+			},
+		}
+
+		// Secret created when old EventSource was referenced
+		staleSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: controllers.ReportNamespace,
+				Name:      randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
+					eventTriggerName, oldEventReport, clusterType),
+			},
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
+			Data: map[string][]byte{randomString(): []byte(randomString())},
+		}
+
+		// Secret created for the current (new) EventSource
+		currentSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: controllers.ReportNamespace,
+				Name:      randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
+					eventTriggerName, newEventReport, clusterType),
+			},
+			Type: libsveltosv1beta1.ClusterProfileSecretType,
+			Data: map[string][]byte{randomString(): []byte(randomString())},
+		}
+
+		initObjects := []client.Object{staleSecret, currentSecret}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		eventTrigger := v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: eventTriggerName},
+		}
+		policyRefs := map[libsveltosv1beta1.PolicyRef]bool{
+			{
+				Kind:      string(libsveltosv1beta1.SecretReferencedResourceKind),
+				Namespace: currentSecret.Namespace,
+				Name:      currentSecret.Name,
+			}: true,
+		}
+
+		Expect(controllers.RemoveSecrets(context.TODO(), c, clusterNamespace, clusterName,
+			clusterType, &eventTrigger, newEventReport, policyRefs, logger)).To(Succeed())
+
+		secretList := &corev1.SecretList{}
+		Expect(c.List(context.TODO(), secretList,
+			client.InNamespace(controllers.ReportNamespace))).To(Succeed())
+		Expect(len(secretList.Items)).To(Equal(1))
+		Expect(secretList.Items[0].Name).To(Equal(currentSecret.Name))
+	})
 })
 
 func validateLabels(labels map[string]string, clusterRef *corev1.ObjectReference,
