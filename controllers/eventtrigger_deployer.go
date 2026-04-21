@@ -2733,8 +2733,10 @@ func removeConfigMaps(ctx context.Context, c client.Client, clusterNamespace, cl
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, er *libsveltosv1beta1.EventReport,
 	policyRefs map[libsveltosv1beta1.PolicyRef]bool, logger logr.Logger) error {
 
+	// Pass nil for er so eventReportNameLabel (EventSource name) is excluded from the selector,
+	// ensuring stale ConfigMaps from a previously referenced EventSource are also found and deleted.
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
-		er, clusterType)
+		nil, clusterType)
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
@@ -2778,8 +2780,10 @@ func removeSecrets(ctx context.Context, c client.Client, clusterNamespace, clust
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, er *libsveltosv1beta1.EventReport,
 	policyRefs map[libsveltosv1beta1.PolicyRef]bool, logger logr.Logger) error {
 
+	// Pass nil for er so eventReportNameLabel (EventSource name) is excluded from the selector,
+	// ensuring stale Secrets from a previously referenced EventSource are also found and deleted.
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
-		er, clusterType)
+		nil, clusterType)
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
@@ -2830,8 +2834,10 @@ func removeClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 		currentClusterProfiles[clusterProfiles[i].Name] = true
 	}
 
+	// Pass nil for er so eventReportNameLabel (EventSource name) is excluded from the selector,
+	// ensuring stale ClusterProfiles from a previously referenced EventSource are also found and deleted.
 	labels := getInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
-		er, clusterType)
+		nil, clusterType)
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
