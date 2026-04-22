@@ -1,5 +1,6 @@
 [![CI](https://github.com/projectsveltos/event-manager/actions/workflows/main.yaml/badge.svg)](https://github.com/projectsveltos/event-manager/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/projectsveltos/event-manager)](https://goreportcard.com/report/github.com/projectsveltos/event-manager)
+[![Release](https://img.shields.io/github/v/release/projectsveltos/event-manager)](https://github.com/projectsveltos/event-manager/releases)
 [![License](https://img.shields.io/badge/license-Apache-blue.svg)](LICENSE)
 [![Slack](https://img.shields.io/badge/join%20slack-%23projectsveltos-brighteen)](https://join.slack.com/t/projectsveltos/shared_invite/zt-1hraownbr-W8NTs6LTimxLPB8Erj8Q6Q)
 [![LinkedIn](https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff)](https://www.linkedin.com/company/projectsveltos/)
