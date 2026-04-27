@@ -19,6 +19,7 @@ package controllers_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -47,10 +48,41 @@ var _ = Describe("EventSource Deployer", func() {
 	var logger logr.Logger
 	var version string
 
+	const cmVersionName = "sveltos-agent-version"
+
 	BeforeEach(func() {
 		version = randomString()
 		eventSource = getEventSourceInstance(randomString())
 		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+
+		By("Create the ConfigMap with sveltos-agent version")
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: controllers.ReportNamespace,
+				Name:      cmVersionName,
+			},
+			Data: map[string]string{
+				"version": version,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), cm)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, cm)).To(Succeed())
+	})
+
+	AfterEach(func() {
+		By("Delete the ConfigMap with sveltos-agent version")
+		cm := &corev1.ConfigMap{}
+		Expect(testEnv.Get(context.TODO(),
+			types.NamespacedName{Namespace: controllers.ReportNamespace, Name: cmVersionName},
+			cm)).To(Succeed())
+		Expect(testEnv.Delete(context.TODO(), cm)).To(Succeed())
+
+		Eventually(func() bool {
+			err := testEnv.Get(context.TODO(),
+				types.NamespacedName{Namespace: controllers.ReportNamespace, Name: cmVersionName},
+				cm)
+			return err != nil && apierrors.IsNotFound(err)
+		}, timeout, pollingInterval).Should(BeTrue())
 	})
 
 	It("deleteEventReport ", func() {
@@ -147,7 +179,7 @@ var _ = Describe("EventSource Deployer", func() {
 	})
 
 	It("collectEventReports collects EventReports from clusters", func() {
-		cluster := prepareCluster(version)
+		cluster := prepareCluster()
 
 		// In managed cluster this is the namespace where EventReports
 		// are created
@@ -476,6 +508,127 @@ spec:
 		Expect(events[0]["specversion"]).To(Equal("1.0"))
 		Expect(events[0]["source"]).To(Equal("repo.requester.codesalot.com"))
 		Expect(events[0]["type"]).To(Equal("repo.error"))
+	})
+
+	It("buildClustersWithEventTrigger returns all clusters matched by any EventTrigger", func() {
+		cluster1 := corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+		cluster2 := corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       "Cluster",
+			APIVersion: clusterv1.GroupVersion.String(),
+		}
+		cluster3 := corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+		// cluster4 belongs to no EventTrigger — must be absent from the result.
+		cluster4 := corev1.ObjectReference{Namespace: randomString(), Name: randomString()}
+
+		// et1 matches cluster1+cluster2; et2 matches cluster2+cluster3.
+		eventTriggers := &v1beta1.EventTriggerList{
+			Items: []v1beta1.EventTrigger{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: randomString()},
+					Spec:       v1beta1.EventTriggerSpec{EventSourceName: randomString()},
+					Status: v1beta1.EventTriggerStatus{
+						MatchingClusterRefs: []corev1.ObjectReference{cluster1, cluster2},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: randomString()},
+					Spec:       v1beta1.EventTriggerSpec{EventSourceName: randomString()},
+					Status: v1beta1.EventTriggerStatus{
+						MatchingClusterRefs: []corev1.ObjectReference{cluster2, cluster3},
+					},
+				},
+			},
+		}
+
+		result := controllers.BuildClustersWithEventTrigger(eventTriggers)
+
+		Expect(result[cluster1]).To(BeTrue())
+		Expect(result[cluster2]).To(BeTrue())
+		Expect(result[cluster3]).To(BeTrue())
+		Expect(result[cluster4]).To(BeFalse())
+	})
+
+	It("collectAndProcessAllEventReports distinguishes CAPI and Sveltos clusters with same namespace and name", func() {
+		// prepareCluster creates a ready CAPI cluster in testEnv so that
+		// skipCollecting passes when we process EventReports for it.
+		capiCluster := prepareCluster()
+
+		cmName := fmt.Sprintf("sa-%s-%s", strings.ToLower(string(libsveltosv1beta1.ClusterTypeCapi)), capiCluster.Name)
+		cmNamespace := capiCluster.Namespace
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: cmNamespace,
+				Name:      cmName,
+			},
+			Data: map[string]string{
+				"version": version,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), cm)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, cm)).To(Succeed())
+
+		// EventReport labeled as CAPI cluster — needs processing (Phase not set).
+		capiER := getEventReport(randomString(), capiCluster.Namespace, capiCluster.Name)
+		capiER.Labels[libsveltosv1beta1.EventReportClusterNameLabel] = capiCluster.Name
+		capiER.Labels[libsveltosv1beta1.EventReportClusterTypeLabel] = strings.ToLower(string(libsveltosv1beta1.ClusterTypeCapi))
+		Expect(testEnv.Create(context.TODO(), capiER)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, capiER)).To(Succeed())
+
+		// EventReport labeled as Sveltos cluster — same namespace/name as the CAPI cluster.
+		// Must NOT be processed since its cluster type is not in clusterList.
+		sveltosER := getEventReport(randomString(), capiCluster.Namespace, capiCluster.Name)
+		sveltosER.Labels[libsveltosv1beta1.EventReportClusterNameLabel] = capiCluster.Name
+		sveltosER.Labels[libsveltosv1beta1.EventReportClusterTypeLabel] = strings.ToLower(string(libsveltosv1beta1.ClusterTypeSveltos))
+		Expect(testEnv.Create(context.TODO(), sveltosER)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, sveltosER)).To(Succeed())
+
+		// Only the CAPI cluster is in clusterList.
+		capiClusterRef := corev1.ObjectReference{
+			Namespace:  capiCluster.Namespace,
+			Name:       capiCluster.Name,
+			Kind:       "Cluster",
+			APIVersion: clusterv1.GroupVersion.String(),
+		}
+
+		eventTriggers := &v1beta1.EventTriggerList{}
+		eventTriggerMap := map[string]libsveltosset.Set{}
+
+		Expect(controllers.CollectAndProcessAllEventReports(context.TODO(), testEnv.Client,
+			[]corev1.ObjectReference{capiClusterRef}, eventTriggers, eventTriggerMap,
+			version, false, logger)).To(Succeed())
+
+		// The CAPI EventReport must be marked as processed.
+		Eventually(func() bool {
+			current := &libsveltosv1beta1.EventReport{}
+			if err := testEnv.Get(context.TODO(),
+				types.NamespacedName{Namespace: capiER.Namespace, Name: capiER.Name}, current); err != nil {
+				return false
+			}
+			return current.Status.Phase != nil && *current.Status.Phase == libsveltosv1beta1.ReportProcessed
+		}, timeout, pollingInterval).Should(BeTrue())
+
+		// The Sveltos EventReport must not have been processed — its cluster type was
+		// not in clusterList so collectAndProcessAllEventReports must have ignored it.
+		Consistently(func() bool {
+			current := &libsveltosv1beta1.EventReport{}
+			if err := testEnv.Get(context.TODO(),
+				types.NamespacedName{Namespace: sveltosER.Namespace, Name: sveltosER.Name}, current); err != nil {
+				return false
+			}
+			return current.Status.Phase == nil || *current.Status.Phase != libsveltosv1beta1.ReportProcessed
+		}, timeout, pollingInterval).Should(BeTrue())
 	})
 
 	It("instantiateCloudEventAction ", func() {

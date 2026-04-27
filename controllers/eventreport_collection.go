@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -43,6 +44,11 @@ import (
 const (
 	eventReportMalformedLabelError = "eventReport is malformed. Labels is empty"
 	eventReportMissingLabelError   = "eventReport is malformed. Label missing"
+
+	// clustersPerWorker controls how many clusters each worker goroutine handles.
+	clustersPerWorker = 50
+	// maxCollectionWorkers caps the number of concurrent goroutines collecting EventReports.
+	maxCollectionWorkers = 5
 )
 
 var (
@@ -158,6 +164,20 @@ func addEventTriggerMatchingCluster(et *v1beta1.EventTrigger,
 	return eventTriggerMap
 }
 
+// buildClustersWithEventTrigger returns the set of all clusters currently matched
+// by at least one EventTrigger, derived from EventTrigger.Status.MatchingClusterRefs.
+// This is used to skip clusters that have no EventTriggers and therefore no
+// EventReports to collect.
+func buildClustersWithEventTrigger(eventTriggers *v1beta1.EventTriggerList) map[corev1.ObjectReference]bool {
+	clusters := make(map[corev1.ObjectReference]bool)
+	for i := range eventTriggers.Items {
+		for j := range eventTriggers.Items[i].Status.MatchingClusterRefs {
+			clusters[eventTriggers.Items[i].Status.MatchingClusterRefs[j]] = true
+		}
+	}
+	return clusters
+}
+
 // buildClusterForEventTriggerMap builds a map:
 // key => eventTrigger name
 // values => slice of currently matching clusters
@@ -213,28 +233,34 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 			continue
 		}
 
+		// Restrict collection to clusters actually matched by an EventTrigger.
+		// Clusters with no matching EventTrigger have no EventReports to collect,
+		// so we avoid all per-cluster API calls for them. clustersWithET is built
+		// from EventTrigger.Status.MatchingClusterRefs without shard awareness, so
+		// we intersect with the shard-local clusterList.
+		clustersWithET := buildClustersWithEventTrigger(eventTriggers)
+		var clustersToCollect []corev1.ObjectReference
+		for i := range clusterList {
+			if clustersWithET[clusterList[i]] {
+				clustersToCollect = append(clustersToCollect, clusterList[i])
+			}
+		}
+
 		allSuccessfull := true
 
-		for i := range clusterList {
-			cluster := &clusterList[i]
-
-			// Build a map of EventTrigger consuming an EventSource. This is built once per cluster
-			// as EventSourceName in EventTrigger.Spec can be expressed as a template and instantiated
-			// using cluster namespace, name and type.
-			eventSourceMap, err := buildEventTriggersForEventSourceMap(ctx, cluster, eventTriggers)
-			if err != nil {
-				time.Sleep(interval)
+		// In agentless mode all EventReports live in the management cluster.
+		// A single List call covers every cluster, avoiding N per-cluster API calls.
+		// skipCollecting is also only invoked for clusters that actually have EventReports
+		// needing attention.
+		if getAgentInMgmtCluster() {
+			if err := collectAndProcessAllEventReports(ctx, c, clustersToCollect, eventTriggers,
+				eventTriggerMap, version, firstCollection, logger); err != nil {
+				logger.V(logs.LogInfo).Error(err, "failed to collect EventReports")
 				allSuccessfull = false
-				continue
 			}
-
-			l := logger.WithValues("cluster", fmt.Sprintf("%s %s/%s", cluster.Kind, cluster.Namespace, cluster.Name))
-			err = collectAndProcessEventReportsFromCluster(ctx, c, cluster, eventSourceMap, eventTriggerMap,
-				version, firstCollection, l)
-			if err != nil {
-				l.V(logs.LogInfo).Error(err,
-					fmt.Sprintf("failed to collect EventReports from cluster: %s/%s",
-						cluster.Namespace, cluster.Name))
+		} else {
+			if err := processEventReportClusters(ctx, c, clustersToCollect, eventTriggers,
+				eventTriggerMap, version, firstCollection, logger); err != nil {
 				allSuccessfull = false
 			}
 		}
@@ -246,6 +272,238 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 
 		time.Sleep(interval)
 	}
+}
+
+// collectEventReportFromCluster instantiates the per-cluster EventSource map and
+// delegates to collectAndProcessEventReportsFromCluster.
+func collectEventReportFromCluster(ctx context.Context, c client.Client,
+	cluster *corev1.ObjectReference,
+	eventTriggers *v1beta1.EventTriggerList,
+	eventTriggerMap map[string]libsveltosset.Set,
+	version string, firstCollection bool, logger logr.Logger) error {
+
+	eventSourceMap, err := buildEventTriggersForEventSourceMap(ctx, cluster, eventTriggers)
+	if err != nil {
+		return err
+	}
+
+	l := logger.WithValues("cluster", fmt.Sprintf("%s %s/%s", cluster.Kind, cluster.Namespace, cluster.Name))
+	return collectAndProcessEventReportsFromCluster(ctx, c, cluster, eventSourceMap, eventTriggerMap,
+		version, firstCollection, l)
+}
+
+// processEventReportClusters collects and processes EventReports for the given clusters.
+// It runs sequentially when there are fewer than clustersPerWorker clusters, and spawns
+// up to maxCollectionWorkers goroutines otherwise.
+func processEventReportClusters(ctx context.Context, c client.Client,
+	clusters []corev1.ObjectReference, eventTriggers *v1beta1.EventTriggerList,
+	eventTriggerMap map[string]libsveltosset.Set, version string, firstCollection bool,
+	logger logr.Logger) error {
+
+	logErr := func(cluster *corev1.ObjectReference, err error) {
+		logger.WithValues("cluster", fmt.Sprintf("%s/%s", cluster.Namespace, cluster.Name)).
+			V(logs.LogInfo).Info(fmt.Sprintf("failed to collect EventReports: %v", err))
+	}
+
+	numWorkers := len(clusters) / clustersPerWorker
+	if numWorkers > maxCollectionWorkers {
+		numWorkers = maxCollectionWorkers
+	}
+
+	if numWorkers == 0 {
+		// Sequential: fewer than clustersPerWorker clusters, goroutine overhead not justified.
+		var retErr error
+		for i := range clusters {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+			cluster := &clusters[i]
+			if err := collectEventReportFromCluster(ctx, c, cluster, eventTriggers, eventTriggerMap,
+				version, firstCollection, logger); err != nil {
+				logErr(cluster, err)
+				retErr = err
+			}
+		}
+		return retErr
+	}
+
+	// Parallel: one worker per clustersPerWorker clusters, capped at maxCollectionWorkers.
+	work := make(chan corev1.ObjectReference, len(clusters))
+	for _, cluster := range clusters {
+		work <- cluster
+	}
+	close(work)
+
+	var (
+		mu     sync.Mutex
+		retErr error
+		wg     sync.WaitGroup
+	)
+	for range numWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for clusterRef := range work {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				ref := clusterRef
+				if err := collectEventReportFromCluster(ctx, c, &ref, eventTriggers, eventTriggerMap,
+					version, firstCollection, logger); err != nil {
+					logErr(&ref, err)
+					mu.Lock()
+					retErr = err
+					mu.Unlock()
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return retErr
+	}
+}
+
+// collectAndProcessAllEventReports is used in agentless mode. It fetches all EventReports
+// from the management cluster in a single List call, groups the ones needing attention by
+// cluster, and processes only those clusters — avoiding N per-cluster List calls.
+func collectAndProcessAllEventReports(ctx context.Context, c client.Client,
+	clusterList []corev1.ObjectReference,
+	eventTriggers *v1beta1.EventTriggerList,
+	eventTriggerMap map[string]libsveltosset.Set,
+	version string, firstCollection bool, logger logr.Logger) error {
+
+	// Build a lookup of shard-local clusters keyed by namespace/name/clusterType to
+	// correctly distinguish a SveltosCluster from a CAPI Cluster with the same name.
+	type clusterKey struct{ ns, name, clusterType string }
+	shardClusters := make(map[clusterKey]corev1.ObjectReference, len(clusterList))
+	for i := range clusterList {
+		ref := clusterList[i]
+		ct := strings.ToLower(string(clusterproxy.GetClusterType(&ref)))
+		shardClusters[clusterKey{ref.Namespace, ref.Name, ct}] = ref
+	}
+
+	// Single List of all EventReports from the management cluster.
+	eventReportList := &libsveltosv1beta1.EventReportList{}
+	if err := getManagementClusterClient().List(ctx, eventReportList); err != nil {
+		return err
+	}
+
+	// Group EventReports needing attention by cluster. In steady state (not firstCollection)
+	// we skip already-processed EventReports to avoid unnecessary work.
+	type clusterData struct {
+		ref corev1.ObjectReference
+		ers []*libsveltosv1beta1.EventReport
+	}
+	byCluster := make(map[clusterKey]*clusterData)
+	for i := range eventReportList.Items {
+		er := &eventReportList.Items[i]
+		if er.Labels == nil {
+			continue
+		}
+		if !firstCollection && er.DeletionTimestamp.IsZero() && !shouldReprocess(er) {
+			continue
+		}
+		clusterName := er.Labels[libsveltosv1beta1.EventReportClusterNameLabel]
+		clusterType := er.Labels[libsveltosv1beta1.EventReportClusterTypeLabel]
+		clusterNs := er.Namespace
+		if clusterName == "" || clusterType == "" {
+			continue
+		}
+		key := clusterKey{clusterNs, clusterName, clusterType}
+		if _, ok := shardClusters[key]; !ok {
+			continue
+		}
+		cd, exists := byCluster[key]
+		if !exists {
+			ref := shardClusters[key]
+			cd = &clusterData{ref: ref}
+			byCluster[key] = cd
+		}
+		cd.ers = append(cd.ers, er)
+	}
+
+	var retErr error
+	for _, cd := range byCluster {
+		l := logger.WithValues("cluster", fmt.Sprintf("%s %s/%s", cd.ref.Kind, cd.ref.Namespace, cd.ref.Name))
+		if err := processEventReportsForClusterInAgentlessMode(ctx, c, &cd.ref, cd.ers, eventTriggers, eventTriggerMap,
+			version, firstCollection, l); err != nil {
+			retErr = err
+		}
+	}
+
+	return retErr
+}
+
+// processEventReportsForClusterInAgentlessMode handles all ready-to-process EventReports for a single
+// cluster in agentless mode. It checks readiness, version compatibility, and delegates
+// per-EventReport work to updateAllClusterProfiles / updateEventReportStatus.
+func processEventReportsForClusterInAgentlessMode(ctx context.Context, c client.Client,
+	ref *corev1.ObjectReference, ers []*libsveltosv1beta1.EventReport,
+	eventTriggers *v1beta1.EventTriggerList, eventTriggerMap map[string]libsveltosset.Set,
+	version string, firstCollection bool, logger logr.Logger) error {
+
+	skip, err := skipCollecting(ctx, c, ref, logger)
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+
+	if !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctx, c, version, ref.Namespace, ref.Name,
+		clusterproxy.GetClusterType(ref), true, logger) {
+
+		logger.V(logs.LogDebug).Info("compatibility checks failed")
+		return errors.New("compatibility checks failed")
+	}
+
+	// EventSourceName in EventTrigger.Spec can be a template, so the map must be
+	// built per cluster using its namespace, name, and type.
+	eventSourceMap, err := buildEventTriggersForEventSourceMap(ctx, ref, eventTriggers)
+	if err != nil {
+		return err
+	}
+
+	var retErr error
+	mgmtClient := getManagementClusterClient()
+	for _, er := range ers {
+		reprocessing := firstCollection
+
+		if !er.DeletionTimestamp.IsZero() {
+			if err := deleteEventReport(ctx, c, ref, er, logger); err != nil {
+				logger.V(logs.LogInfo).Error(err, "failed to delete EventReport in management cluster")
+				retErr = err
+				continue
+			}
+			reprocessing = true
+		} else if shouldReprocess(er) {
+			// In agentless mode EventReports are generated directly in the management
+			// cluster, so no copy from the managed cluster is needed.
+			reprocessing = true
+		}
+
+		if !reprocessing {
+			continue
+		}
+
+		logger.V(logs.LogDebug).Info("processing EventReport")
+		if err := updateAllClusterProfiles(ctx, c, ref, er, eventSourceMap, eventTriggerMap, logger); err == nil {
+			updateEventReportStatus(ctx, mgmtClient, er, logger)
+		} else {
+			retErr = err
+		}
+	}
+
+	return retErr
 }
 
 func skipCollecting(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,

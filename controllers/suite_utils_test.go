@@ -40,7 +40,6 @@ import (
 
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
-	"github.com/projectsveltos/event-manager/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
@@ -169,7 +168,7 @@ func getEventReport(eventSourceName, clusterNamespace, clusterName string) *libs
 	}
 }
 
-func prepareCluster(version string) *clusterv1.Cluster {
+func prepareCluster() *clusterv1.Cluster {
 	namespace := randomString()
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -228,19 +227,6 @@ func prepareCluster(version string) *clusterv1.Cluster {
 	}
 	Expect(testEnv.Create(context.TODO(), secret)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv.Client, secret)).To(Succeed())
-
-	By("Create the ConfigMap with sveltos-agent version")
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: controllers.ReportNamespace,
-			Name:      "sveltos-agent-version",
-		},
-		Data: map[string]string{
-			"version": version,
-		},
-	}
-	Expect(testEnv.Create(context.TODO(), cm)).To(Succeed())
-	Expect(waitForObject(context.TODO(), testEnv.Client, cm)).To(Succeed())
 
 	Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
 

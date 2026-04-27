@@ -25,6 +25,7 @@ var (
 	RemoveEventReports                       = removeEventReports
 	RemoveEventReportsFromCluster            = removeEventReportsFromCluster
 	CollectAndProcessEventReportsFromCluster = collectAndProcessEventReportsFromCluster
+	CollectAndProcessAllEventReports         = collectAndProcessAllEventReports
 	DeleteEventReport                        = deleteEventReport
 	ProcessEventTriggerForCluster            = processEventTriggerForCluster
 )
@@ -78,6 +79,7 @@ var (
 
 	BuildEventTriggersForEventSourceMap = buildEventTriggersForEventSourceMap
 	BuildEventTriggersForClusterMap     = buildEventTriggersForClusterMap
+	BuildClustersWithEventTrigger       = buildClustersWithEventTrigger
 	ShouldIgnore                        = shouldIgnore
 	ShouldReprocess                     = shouldReprocess
 	IsEventTriggerMatchingTheCluster    = isEventTriggerMatchingTheCluster
