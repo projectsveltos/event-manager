@@ -22,7 +22,7 @@ package v1beta1
 
 import (
 	v1 "k8s.io/api/core/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	apiv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
@@ -131,7 +131,9 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 	if in.PolicyRefs != nil {
 		in, out := &in.PolicyRefs, &out.PolicyRefs
 		*out = make([]apiv1beta1.PolicyRef, len(*in))
-		copy(*out, *in)
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	if in.HelmCharts != nil {
 		in, out := &in.HelmCharts, &out.HelmCharts
@@ -143,6 +145,13 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 	if in.KustomizationRefs != nil {
 		in, out := &in.KustomizationRefs, &out.KustomizationRefs
 		*out = make([]apiv1beta1.KustomizationRef, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.PreDeployChecks != nil {
+		in, out := &in.PreDeployChecks, &out.PreDeployChecks
+		*out = make([]libsveltosapiv1beta1.ValidateHealth, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

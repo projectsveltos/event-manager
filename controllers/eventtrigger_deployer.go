@@ -392,6 +392,8 @@ func getSortedSpec(spec *v1beta1.EventTriggerSpec) *v1beta1.EventTriggerSpec {
 
 	specCopy.Patches = getSortedPatches(spec.Patches)
 
+	specCopy.PreDeployChecks = getSortedValidateHealths(spec.PreDeployChecks)
+
 	specCopy.ValidateHealths = getSortedValidateHealths(spec.ValidateHealths)
 
 	specCopy.PreDeleteChecks = getSortedValidateHealths(spec.PreDeleteChecks)
@@ -3425,6 +3427,7 @@ func getClusterProfileSpec(eventTrigger *v1beta1.EventTrigger) *configv1beta1.Sp
 		Reloader:             eventTrigger.Spec.Reloader,
 		MaxUpdate:            eventTrigger.Spec.MaxUpdate,
 		TemplateResourceRefs: nil, // this needs to be instantiated
+		PreDeployChecks:      eventTrigger.Spec.PreDeployChecks,
 		ValidateHealths:      eventTrigger.Spec.ValidateHealths,
 		PreDeleteChecks:      eventTrigger.Spec.PreDeleteChecks,
 		PostDeleteChecks:     eventTrigger.Spec.PostDeleteChecks,

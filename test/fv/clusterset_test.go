@@ -92,7 +92,7 @@ var _ = Describe("Reference ClusterSet", func() {
 				RepositoryURL:    "https://helm.nginx.com/stable/",
 				RepositoryName:   "nginx-stable",
 				ChartName:        "nginx-stable/nginx-ingress",
-				ChartVersion:     "0.17.1",
+				ChartVersion:     "2.5.1",
 				ReleaseName:      "nginx-latest",
 				ReleaseNamespace: "nginx",
 				HelmChartAction:  configv1beta1.HelmChartActionInstall,

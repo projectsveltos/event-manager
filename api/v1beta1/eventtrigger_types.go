@@ -19,6 +19,7 @@ package v1beta1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
@@ -267,6 +268,14 @@ type EventTriggerSpec struct {
 	// +optional
 	KustomizationRefs []configv1beta1.KustomizationRef `json:"kustomizationRefs,omitempty"`
 
+	// PreDeployChecks is a slice of checks to run against the managed cluster
+	// *before* Sveltos starts deploying resources.
+	// Each check can use Lua scripts or CEL expressions to validate the cluster state.
+	// If any check fails, the deployment of the associated feature is halted.
+	// +listType=atomic
+	// +optional
+	PreDeployChecks []libsveltosv1beta1.ValidateHealth `json:"preDeployChecks,omitempty"`
+
 	// ValidateHealths is a slice of Lua functions to run against
 	// the managed cluster to validate the state of those add-ons/applications
 	// is healthy
@@ -384,5 +393,11 @@ type EventTriggerList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&EventTrigger{}, &EventTriggerList{})
+	SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(GroupVersion,
+			&EventTrigger{},
+			&EventTriggerList{},
+		)
+		return nil
+	})
 }
