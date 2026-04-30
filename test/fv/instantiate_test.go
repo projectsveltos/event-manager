@@ -146,7 +146,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 				RepositoryURL:    "https://kyverno.github.io/kyverno/",
 				RepositoryName:   "kyverno",
 				ChartName:        "kyverno/kyverno",
-				ChartVersion:     "v2.6.0",
+				ChartVersion:     "v3.7.2",
 				ReleaseName:      "kyverno-latest",
 				ReleaseNamespace: "{{ .MatchingResource.Namespace }}",
 				HelmChartAction:  configv1beta1.HelmChartActionInstall,

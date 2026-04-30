@@ -93,7 +93,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 				RepositoryURL:    "https://metallb.github.io/metallb",
 				RepositoryName:   "metallb",
 				ChartName:        "metallb/metallb",
-				ChartVersion:     "0.14.7",
+				ChartVersion:     "0.15.3",
 				ReleaseName:      "{{ .Cluster.metadata.name }}",
 				ReleaseNamespace: "{{ .Resource.metadata.namespace }}",
 				HelmChartAction:  configv1beta1.HelmChartActionInstall,
