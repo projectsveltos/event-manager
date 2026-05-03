@@ -11,7 +11,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.28.3
 	github.com/onsi/gomega v1.40.0
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/addon-controller v1.8.1-0.20260430153734-63c425d617fb
+	github.com/projectsveltos/addon-controller v1.8.1-0.20260501123148-51b70adbe49b
 	github.com/projectsveltos/libsveltos v1.8.1-0.20260503183018-cf85218400d7
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/pflag v1.0.10
@@ -33,7 +33,7 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver/v3 v3.4.0 // indirect
+	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
