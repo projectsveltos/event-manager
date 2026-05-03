@@ -59,6 +59,7 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	"github.com/projectsveltos/libsveltos/lib/pullmode"
+	"github.com/projectsveltos/libsveltos/lib/randutils"
 	"github.com/projectsveltos/libsveltos/lib/sharding"
 )
 
@@ -1195,7 +1196,7 @@ func removeStaleEventReports(ctx context.Context, c client.Client,
 
 	for i := range eventReportList.Items {
 		err = c.Delete(ctx, &eventReportList.Items[i])
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			logger.V(logs.LogInfo).Error(err, "failed to delete EventReport")
 			return err
 		}
@@ -2526,7 +2527,7 @@ func getInstantiatedObjectName(ctx context.Context, c client.Client, objects []c
 		// a conflict will happen. On retry different name will
 		// be picked
 		const nameLength = 20
-		name = prefix + util.RandomString(nameLength)
+		name = prefix + randutils.RandomString(nameLength)
 		err = nil
 	case 1:
 		name = objects[0].GetName()
