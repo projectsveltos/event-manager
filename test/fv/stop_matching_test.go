@@ -266,7 +266,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 			if len(clusterProfileList.Items) == 0 {
 				return true
 			}
-			// If clusterProfiles are marked as deleted, event-trigger did its part
+			// If clusterProfiles are marked as deleted, event-manager did its part
 			for i := range clusterProfileList.Items {
 				if clusterProfileList.Items[i].DeletionTimestamp.IsZero() {
 					return false
