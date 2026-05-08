@@ -126,7 +126,9 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 	if in.TemplateResourceRefs != nil {
 		in, out := &in.TemplateResourceRefs, &out.TemplateResourceRefs
 		*out = make([]apiv1beta1.TemplateResourceRef, len(*in))
-		copy(*out, *in)
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	if in.PolicyRefs != nil {
 		in, out := &in.PolicyRefs, &out.PolicyRefs
