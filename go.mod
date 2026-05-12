@@ -1,21 +1,21 @@
 module github.com/projectsveltos/event-manager
 
-go 1.26.2
+go 1.26.3
 
 require (
 	github.com/TwiN/go-color v1.4.1
 	github.com/cloudevents/sdk-go/v2 v2.16.2
-	github.com/fluxcd/source-controller/api v1.8.3
+	github.com/fluxcd/source-controller/api v1.8.4
 	github.com/gdexlab/go-render v1.0.1
 	github.com/go-logr/logr v1.4.3
 	github.com/onsi/ginkgo/v2 v2.28.3
 	github.com/onsi/gomega v1.40.0
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/addon-controller v1.9.0
-	github.com/projectsveltos/libsveltos v1.9.0
+	github.com/projectsveltos/addon-controller v1.9.1-0.20260512164425-41601094377c
+	github.com/projectsveltos/libsveltos v1.9.1-0.20260512144132-3d4679d95b46
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/pflag v1.0.10
-	golang.org/x/text v0.36.0
+	golang.org/x/text v0.37.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.0
 	k8s.io/apiextensions-apiserver v0.36.0
@@ -25,7 +25,7 @@ require (
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
 	sigs.k8s.io/cluster-api v1.13.1
-	sigs.k8s.io/controller-runtime v0.24.0
+	sigs.k8s.io/controller-runtime v0.24.1
 )
 
 require (
@@ -45,7 +45,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.9.0 // indirect
-	github.com/fluxcd/pkg/apis/meta v1.26.0 // indirect
+	github.com/fluxcd/pkg/apis/meta v1.27.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
