@@ -2655,10 +2655,17 @@ func removeInstantiatedResources(ctx context.Context, c client.Client, clusterNa
 	clusterProfiles []*configv1beta1.ClusterProfile, fromGenerators []libsveltosv1beta1.PolicyRef,
 	logger logr.Logger) error {
 
-	if err := removeClusterProfiles(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger, er,
-		clusterProfiles, logger); err != nil {
+	staleProfilesFound, err := removeClusterProfiles(ctx, c, clusterNamespace, clusterName, clusterType, eventTrigger, er,
+		clusterProfiles, logger)
+	if err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to remove stale clusterProfiles")
 		return err
+	}
+
+	// Wait for stale ClusterProfiles to be fully deleted before removing referenced ConfigMaps/Secrets.
+	// Those resources may still be referenced by a ClusterProfile that is terminating.
+	if staleProfilesFound {
+		return fmt.Errorf("stale ClusterProfiles are being deleted, requeuing")
 	}
 
 	policyRefs := make(map[libsveltosv1beta1.PolicyRef]bool) // ignore deploymentType
@@ -2824,10 +2831,12 @@ func removeSecrets(ctx context.Context, c client.Client, clusterNamespace, clust
 // It deletes all stale ClusterProfiles (all ClusterProfile instances currently present and not in the clusterProfiles
 // list).
 // clusterProfiles arg represents all the ClusterProfiles the EventTrigger instance is currently managing for the
-// given cluster
+// given cluster.
+// Returns true if any stale ClusterProfiles were found (newly deleted or still terminating), so the caller
+// can defer removal of referenced ConfigMaps/Secrets until all profiles are fully gone.
 func removeClusterProfiles(ctx context.Context, c client.Client, clusterNamespace, clusterName string,
 	clusterType libsveltosv1beta1.ClusterType, eventTrigger *v1beta1.EventTrigger, er *libsveltosv1beta1.EventReport,
-	clusterProfiles []*configv1beta1.ClusterProfile, logger logr.Logger) error {
+	clusterProfiles []*configv1beta1.ClusterProfile, logger logr.Logger) (bool, error) {
 
 	// Build a map of current ClusterProfiles for faster indexing
 	// Those are the clusterProfiles current eventTrigger instance is programming
@@ -2849,21 +2858,26 @@ func removeClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 	clusterProfileList := &configv1beta1.ClusterProfileList{}
 	err := c.List(ctx, clusterProfileList, listOptions...)
 	if err != nil {
-		return err
+		return false, err
 	}
 
+	staleFound := false
 	for i := range clusterProfileList.Items {
 		cp := &clusterProfileList.Items[i]
 		if _, ok := currentClusterProfiles[cp.Name]; !ok {
-			logger.V(logs.LogDebug).Info(fmt.Sprintf("deleting clusterProfile %s", cp.Name))
-			err = c.Delete(ctx, cp)
-			if err != nil {
-				return err
+			staleFound = true
+			if cp.DeletionTimestamp.IsZero() {
+				logger.V(logs.LogDebug).Info(fmt.Sprintf("deleting clusterProfile %s", cp.Name))
+				if err := c.Delete(ctx, cp); err != nil {
+					return true, err
+				}
+			} else {
+				logger.V(logs.LogDebug).Info(fmt.Sprintf("clusterProfile %s is being deleted", cp.Name))
 			}
 		}
 	}
 
-	return nil
+	return staleFound, nil
 }
 
 func unstructuredToTyped(config *rest.Config, u *unstructured.Unstructured) (runtime.Object, error) {
