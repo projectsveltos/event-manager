@@ -303,6 +303,8 @@ data:
 			currentEventTrigger)).To(Succeed())
 		Expect(k8sClient.Delete(context.TODO(), currentEventTrigger)).To(Succeed())
 
+		verifyClusterProfilesAreGone(eventTriggerName)
+
 		Byf("Verifying EventTrigger %s is removed from the management cluster", eventTriggerName)
 		Eventually(func() bool {
 			err = k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventTriggerName},

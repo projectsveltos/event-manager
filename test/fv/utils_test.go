@@ -251,3 +251,19 @@ func verifyEventTriggerMatches(eventTrigger *v1beta1.EventTrigger) {
 		return false
 	}, timeout, pollingInterval).Should(BeTrue())
 }
+
+func verifyClusterProfilesAreGone(eventTriggerName string) {
+	Byf("Verifying ClusterProfile has been removed for eventTrigger %s", eventTriggerName)
+	const two = 2
+	Eventually(func() bool {
+		listOptions := []client.ListOption{
+			client.MatchingLabels(getInstantiatedObjectLabels(eventTriggerName)),
+		}
+		clusterProfileList := &configv1beta1.ClusterProfileList{}
+		err := k8sClient.List(context.TODO(), clusterProfileList, listOptions...)
+		if err != nil {
+			return false
+		}
+		return len(clusterProfileList.Items) == 0
+	}, two*timeout, pollingInterval).Should(BeTrue())
+}

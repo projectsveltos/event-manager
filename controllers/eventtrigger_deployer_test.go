@@ -1161,8 +1161,10 @@ status:
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		Expect(controllers.RemoveClusterProfiles(context.TODO(), c, clusterNamespace, clusterName, clusterType, eventTrigger,
-			eventReport, []*configv1beta1.ClusterProfile{clusterProfile}, logger)).To(Succeed())
+		staleFound, err := controllers.RemoveClusterProfiles(context.TODO(), c, clusterNamespace, clusterName, clusterType, eventTrigger,
+			eventReport, []*configv1beta1.ClusterProfile{clusterProfile}, logger)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(staleFound).To(BeTrue())
 
 		clusterProfiles := &configv1beta1.ClusterProfileList{}
 		Expect(c.List(context.TODO(), clusterProfiles)).To(Succeed())
@@ -2288,9 +2290,11 @@ data:
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
 
-		Expect(controllers.RemoveClusterProfiles(context.TODO(), c, clusterNamespace, clusterName,
+		staleFound, err := controllers.RemoveClusterProfiles(context.TODO(), c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, newEventReport,
-			[]*configv1beta1.ClusterProfile{currentClusterProfile}, logger)).To(Succeed())
+			[]*configv1beta1.ClusterProfile{currentClusterProfile}, logger)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(staleFound).To(BeTrue())
 
 		clusterProfileList := &configv1beta1.ClusterProfileList{}
 		Expect(c.List(context.TODO(), clusterProfileList)).To(Succeed())

@@ -292,6 +292,8 @@ var _ = Describe("CloudEvents", func() {
 			}, timeout, pollingInterval).Should(BeTrue())
 		}
 
+		verifyClusterProfilesAreGone(eventTrigger.Name)
+
 		Byf("Verifying EventTrigger %s is removed from the management cluster", eventTrigger.Name)
 		Eventually(func() bool {
 			err = k8sClient.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name},
@@ -313,24 +315,5 @@ var _ = Describe("CloudEvents", func() {
 				currentEventReport)
 			return err != nil && apierrors.IsNotFound(err)
 		}, timeout, pollingInterval).Should(BeTrue())
-
-		By("Verifying ClusterProfile has been removed")
-		Eventually(func() bool {
-			listOptions = []client.ListOption{
-				client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
-			}
-			err = k8sClient.List(context.TODO(), clusterProfileList, listOptions...)
-			if err != nil {
-				return false
-			}
-			for i := range clusterProfileList.Items {
-				cp := clusterProfileList.Items[i]
-				if cp.DeletionTimestamp.IsZero() {
-					return false
-				}
-			}
-			return true
-		}, timeout, pollingInterval).Should(BeTrue())
-
 	})
 })
