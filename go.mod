@@ -11,8 +11,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.28.3
 	github.com/onsi/gomega v1.40.0
 	github.com/pkg/errors v0.9.1
-	github.com/projectsveltos/addon-controller v1.9.1-0.20260514072008-1f15e55ba8de
-	github.com/projectsveltos/libsveltos v1.9.1-0.20260513071741-2e3047a7cd36
+	github.com/projectsveltos/addon-controller v1.10.0
+	github.com/projectsveltos/libsveltos v1.10.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/text v0.37.0
@@ -55,7 +55,7 @@ require (
 	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gobuffalo/flect v1.0.3 // indirect
-	github.com/google/cel-go v0.28.0 // indirect
+	github.com/google/cel-go v0.28.1 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
