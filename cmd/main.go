@@ -123,8 +123,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	sveltosNamespace := getSveltosNamespace()
+
 	controllers.SetManagementClusterAccess(mgr.GetClient(), mgr.GetConfig())
 	controllers.SetAgentInMgmtCluster(agentInMgmtCluster)
+	controllers.SetSveltosNamespace(sveltosNamespace)
 
 	// Setup the context that's going to be used in controllers and for the manager.
 	ctx := ctrl.SetupSignalHandler()
@@ -348,4 +351,13 @@ func getEventTriggerReconciler(mgr manager.Manager) *controllers.EventTriggerRec
 		ToEventSourceMap:      make(map[types.NamespacedName]*libsveltosset.Set),
 		ClusterSetMap:         make(map[corev1.ObjectReference]*libsveltosset.Set),
 	}
+}
+
+func getSveltosNamespace() string {
+	sveltosNamespace := os.Getenv("NAMESPACE")
+	if sveltosNamespace == "" {
+		setupLog.V(logs.LogInfo).Error(nil, "Missing required environment variables NAMESPACE")
+		os.Exit(1)
+	}
+	return sveltosNamespace
 }

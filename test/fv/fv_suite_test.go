@@ -19,6 +19,7 @@ package fv_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -53,6 +54,7 @@ var (
 	k8sClient           client.Client
 	scheme              *runtime.Scheme
 	kindWorkloadCluster *unstructured.Unstructured // This is the name of the kind workload cluster, in the form namespace/name
+	sveltosNamespace    string
 )
 
 const (
@@ -61,10 +63,16 @@ const (
 )
 
 const (
-	deplNamespace        = "projectsveltos"
 	deplName             = "event-manager"
 	managerContainerName = "manager"
 )
+
+func init() {
+	sveltosNamespace = os.Getenv("SVELTOS_NAMESPACE")
+	if sveltosNamespace == "" {
+		sveltosNamespace = "projectsveltos"
+	}
+}
 
 func TestFv(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -92,6 +100,7 @@ func TestFv(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	By(fmt.Sprintf("Running with Sveltos namespace: %s", sveltosNamespace))
 	ctrl.SetLogger(klog.Background())
 
 	restConfig := ctrl.GetConfigOrDie()
@@ -253,7 +262,7 @@ func isAgentLessMode() bool {
 	By("Getting event manager pod")
 	classfierDepl := &appsv1.Deployment{}
 	Expect(k8sClient.Get(context.TODO(),
-		types.NamespacedName{Namespace: deplNamespace, Name: deplName},
+		types.NamespacedName{Namespace: sveltosNamespace, Name: deplName},
 		classfierDepl)).To(Succeed())
 
 	Expect(len(classfierDepl.Spec.Template.Spec.Containers)).To(Equal(1))

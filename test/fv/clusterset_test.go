@@ -33,8 +33,7 @@ import (
 
 var _ = Describe("Reference ClusterSet", func() {
 	const (
-		namePrefix     = "clusterset-"
-		projectsveltos = "projectsveltos"
+		namePrefix = "clusterset-"
 	)
 
 	It("Verifies EventTrigger reacts to ClusterSet changes", Label("FV", "PULLMODE"), func() {

@@ -25,6 +25,7 @@ import (
 var (
 	managementClusterClient client.Client
 	agentInMgmtCluster      bool
+	sveltosNamespace        string
 )
 
 func SetManagementClusterAccess(c client.Client, config *rest.Config) {
@@ -33,6 +34,10 @@ func SetManagementClusterAccess(c client.Client, config *rest.Config) {
 
 func SetAgentInMgmtCluster(isInMgmtCluster bool) {
 	agentInMgmtCluster = isInMgmtCluster
+}
+
+func SetSveltosNamespace(ns string) {
+	sveltosNamespace = ns
 }
 
 func getManagementClusterClient() client.Client {
@@ -45,4 +50,8 @@ func getAgentInMgmtCluster() bool {
 
 func getManagementClusterScheme() *runtime.Scheme {
 	return managementClusterClient.Scheme()
+}
+
+func getSveltosNamespace() string {
+	return sveltosNamespace
 }

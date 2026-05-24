@@ -44,8 +44,7 @@ var (
 
 var _ = Describe("Template functions", func() {
 	const (
-		namePrefix     = "function-name-"
-		projectsveltos = "projectsveltos"
+		namePrefix = "function-name-"
 	)
 
 	It("Verifies use of extra template functions", Label("FV", "PULLMODE"),
@@ -126,7 +125,7 @@ var _ = Describe("Template functions", func() {
 				Eventually(func() bool {
 					currentEventReport := &libsveltosv1beta1.EventReport{}
 					err = workloadClient.Get(context.TODO(),
-						types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+						types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 						currentEventReport)
 					return err != nil && meta.IsNoMatchError(err) // CRD never installed
 				}, timeout, pollingInterval).Should(BeTrue())
@@ -142,7 +141,7 @@ var _ = Describe("Template functions", func() {
 				Eventually(func() error {
 					currentEventReport := &libsveltosv1beta1.EventReport{}
 					return workloadClient.Get(context.TODO(),
-						types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+						types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 						currentEventReport)
 				}, timeout, pollingInterval).Should(BeNil())
 			}

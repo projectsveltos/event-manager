@@ -54,8 +54,7 @@ data:
 
 var _ = Describe("CloudEvents", func() {
 	const (
-		namePrefix     = "ce-"
-		projectsveltos = "projectsveltos"
+		namePrefix = "ce-"
 	)
 
 	It("EventTrigger using matching CloudEvents", Label("FV", "PULLMODE"), func() {
@@ -130,7 +129,7 @@ var _ = Describe("CloudEvents", func() {
 			Eventually(func() error {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				return workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 			}, timeout, pollingInterval).Should(BeNil())
 		}
@@ -162,7 +161,7 @@ var _ = Describe("CloudEvents", func() {
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err := workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: erName},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: erName},
 					currentEventReport)
 				if err != nil {
 					return false
@@ -194,14 +193,14 @@ var _ = Describe("CloudEvents", func() {
 			Expect(k8sClient.Status().Update(context.TODO(), currentEventReport)).To(Succeed())
 		} else {
 			Byf("Updating EventReports %s/%s in the managed cluster adding a matching CloudEvent",
-				projectsveltos, eventSource.Name)
+				sveltosNamespace, eventSource.Name)
 			Expect(workloadClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+				types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 				currentEventReport)).To(Succeed())
 			currentEventReport.Spec.CloudEvents = [][]byte{jsonData}
 			Expect(workloadClient.Update(context.TODO(), currentEventReport)).To(Succeed())
 			Byf("Updated EventReport %s/%s in the management cluster adding a matching CloudEvent: %d",
-				projectsveltos, eventSource.Name, len(currentEventReport.Spec.CloudEvents))
+				sveltosNamespace, eventSource.Name, len(currentEventReport.Spec.CloudEvents))
 			waitingForDelivery := libsveltosv1beta1.ReportWaitingForDelivery
 			currentEventReport.Status.Phase = &waitingForDelivery
 			Expect(workloadClient.Status().Update(context.TODO(), currentEventReport)).To(Succeed())
@@ -224,7 +223,7 @@ var _ = Describe("CloudEvents", func() {
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				if err != nil {
 					return false
@@ -286,7 +285,7 @@ var _ = Describe("CloudEvents", func() {
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				return err != nil && apierrors.IsNotFound(err)
 			}, timeout, pollingInterval).Should(BeTrue())

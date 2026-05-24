@@ -36,8 +36,7 @@ import (
 
 var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and deploy helm chart", func() {
 	const (
-		namePrefix     = "events-helm-chart"
-		projectsveltos = "projectsveltos"
+		namePrefix = "events-helm-chart"
 	)
 
 	var clusterSummary *configv1beta1.ClusterSummary
@@ -128,7 +127,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 			Consistently(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				return err != nil && meta.IsNoMatchError(err) // CRD never installed
 			}, timeout/2, pollingInterval).Should(BeTrue())
@@ -144,7 +143,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 			Eventually(func() error {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				return workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 			}, timeout, pollingInterval).Should(BeNil())
 		}
@@ -153,7 +152,10 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 		Eventually(func() error {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			return k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{
+					Namespace: kindWorkloadCluster.GetNamespace(),
+					Name:      getEventReportName(eventSource.Name),
+				},
 				currentEventReport)
 		}, timeout, pollingInterval).Should(BeNil())
 
@@ -195,7 +197,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				if err != nil {
 					return false
@@ -208,7 +210,10 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 		Eventually(func() bool {
 			currentEventReport := &libsveltosv1beta1.EventReport{}
 			err = k8sClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: kindWorkloadCluster.GetNamespace(), Name: getEventReportName(eventSource.Name)},
+				types.NamespacedName{
+					Namespace: kindWorkloadCluster.GetNamespace(),
+					Name:      getEventReportName(eventSource.Name),
+				},
 				currentEventReport)
 			if err != nil {
 				return false
@@ -247,7 +252,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 		Byf("Verifying ConfigMap %s is instantiated in the projectsveltos namespace", configMapName)
 		configMap := &corev1.ConfigMap{}
 		Expect(k8sClient.Get(context.TODO(),
-			types.NamespacedName{Namespace: "projectsveltos", Name: configMapName}, configMap)).To(Succeed())
+			types.NamespacedName{Namespace: sveltosNamespace, Name: configMapName}, configMap)).To(Succeed())
 
 		Byf("Deleting EventTrigger %s", eventTrigger.Name)
 		currentEventTrigger := &v1beta1.EventTrigger{}
@@ -268,7 +273,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				return err != nil && apierrors.IsNotFound(err)
 			}, timeout, pollingInterval).Should(BeTrue())
@@ -300,7 +305,7 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 
 		Byf("Verifying ConfigMap %s in the projectsveltos namespace is removed", configMapName)
 		err = k8sClient.Get(context.TODO(),
-			types.NamespacedName{Namespace: "projectsveltos", Name: configMapName}, configMap)
+			types.NamespacedName{Namespace: sveltosNamespace, Name: configMapName}, configMap)
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	})
 })

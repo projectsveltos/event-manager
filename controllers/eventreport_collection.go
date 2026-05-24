@@ -459,8 +459,8 @@ func processEventReportsForClusterInAgentlessMode(ctx context.Context, c client.
 		return nil
 	}
 
-	if !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctx, c, version, ref.Namespace, ref.Name,
-		clusterproxy.GetClusterType(ref), true, logger) {
+	if !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctx, c, getSveltosNamespace(), version,
+		ref.Namespace, ref.Name, clusterproxy.GetClusterType(ref), true, logger) {
 
 		logger.V(logs.LogDebug).Info("compatibility checks failed")
 		return errors.New("compatibility checks failed")
@@ -563,8 +563,8 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 	if err != nil {
 		return err
 	}
-	if !isPullMode && !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctx, c, version, cluster.Namespace, cluster.Name,
-		clusterproxy.GetClusterType(clusterRef), getAgentInMgmtCluster(), logger) {
+	if !isPullMode && !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctx, c, getSveltosNamespace(), version,
+		cluster.Namespace, cluster.Name, clusterproxy.GetClusterType(clusterRef), getAgentInMgmtCluster(), logger) {
 
 		msg := "compatibility checks failed"
 		logger.V(logs.LogDebug).Info(msg)

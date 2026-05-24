@@ -44,8 +44,6 @@ const (
 
 var _ = Describe("Redeploy when Generators change", func() {
 	const (
-		projectsveltos = "projectsveltos"
-
 		eventTriggerName = "deploy-imagepullsecret"
 
 		namePrefix = "redeploy-generator-"
@@ -110,7 +108,7 @@ spec:
       apiVersion: v1
       kind: ConfigMap
       name: "{{ .Cluster.metadata.name }}-imagepullsecret"
-      namespace: projectsveltos
+      namespace: %s
     identifier: Namespaces
   - resource: # This is the ConfigMap containing the credentials to authenticate with private registry
       apiVersion: v1
@@ -179,7 +177,7 @@ data:
 		// 2. copy the regcred Secret created above to this namespace
 		Byf("Deploy Sveltos configuration (EventTrigger: %s)", eventTriggerName)
 		configuration := fmt.Sprintf(sveltosConfig, configMapGeneratorName, namespaceLabel,
-			eventTriggerName, key, value, configMapGeneratorName)
+			eventTriggerName, key, value, configMapGeneratorName, sveltosNamespace)
 		objects, err := customSplit(configuration)
 		Expect(err).To(BeNil())
 		for i := range objects {
@@ -217,7 +215,7 @@ data:
 			Eventually(func() error {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				return workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSourceName},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSourceName},
 					currentEventReport)
 			}, timeout, pollingInterval).Should(BeNil())
 		}
@@ -239,7 +237,7 @@ data:
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSourceName},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSourceName},
 					currentEventReport)
 				if err != nil {
 					return false

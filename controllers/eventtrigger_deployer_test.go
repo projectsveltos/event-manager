@@ -1419,7 +1419,7 @@ status:
 			eventReport, libsveltosv1beta1.ClusterTypeCapi)
 
 		listOptions := []client.ListOption{
-			client.InNamespace(controllers.ReportNamespace),
+			client.InNamespace(sveltosNamespace),
 			client.MatchingLabels(expectedLabels),
 		}
 
@@ -1624,7 +1624,7 @@ spec:
 		Expect(len(remoteSet)).To(Equal(1))
 
 		listOptions := []client.ListOption{
-			client.InNamespace(controllers.ReportNamespace),
+			client.InNamespace(sveltosNamespace),
 			client.MatchingLabels(labels),
 		}
 
@@ -1663,7 +1663,7 @@ spec:
 
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: controllers.ReportNamespace,
+				Namespace: sveltosNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
 					clusterName, eventTriggerName, eventReport, clusterType),
@@ -1675,7 +1675,7 @@ spec:
 
 		toBeRemovedConfigMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: controllers.ReportNamespace,
+				Namespace: sveltosNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
 					clusterName, eventTriggerName, eventReport, clusterType),
@@ -1708,7 +1708,7 @@ spec:
 			&eventTrigger, eventReport, policyRefs, logger)).To(Succeed())
 
 		listOptions := []client.ListOption{
-			client.InNamespace(controllers.ReportNamespace),
+			client.InNamespace(sveltosNamespace),
 		}
 		configMapList := &corev1.ConfigMapList{}
 		Expect(c.List(context.TODO(), configMapList, listOptions...)).To(Succeed())
@@ -1734,7 +1734,7 @@ spec:
 
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: controllers.ReportNamespace,
+				Namespace: sveltosNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
 					clusterName, eventTriggerName, eventReport, clusterType),
@@ -1747,7 +1747,7 @@ spec:
 
 		toBeRemovedSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: controllers.ReportNamespace,
+				Namespace: sveltosNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace,
 					clusterName, eventTriggerName, eventReport, clusterType),
@@ -1781,7 +1781,7 @@ spec:
 			&eventTrigger, eventReport, policyRefs, logger)).To(Succeed())
 
 		listOptions := []client.ListOption{
-			client.InNamespace(controllers.ReportNamespace),
+			client.InNamespace(sveltosNamespace),
 		}
 		secretList := &corev1.SecretList{}
 		Expect(c.List(context.TODO(), secretList, listOptions...)).To(Succeed())
@@ -2329,7 +2329,7 @@ data:
 		// ConfigMap created when old EventSource was referenced
 		staleConfigMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: controllers.ReportNamespace,
+				Namespace: sveltosNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
 					eventTriggerName, oldEventReport, clusterType),
@@ -2340,7 +2340,7 @@ data:
 		// ConfigMap created for the current (new) EventSource
 		currentConfigMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: controllers.ReportNamespace,
+				Namespace: sveltosNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
 					eventTriggerName, newEventReport, clusterType),
@@ -2368,7 +2368,7 @@ data:
 
 		configMapList := &corev1.ConfigMapList{}
 		Expect(c.List(context.TODO(), configMapList,
-			client.InNamespace(controllers.ReportNamespace))).To(Succeed())
+			client.InNamespace(sveltosNamespace))).To(Succeed())
 		Expect(len(configMapList.Items)).To(Equal(1))
 		Expect(configMapList.Items[0].Name).To(Equal(currentConfigMap.Name))
 	})
@@ -2400,7 +2400,7 @@ data:
 		// Secret created when old EventSource was referenced
 		staleSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: controllers.ReportNamespace,
+				Namespace: sveltosNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
 					eventTriggerName, oldEventReport, clusterType),
@@ -2412,7 +2412,7 @@ data:
 		// Secret created for the current (new) EventSource
 		currentSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: controllers.ReportNamespace,
+				Namespace: sveltosNamespace,
 				Name:      randomString(),
 				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName,
 					eventTriggerName, newEventReport, clusterType),
@@ -2441,7 +2441,7 @@ data:
 
 		secretList := &corev1.SecretList{}
 		Expect(c.List(context.TODO(), secretList,
-			client.InNamespace(controllers.ReportNamespace))).To(Succeed())
+			client.InNamespace(sveltosNamespace))).To(Succeed())
 		Expect(len(secretList.Items)).To(Equal(1))
 		Expect(secretList.Items[0].Name).To(Equal(currentSecret.Name))
 	})

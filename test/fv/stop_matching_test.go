@@ -45,8 +45,7 @@ metadata:
 
 var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", func() {
 	const (
-		namePrefix     = "stop-matching"
-		projectsveltos = "projectsveltos"
+		namePrefix = "stop-matching"
 	)
 
 	It("Verifies ClusterProfiles is deleted when cluster stops matching EventTrigger", Label("FV", "PULLMODE"), func() {
@@ -121,7 +120,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				return err != nil && meta.IsNoMatchError(err) // CRD never installed
 			}, timeout/2, pollingInterval).Should(BeTrue())
@@ -137,7 +136,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 			Eventually(func() error {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				return workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 			}, timeout, pollingInterval).Should(BeNil())
 		}
@@ -167,7 +166,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				if err != nil {
 					return false
@@ -247,7 +246,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				return err != nil && apierrors.IsNotFound(err)
 			}, timeout, pollingInterval).Should(BeTrue())
