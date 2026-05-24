@@ -37,9 +37,8 @@ import (
 
 var _ = Describe("ClusterProfile deletion precedes referenced resource cleanup", func() {
 	const (
-		namePrefix     = "profile-before-cm-"
-		projectsveltos = "projectsveltos"
-		testFinalizer  = "test.projectsveltos.io/do-not-delete"
+		namePrefix    = "profile-before-cm-"
+		testFinalizer = "test.projectsveltos.io/do-not-delete"
 	)
 
 	// Verifies that when an EventTrigger update makes a ClusterProfile stale, the instantiated
@@ -134,7 +133,7 @@ var _ = Describe("ClusterProfile deletion precedes referenced resource cleanup",
 				Eventually(func() error {
 					currentEventReport := &libsveltosv1beta1.EventReport{}
 					return workloadClient.Get(context.TODO(),
-						types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+						types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 						currentEventReport)
 				}, timeout, pollingInterval).Should(BeNil())
 			}
@@ -167,7 +166,7 @@ var _ = Describe("ClusterProfile deletion precedes referenced resource cleanup",
 				Eventually(func() bool {
 					currentEventReport := &libsveltosv1beta1.EventReport{}
 					err = workloadClient.Get(context.TODO(),
-						types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+						types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 						currentEventReport)
 					if err != nil {
 						return false
@@ -213,7 +212,7 @@ var _ = Describe("ClusterProfile deletion precedes referenced resource cleanup",
 			Eventually(func() bool {
 				cmListOptions := []client.ListOption{
 					client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
-					client.InNamespace(projectsveltos),
+					client.InNamespace(sveltosNamespace),
 				}
 				cmList := &corev1.ConfigMapList{}
 				err = k8sClient.List(context.TODO(), cmList, cmListOptions...)
@@ -263,7 +262,7 @@ var _ = Describe("ClusterProfile deletion precedes referenced resource cleanup",
 			Consistently(func() bool {
 				cmListOptions := []client.ListOption{
 					client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
-					client.InNamespace(projectsveltos),
+					client.InNamespace(sveltosNamespace),
 				}
 				cmList := &corev1.ConfigMapList{}
 				err = k8sClient.List(context.TODO(), cmList, cmListOptions...)
@@ -302,7 +301,7 @@ var _ = Describe("ClusterProfile deletion precedes referenced resource cleanup",
 			Eventually(func() bool {
 				cmListOptions := []client.ListOption{
 					client.MatchingLabels(getInstantiatedObjectLabels(eventTrigger.Name)),
-					client.InNamespace(projectsveltos),
+					client.InNamespace(sveltosNamespace),
 				}
 				cmList := &corev1.ConfigMapList{}
 				err = k8sClient.List(context.TODO(), cmList, cmListOptions...)

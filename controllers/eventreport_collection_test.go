@@ -58,7 +58,7 @@ var _ = Describe("EventSource Deployer", func() {
 		By("Create the ConfigMap with sveltos-agent version")
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: controllers.ReportNamespace,
+				Namespace: sveltosNamespace,
 				Name:      cmVersionName,
 			},
 			Data: map[string]string{
@@ -73,13 +73,13 @@ var _ = Describe("EventSource Deployer", func() {
 		By("Delete the ConfigMap with sveltos-agent version")
 		cm := &corev1.ConfigMap{}
 		Expect(testEnv.Get(context.TODO(),
-			types.NamespacedName{Namespace: controllers.ReportNamespace, Name: cmVersionName},
+			types.NamespacedName{Namespace: sveltosNamespace, Name: cmVersionName},
 			cm)).To(Succeed())
 		Expect(testEnv.Delete(context.TODO(), cm)).To(Succeed())
 
 		Eventually(func() bool {
 			err := testEnv.Get(context.TODO(),
-				types.NamespacedName{Namespace: controllers.ReportNamespace, Name: cmVersionName},
+				types.NamespacedName{Namespace: sveltosNamespace, Name: cmVersionName},
 				cm)
 			return err != nil && apierrors.IsNotFound(err)
 		}, timeout, pollingInterval).Should(BeTrue())
@@ -183,10 +183,9 @@ var _ = Describe("EventSource Deployer", func() {
 
 		// In managed cluster this is the namespace where EventReports
 		// are created
-		const eventReportNamespace = controllers.ReportNamespace
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: eventReportNamespace,
+				Name: sveltosNamespace,
 			},
 		}
 		err := testEnv.Create(context.TODO(), ns)
@@ -201,7 +200,7 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventSource)).To(Succeed())
 
 		eventReport := getEventReport(eventSourceName, "", "")
-		eventReport.Namespace = eventReportNamespace
+		eventReport.Namespace = sveltosNamespace
 		Expect(testEnv.Create(context.TODO(), eventReport)).To(Succeed())
 
 		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport)).To(Succeed())

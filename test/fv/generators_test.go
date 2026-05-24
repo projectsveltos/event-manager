@@ -79,8 +79,7 @@ data:
 
 var _ = Describe("Generators", func() {
 	const (
-		namePrefix     = "generators-"
-		projectsveltos = "projectsveltos"
+		namePrefix = "generators-"
 	)
 
 	It("Configures Generators and have ClusterProfile consume those", Label("FV", "PULLMODE"), func() {
@@ -151,7 +150,7 @@ var _ = Describe("Generators", func() {
 			{
 				Identifier: "ConfigMapToken",
 				Resource: corev1.ObjectReference{
-					Namespace:  "projectsveltos",
+					Namespace:  sveltosNamespace,
 					Name:       instantiateResourceName,
 					Kind:       string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
 					APIVersion: "v1",
@@ -186,7 +185,7 @@ var _ = Describe("Generators", func() {
 			Eventually(func() error {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				return workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 			}, timeout, pollingInterval).Should(BeNil())
 		}
@@ -206,7 +205,7 @@ var _ = Describe("Generators", func() {
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				if err != nil {
 					return false
@@ -280,7 +279,7 @@ var _ = Describe("Generators", func() {
 			Eventually(func() bool {
 				currentEventReport := &libsveltosv1beta1.EventReport{}
 				err = workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+					types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 					currentEventReport)
 				return err != nil && apierrors.IsNotFound(err)
 			}, timeout, pollingInterval).Should(BeTrue())

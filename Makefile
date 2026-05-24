@@ -38,7 +38,7 @@ ARCH ?= $(shell go env GOARCH)
 OS ?= $(shell uname -s | tr A-Z a-z)
 K8S_LATEST_VER ?= $(shell curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
 export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
-TAG ?= v1.10.0
+TAG ?= main
 
 ## Tool Binaries
 CONTROLLER_GEN := $(TOOLS_BIN_DIR)/controller-gen
@@ -260,27 +260,12 @@ fv-pullmode: $(GINKGO) ## Run Sveltos Controller tests using existing cluster
 test: manifests generate fmt vet check-manifests $(SETUP_ENVTEST) ## Run uts.
 	KUBEBUILDER_ASSETS="$(KUBEBUILDER_ASSETS)" go test $(shell go list ./... |grep -v test/fv |grep -v test/helpers) $(TEST_ARGS) -coverprofile cover.out
 
-.PHONY: create-cluster
-create-cluster: $(KIND) $(CLUSTERCTL) $(KUBECTL) $(ENVSUBST) ## Create a new kind cluster designed for development
+.PHONY: create-cluster-infra
+create-cluster-infra: $(KIND) $(CLUSTERCTL) $(KUBECTL) ## Create cluster infrastructure without deploying Sveltos
 	$(MAKE) create-control-cluster
-
-	@echo wait for capd-system pod
-	$(KUBECTL) wait --for=condition=Available deployment/capd-controller-manager -n capd-system --timeout=$(TIMEOUT)
-
-	@echo wait for capi-kubeadm-bootstrap-system pod
-	$(KUBECTL) wait --for=condition=Available deployment/capi-kubeadm-bootstrap-controller-manager -n capi-kubeadm-bootstrap-system --timeout=$(TIMEOUT)
-
-	@echo wait for capi-kubeadm-control-plane-system pod
-	$(KUBECTL) wait --for=condition=Available deployment/capi-kubeadm-control-plane-controller-manager -n capi-kubeadm-control-plane-system --timeout=$(TIMEOUT)
-
-	@echo "sleep allowing webhook to be ready"
-	sleep 10
 
 	@echo "Create a workload cluster"
 	$(KUBECTL) apply -f $(KIND_CLUSTER_YAML)
-
-	@echo "Start projectsveltos event-manager"
-	$(MAKE) deploy-projectsveltos
 
 	@echo "sleep allowing control plane to be ready"
 	sleep 60
@@ -293,6 +278,39 @@ create-cluster: $(KIND) $(CLUSTERCTL) $(KUBECTL) $(ENVSUBST) ## Create a new kin
 
 	@echo wait for calico pod
 	$(KUBECTL) --kubeconfig=./test/fv/workload_kubeconfig wait --for=condition=Available deployment/calico-kube-controllers -n kube-system --timeout=$(TIMEOUT)
+
+.PHONY: fv-namespace
+fv-namespace: $(GINKGO) $(KUBECTL) $(KUSTOMIZE) $(ENVSUBST) ## Run FV tests with event-manager deployed in a random namespace
+	$(MAKE) load-image
+	$(MAKE) deploy-crds
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	SVELTOS_NS="sveltos-$$(openssl rand -hex 4)"; \
+	echo "Deploying in namespace: $$SVELTOS_NS"; \
+	curl -s https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/manifest.yaml | \
+		sed -E 's/^([[:space:]]+)(name|namespace): projectsveltos$$/\1\2: '"$$SVELTOS_NS"'/' | \
+		$(KUBECTL) apply -f-; \
+	echo "Waiting for addon-controller to be available in namespace $$SVELTOS_NS..."; \
+	$(KUBECTL) wait --for=condition=Available deployment/addon-controller -n "$$SVELTOS_NS" --timeout=$(TIMEOUT); \
+	$(KUSTOMIZE) build config/default | $(ENVSUBST) | \
+		sed -E 's/^([[:space:]]+)(name|namespace): projectsveltos$$/\1\2: '"$$SVELTOS_NS"'/' | \
+		$(KUBECTL) apply -f-; \
+	echo "Waiting for event-manager to be available in namespace $$SVELTOS_NS..."; \
+	$(KUBECTL) wait --for=condition=Available deployment/event-manager -n "$$SVELTOS_NS" --timeout=$(TIMEOUT); \
+	cp test/sveltos-agent.yaml test/sveltos-agent.yaml.m; \
+	sed -E 's/^([[:space:]]+)(name|namespace): projectsveltos$$/\1\2: '"$$SVELTOS_NS"'/' test/sveltos-agent.yaml.m > test/sveltos-agent.yaml.tmp; \
+	mv test/sveltos-agent.yaml.tmp test/sveltos-agent.yaml.m; \
+	KUBECONFIG="--kubeconfig=./test/fv/workload_kubeconfig" $(MAKE) deploy-sveltos-agent; \
+	cd test/fv && SVELTOS_NAMESPACE="$$SVELTOS_NS" $(GINKGO) -nodes $(NUM_NODES) --label-filter='FV' --v --trace --randomize-all
+
+.PHONY: kind-test-namespace
+kind-test-namespace: test create-cluster-infra fv-namespace ## Build docker image; start kind cluster; run fv in a random namespace
+
+.PHONY: create-cluster
+create-cluster: $(KIND) $(CLUSTERCTL) $(KUBECTL) $(ENVSUBST) ## Create a new kind cluster designed for development
+	$(MAKE) create-cluster-infra
+
+	@echo "Start projectsveltos event-manager"
+	$(MAKE) deploy-projectsveltos
 
 create-cluster-pullmode: $(KIND) $(KUBECTL) $(ENVSUBST) $(KUSTOMIZE)
 	docker network rm $(SVELTOS_NETWORK_NAME) 2>/dev/null || true
@@ -446,11 +464,8 @@ create-control-cluster:
 	@echo "sleep allowing webhook to be ready"
 	sleep 10
 
-deploy-projectsveltos: $(KUSTOMIZE)
-	# Load projectsveltos image into cluster
-	@echo 'Load projectsveltos image into cluster'
-	$(MAKE) load-image
-
+.PHONY: deploy-crds
+deploy-crds: $(KUBECTL) ## Install libsveltos CRDs
 	@echo 'Install libsveltos CRDs'
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_debuggingconfigurations.lib.projectsveltos.io.yaml
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_eventsources.lib.projectsveltos.io.yaml
@@ -460,6 +475,13 @@ deploy-projectsveltos: $(KUSTOMIZE)
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_sets.lib.projectsveltos.io.yaml
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_configurationgroups.lib.projectsveltos.io.yaml
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_configurationbundles.lib.projectsveltos.io.yaml
+
+deploy-projectsveltos: $(KUSTOMIZE)
+	# Load projectsveltos image into cluster
+	@echo 'Load projectsveltos image into cluster'
+	$(MAKE) load-image
+
+	$(MAKE) deploy-crds
 
 	# Install projectsveltos addon-controller
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/addon-controller/$(TAG)/manifest/manifest.yaml

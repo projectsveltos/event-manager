@@ -64,9 +64,6 @@ import (
 )
 
 const (
-	// Namespace where reports will be generated
-	ReportNamespace = "projectsveltos"
-
 	// TODO: remove this (it is replaced by eventSourceNameLabel)
 	eventReportNameLabel = "eventtrigger.lib.projectsveltos.io/eventreportname"
 
@@ -2293,14 +2290,14 @@ func instantiateReferencedPolicy(ctx context.Context, e *v1beta1.EventTrigger, r
 		&corev1.ObjectReference{Kind: v1beta1.EventTriggerKind, Name: e.GetName(), APIVersion: v1beta1.GroupVersion.String()},
 	)
 
-	return &types.NamespacedName{Namespace: ReportNamespace, Name: name}, nil
+	return &types.NamespacedName{Namespace: getSveltosNamespace(), Name: name}, nil
 }
 
 func generateConfigMap(ref client.Object, name string, labels, content map[string]string) client.Object {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
-			Namespace:   ReportNamespace,
+			Namespace:   getSveltosNamespace(),
 			Labels:      labels,
 			Annotations: ref.GetAnnotations(), //  libsveltosv1beta1.PolicyTemplateAnnotation might be set
 		},
@@ -2317,7 +2314,7 @@ func generateSecret(ref client.Object, name string, labels, content map[string]s
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
-			Namespace:   ReportNamespace,
+			Namespace:   getSveltosNamespace(),
 			Labels:      labels,
 			Annotations: ref.GetAnnotations(), //  libsveltosv1beta1.PolicyTemplateAnnotation might be set
 		},
@@ -2475,7 +2472,7 @@ func getConfigMapName(ctx context.Context, c client.Client, labels map[string]st
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
-		client.InNamespace(ReportNamespace), // all instantianted ConfigMaps are in this namespace
+		client.InNamespace(getSveltosNamespace()), // all instantianted ConfigMaps are in this namespace
 	}
 
 	configMapList := &corev1.ConfigMapList{}
@@ -2499,7 +2496,7 @@ func getSecretName(ctx context.Context, c client.Client, labels map[string]strin
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
-		client.InNamespace(ReportNamespace), // all instantianted Secrets are in this namespace
+		client.InNamespace(getSveltosNamespace()), // all instantianted Secrets are in this namespace
 	}
 
 	secretList := &corev1.SecretList{}
@@ -2750,7 +2747,7 @@ func removeConfigMaps(ctx context.Context, c client.Client, clusterNamespace, cl
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
-		client.InNamespace(ReportNamespace),
+		client.InNamespace(getSveltosNamespace()),
 	}
 
 	configMaps := &corev1.ConfigMapList{}
@@ -2797,7 +2794,7 @@ func removeSecrets(ctx context.Context, c client.Client, clusterNamespace, clust
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
-		client.InNamespace(ReportNamespace),
+		client.InNamespace(getSveltosNamespace()),
 	}
 
 	secrets := &corev1.SecretList{}
@@ -3370,7 +3367,7 @@ func deleteInstantiatedFromGenerators(ctx context.Context, c client.Client, clus
 
 	listOptions := []client.ListOption{
 		client.MatchingLabels(labels),
-		client.InNamespace(ReportNamespace),
+		client.InNamespace(getSveltosNamespace()),
 	}
 
 	configMaps := &corev1.ConfigMapList{}
@@ -3524,7 +3521,7 @@ func (r *EventTriggerReconciler) resetEventReportStatus(ctx context.Context,
 		kubernetesClient = r.Client
 	} else {
 		eventReportName = eventTrigger.Spec.EventSourceName
-		eventReportNamespace = "projectsveltos"
+		eventReportNamespace = sveltosNamespace
 		kubernetesClient, err = clusterproxy.GetKubernetesClient(ctx, r.Client, clusterRef.Namespace,
 			clusterRef.Name, "", "", clusterType, logger)
 		if err != nil {

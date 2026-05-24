@@ -44,8 +44,7 @@ metadata:
 
 var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 	const (
-		namePrefix     = "profile-name-"
-		projectsveltos = "projectsveltos"
+		namePrefix = "profile-name-"
 	)
 
 	It("Verifies ClusterProfiles are instantiated with names based on InstantiatedProfileNameFormat", Label("FV", "PULLMODE"),
@@ -120,7 +119,7 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 				Eventually(func() bool {
 					currentEventReport := &libsveltosv1beta1.EventReport{}
 					err = workloadClient.Get(context.TODO(),
-						types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+						types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 						currentEventReport)
 					return err != nil && meta.IsNoMatchError(err) // CRD never installed
 				}, timeout, pollingInterval).Should(BeTrue())
@@ -136,7 +135,7 @@ var _ = Describe("Instantiate ClusterProfile with predictable names", func() {
 				Eventually(func() error {
 					currentEventReport := &libsveltosv1beta1.EventReport{}
 					return workloadClient.Get(context.TODO(),
-						types.NamespacedName{Namespace: projectsveltos, Name: eventSource.Name},
+						types.NamespacedName{Namespace: sveltosNamespace, Name: eventSource.Name},
 						currentEventReport)
 				}, timeout, pollingInterval).Should(BeNil())
 			}

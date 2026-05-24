@@ -32,7 +32,7 @@ import (
 var (
 	programEventTriggerDurationHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
-			Namespace: "projectsveltos",
+			Namespace: getSveltosNamespace(),
 			Name:      "program_eventtrigger_time_seconds",
 			Help:      "Program EventTrigger on a workload cluster duration distribution",
 			Buckets:   []float64{0.1, 0.5, 1, 5, 10, 20, 30},
