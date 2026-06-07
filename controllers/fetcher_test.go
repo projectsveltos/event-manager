@@ -24,7 +24,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	sourcev1b2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -250,7 +249,7 @@ var _ = Describe("Fetcher", func() {
 			},
 		}
 
-		ociRegistry := &sourcev1b2.OCIRepository{
+		ociRegistry := &sourcev1.OCIRepository{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("%s-%s", namePrefix, cluster.Name),
 				Namespace: clusterNamespace, // this is put in cluster namespace on purpose
@@ -267,7 +266,7 @@ var _ = Describe("Fetcher", func() {
 				PolicyRefs: []configv1beta1.PolicyRef{
 					{
 						DeploymentType: configv1beta1.DeploymentTypeLocal,
-						Kind:           string(sourcev1b2.OCIRepositoryKind),
+						Kind:           string(sourcev1.OCIRepositoryKind),
 						Name:           namePrefix + "-{{ .Cluster.metadata.name }}",
 						Namespace:      "", // leaving it empty to use cluster namespace
 						Path:           "charts/{{ .Cluster.metadata.name }}",
