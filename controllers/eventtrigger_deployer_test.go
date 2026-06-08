@@ -56,9 +56,13 @@ import (
 )
 
 const (
-	ClusterKind         = "Cluster"
-	separator           = "---\n"
-	nginxDeploymentName = "nginx-deployment"
+	ClusterKind                   = "Cluster"
+	separator                     = "---\n"
+	nginxDeploymentName           = "nginx-deployment"
+	labelProduction               = "production"
+	deploymentKind                = "Deployment"
+	matchingResourceNamespaceTmpl = "{{ .MatchingResource.Namespace }}"
+	policyKey                     = "policy"
 )
 
 var (
@@ -151,7 +155,7 @@ var _ = Describe("EventTrigger deployer", func() {
 		eventTrigger.Status = v1beta1.EventTriggerStatus{
 			MatchingClusterRefs: []corev1.ObjectReference{
 				{
-					Kind: "Cluster", APIVersion: clusterv1.GroupVersion.String(),
+					Kind: ClusterKind, APIVersion: clusterv1.GroupVersion.String(),
 					Namespace: clusterNamespace, Name: clusterName,
 				},
 			},
@@ -653,7 +657,7 @@ status:
 		clusterName := randomString()
 		clusterType := libsveltosv1beta1.ClusterTypeCapi
 		labelKey := randomString()
-		labelValue := "production"
+		labelValue := labelProduction
 
 		eventSourceNamePrefix := "eventsource"
 		eventSource := &libsveltosv1beta1.EventSource{
@@ -906,7 +910,7 @@ status:
 			},
 			Spec: libsveltosv1beta1.EventReportSpec{
 				MatchingResources: []corev1.ObjectReference{
-					{Kind: "Deployment", APIVersion: corev1.SchemeGroupVersion.String(),
+					{Kind: deploymentKind, APIVersion: corev1.SchemeGroupVersion.String(),
 						Namespace: nginxNamespace, Name: nginxName},
 				},
 				Resources:        []byte(result),
@@ -975,7 +979,7 @@ status:
 		Expect(len(clusterProfiles.Items[0].Spec.ClusterRefs)).To(Equal(1))
 		Expect(clusterProfiles.Items[0].Spec.ClusterRefs[0].Namespace).To(Equal(clusterNamespace))
 		Expect(clusterProfiles.Items[0].Spec.ClusterRefs[0].Name).To(Equal(clusterName))
-		Expect(clusterProfiles.Items[0].Spec.ClusterRefs[0].Kind).To(Equal("Cluster"))
+		Expect(clusterProfiles.Items[0].Spec.ClusterRefs[0].Kind).To(Equal(ClusterKind))
 		Expect(len(clusterProfiles.Items[0].Spec.HelmCharts)).To(Equal(1))
 	})
 
@@ -1015,9 +1019,9 @@ status:
 			},
 			Spec: libsveltosv1beta1.EventReportSpec{
 				MatchingResources: []corev1.ObjectReference{
-					{Kind: "Deployment", APIVersion: corev1.SchemeGroupVersion.String(),
+					{Kind: deploymentKind, APIVersion: corev1.SchemeGroupVersion.String(),
 						Namespace: nginxNamespace1, Name: nginxName},
-					{Kind: "Deployment", APIVersion: corev1.SchemeGroupVersion.String(),
+					{Kind: deploymentKind, APIVersion: corev1.SchemeGroupVersion.String(),
 						Namespace: nginxNamespace2, Name: nginxName},
 				},
 				Resources:        []byte(result),
@@ -1036,7 +1040,7 @@ status:
 					{
 						RepositoryName:   randomString(),
 						RepositoryURL:    randomString(),
-						ReleaseNamespace: "{{ .MatchingResource.Namespace }}",
+						ReleaseNamespace: matchingResourceNamespaceTmpl,
 						ReleaseName:      randomString(),
 						ChartName:        randomString() + "{{ .Cluster.metadata.name }}",
 						ChartVersion:     randomString(),
@@ -1045,10 +1049,10 @@ status:
 				},
 				KustomizationRefs: []configv1beta1.KustomizationRef{
 					{
-						Namespace: "{{ .MatchingResource.Namespace }}",
+						Namespace: matchingResourceNamespaceTmpl,
 						Name:      randomString() + "{{ .Cluster.metadata.name }}",
 						Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
-						Path:      randomString() + "{{ .Cluster.metadata.name }}" + "{{ .MatchingResource.Namespace }}",
+						Path:      randomString() + "{{ .Cluster.metadata.name }}" + matchingResourceNamespaceTmpl,
 					},
 				},
 			},
@@ -1098,7 +1102,7 @@ status:
 			Expect(len(clusterProfiles.Items[i].Spec.ClusterRefs)).To(Equal(1))
 			Expect(clusterProfiles.Items[i].Spec.ClusterRefs[0].Namespace).To(Equal(clusterNamespace))
 			Expect(clusterProfiles.Items[i].Spec.ClusterRefs[0].Name).To(Equal(clusterName))
-			Expect(clusterProfiles.Items[i].Spec.ClusterRefs[0].Kind).To(Equal("Cluster"))
+			Expect(clusterProfiles.Items[i].Spec.ClusterRefs[0].Kind).To(Equal(ClusterKind))
 			Expect(len(clusterProfiles.Items[i].Spec.HelmCharts)).To(Equal(1))
 			Expect(len(clusterProfiles.Items[i].Spec.KustomizationRefs)).To(Equal(1))
 		}
@@ -1144,7 +1148,7 @@ status:
 					{
 						RepositoryName:   randomString(),
 						RepositoryURL:    randomString(),
-						ReleaseNamespace: "{{ .MatchingResource.Namespace }}",
+						ReleaseNamespace: matchingResourceNamespaceTmpl,
 						ReleaseName:      randomString(),
 						ChartName:        randomString(),
 						ChartVersion:     randomString(),
@@ -1227,7 +1231,7 @@ status:
 
 		eventSourceName := randomString()
 
-		eventResource := corev1.ObjectReference{Kind: "Secret", APIVersion: corev1.SchemeGroupVersion.String(),
+		eventResource := corev1.ObjectReference{Kind: secretKind, APIVersion: corev1.SchemeGroupVersion.String(),
 			Namespace: randomString(), Name: randomString()}
 		eventReport := &libsveltosv1beta1.EventReport{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1305,11 +1309,11 @@ status:
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					v1beta1.InstantiateAnnotation: "ok",
+					v1beta1.InstantiateAnnotation: labelValueOk,
 				},
 			},
 			Data: map[string]string{
-				"policy": randomString(),
+				policyKey: randomString(),
 			},
 		}
 
@@ -1320,12 +1324,12 @@ status:
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					v1beta1.InstantiateAnnotation: "ok",
+					v1beta1.InstantiateAnnotation: labelValueOk,
 				},
 			},
 			Type: libsveltosv1beta1.ClusterProfileSecretType,
 			Data: map[string][]byte{
-				"policy": []byte(randomString()),
+				policyKey: []byte(randomString()),
 			},
 		}
 
@@ -1371,7 +1375,7 @@ status:
 		clusterRef := &corev1.ObjectReference{
 			Namespace:  namespace,
 			Name:       cluster.Name,
-			Kind:       "Cluster",
+			Kind:       ClusterKind,
 			APIVersion: clusterv1.GroupVersion.String(),
 		}
 
@@ -1398,7 +1402,7 @@ status:
 		object := &controllers.CurrentObject{
 			MatchingResource: corev1.ObjectReference{
 				Kind:       "Service",
-				APIVersion: "v1",
+				APIVersion: coreV1APIVersion,
 				Namespace:  randomString(),
 				Name:       randomString(),
 			},
@@ -1494,11 +1498,11 @@ status:
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					v1beta1.InstantiateAnnotation: "ok",
+					v1beta1.InstantiateAnnotation: labelValueOk,
 				},
 			},
 			Data: map[string]string{
-				"policy": fmt.Sprintf(ingress, namespace),
+				policyKey: fmt.Sprintf(ingress, namespace),
 			},
 		}
 
@@ -1529,7 +1533,7 @@ status:
 		clusterRef := &corev1.ObjectReference{
 			Namespace:  namespace,
 			Name:       cluster.Name,
-			Kind:       "Cluster",
+			Kind:       ClusterKind,
 			APIVersion: clusterv1.GroupVersion.String(),
 		}
 
@@ -1641,8 +1645,8 @@ spec:
 		Expect(testEnv.List(context.TODO(), configMaps, listOptions...)).To(Succeed())
 		Expect(len(configMaps.Items)).To(Equal(1))
 		Expect(configMaps.Items[0].Data).ToNot(BeEmpty())
-		Expect(configMaps.Items[0].Data["policy"]).To(ContainSubstring("443"))
-		Expect(configMaps.Items[0].Data["policy"]).To(ContainSubstring("8443"))
+		Expect(configMaps.Items[0].Data[policyKey]).To(ContainSubstring("443"))
+		Expect(configMaps.Items[0].Data[policyKey]).To(ContainSubstring("8443"))
 	})
 
 	It("removeConfigMaps removes stale ConfigMaps", func() {
@@ -1959,7 +1963,7 @@ metadata:
 			},
 			Spec: libsveltosv1beta1.EventReportSpec{
 				MatchingResources: []corev1.ObjectReference{
-					{Kind: "Secret", APIVersion: corev1.SchemeGroupVersion.String(),
+					{Kind: secretKind, APIVersion: corev1.SchemeGroupVersion.String(),
 						Namespace: secret.Namespace, Name: secret.Name},
 				},
 				Resources:        []byte(result),
@@ -1990,7 +1994,7 @@ data:
 				Namespace: ns.Name,
 				Name:      randomString(),
 				Annotations: map[string]string{
-					"projectsveltos.io/instantiate": "ok",
+					v1beta1.InstantiateAnnotation: labelValueOk,
 				},
 			},
 			Type: libsveltosv1beta1.ClusterProfileSecretType,
@@ -2170,7 +2174,7 @@ data:
 			},
 		}
 
-		lbls["eventtrigger.lib.projectsveltos.io/fromgenerator"] = "ok"
+		lbls["eventtrigger.lib.projectsveltos.io/fromgenerator"] = labelValueOk
 		// Secret created because of generators, generators label present
 		secret2 := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

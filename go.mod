@@ -1,6 +1,6 @@
 module github.com/projectsveltos/event-manager
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/TwiN/go-color v1.4.1
@@ -12,7 +12,7 @@ require (
 	github.com/onsi/gomega v1.41.0
 	github.com/pkg/errors v0.9.1
 	github.com/projectsveltos/addon-controller v1.10.1-0.20260607134513-fa510616ae64
-	github.com/projectsveltos/libsveltos v1.10.1-0.20260601130048-ace88648a3f5
+	github.com/projectsveltos/libsveltos v1.10.1-0.20260608095342-7d10ad02760d
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/text v0.37.0

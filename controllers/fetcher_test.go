@@ -40,6 +40,10 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
+const (
+	clusterNameChartPath = "charts/{{ .Cluster.metadata.name }}"
+)
+
 var _ = Describe("Fetcher", func() {
 	var logger logr.Logger
 
@@ -269,14 +273,14 @@ var _ = Describe("Fetcher", func() {
 						Kind:           string(sourcev1.OCIRepositoryKind),
 						Name:           namePrefix + "-{{ .Cluster.metadata.name }}",
 						Namespace:      "", // leaving it empty to use cluster namespace
-						Path:           "charts/{{ .Cluster.metadata.name }}",
+						Path:           clusterNameChartPath,
 					},
 					{
 						DeploymentType: configv1beta1.DeploymentTypeRemote,
 						Kind:           string(sourcev1.GitRepositoryKind),
 						Name:           namePrefix + "-{{ .Cluster.metadata.name }}",
 						Namespace:      gitRepository.Namespace,
-						Path:           "charts/{{ .Cluster.metadata.name }}",
+						Path:           clusterNameChartPath,
 					},
 				},
 			},

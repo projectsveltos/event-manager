@@ -96,7 +96,7 @@ var _ = Describe("Generators", func() {
 				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 					{
 						Group:     "",
-						Version:   "v1",
+						Version:   coreV1Version,
 						Kind:      "Secret",
 						Namespace: secretNamespace,
 					},
@@ -153,7 +153,7 @@ var _ = Describe("Generators", func() {
 					Namespace:  sveltosNamespace,
 					Name:       instantiateResourceName,
 					Kind:       string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
-					APIVersion: "v1",
+					APIVersion: coreV1Version,
 				},
 			},
 		}

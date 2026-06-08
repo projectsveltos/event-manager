@@ -63,6 +63,9 @@ import (
 )
 
 const (
+	deployedBySveltosTrueValue = "true"
+	coreAPIVersion             = "v1"
+
 	// TODO: remove this (it is replaced by eventSourceNameLabel)
 	eventReportNameLabel = "eventtrigger.lib.projectsveltos.io/eventreportname"
 
@@ -863,7 +866,7 @@ func undeployEventTriggerInPullMode(ctx context.Context, c client.Client,
 		} else if agentStatus.FailureMessage != nil {
 			retError = errors.New(*agentStatus.FailureMessage)
 		} else {
-			return errors.New("agent is removing classifier instance")
+			return errors.New("agent is removing eventTrigger instance")
 		}
 	}
 
@@ -1119,7 +1122,7 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 			// ServiceAccount representing the tenant admin when fetching resources
 			currentEventSource.Labels = eventSource.Labels
 			currentEventSource.Annotations = map[string]string{
-				libsveltosv1beta1.DeployedBySveltosAnnotation: "true",
+				libsveltosv1beta1.DeployedBySveltosAnnotation: deployedBySveltosTrueValue,
 			}
 			k8s_utils.AddOwnerReference(currentEventSource, resource)
 			return remoteClient.Update(ctx, currentEventSource)
@@ -1131,7 +1134,7 @@ func createOrUpdateEventSource(ctx context.Context, remoteClient client.Client, 
 		// ServiceAccount representing the tenant admin when fetching resources
 		currentEventSource.Labels = eventSource.Labels
 		currentEventSource.Annotations = map[string]string{
-			libsveltosv1beta1.DeployedBySveltosAnnotation: "true",
+			libsveltosv1beta1.DeployedBySveltosAnnotation: deployedBySveltosTrueValue,
 		}
 		k8s_utils.AddOwnerReference(currentEventSource, resource)
 
@@ -1159,7 +1162,7 @@ func getEventSourceToDeploy(eventSource *libsveltosv1beta1.EventSource) *libsvel
 		ObjectMeta: metav1.ObjectMeta{
 			Name: eventSource.Name,
 			Annotations: map[string]string{
-				libsveltosv1beta1.DeployedBySveltosAnnotation: "true",
+				libsveltosv1beta1.DeployedBySveltosAnnotation: deployedBySveltosTrueValue,
 			},
 		},
 		Spec: eventSource.Spec,
@@ -2285,7 +2288,7 @@ func instantiateReferencedPolicy(ctx context.Context, e *v1beta1.EventTrigger, r
 	resourceTracker := getTrackerInstance()
 	resourceTracker.trackResourceForConsumer(
 		&corev1.ObjectReference{Kind: ref.GetObjectKind().GroupVersionKind().Kind, Namespace: ref.GetNamespace(),
-			Name: ref.GetName(), APIVersion: "v1"},
+			Name: ref.GetName(), APIVersion: coreAPIVersion},
 		&corev1.ObjectReference{Kind: v1beta1.EventTriggerKind, Name: e.GetName(), APIVersion: v1beta1.GroupVersion.String()},
 	)
 
@@ -3249,7 +3252,7 @@ func instantiateResourceFromGenerator(ctx context.Context, c client.Client, gene
 	resourceTracker := getTrackerInstance()
 	resourceTracker.trackResourceForConsumer(
 		&corev1.ObjectReference{Kind: referencedResource.GetObjectKind().GroupVersionKind().Kind,
-			Namespace: referencedResource.GetNamespace(), Name: referencedResource.GetName(), APIVersion: "v1"},
+			Namespace: referencedResource.GetNamespace(), Name: referencedResource.GetName(), APIVersion: coreAPIVersion},
 		&corev1.ObjectReference{Kind: v1beta1.EventTriggerKind, Name: e.GetName(), APIVersion: v1beta1.GroupVersion.String()},
 	)
 

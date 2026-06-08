@@ -272,7 +272,7 @@ data:
 		By("Modify ConfigMap referenced in the ConfigMapGenerator section")
 		currentConfigMap := &corev1.ConfigMap{}
 		Expect(k8sClient.Get(context.TODO(),
-			types.NamespacedName{Namespace: "default", Name: configMapGeneratorName},
+			types.NamespacedName{Namespace: defaultNamespace, Name: configMapGeneratorName},
 			currentConfigMap)).To(Succeed())
 		newConfigMap, err := k8s_utils.GetUnstructured([]byte(fmt.Sprintf(newConfigMapString, configMapGeneratorName)))
 		Expect(err).To(BeNil())
@@ -283,7 +283,7 @@ data:
 		Eventually(func() error {
 			currentSecret := &corev1.Secret{}
 			return workloadClient.Get(context.TODO(),
-				types.NamespacedName{Namespace: "default", Name: regcred.GetName()},
+				types.NamespacedName{Namespace: defaultNamespace, Name: regcred.GetName()},
 				currentSecret)
 		}, timeout, pollingInterval).Should(BeNil())
 

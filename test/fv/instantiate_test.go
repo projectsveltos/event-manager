@@ -101,8 +101,8 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 					{
 						Group:     "",
-						Version:   "v1",
-						Kind:      "Service",
+						Version:   coreV1Version,
+						Kind:      serviceKind,
 						Namespace: serviceNamespace,
 						Evaluate:  serviceLuaScript,
 					},
@@ -116,12 +116,12 @@ var _ = Describe("Instantiate one ClusterProfile per resource", func() {
 
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: "default",
+				Namespace: defaultNamespace,
 				Name:      randomString(),
 				// Mark resource as template so instantiateReferencedPolicies
 				// will generate a new one in projectsveltos namespace
 				Annotations: map[string]string{
-					"projectsveltos.io/instantiate": "ok",
+					instantiateAnnotation: instantiateOk,
 				},
 			},
 			Data: map[string]string{

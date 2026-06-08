@@ -29,12 +29,17 @@ import (
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
 
+const (
+	eventTriggerMetricName = "program_eventtrigger_time_seconds"
+	eventTriggerMetricHelp = "Program EventTrigger on a workload cluster duration distribution"
+)
+
 var (
 	programEventTriggerDurationHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: getSveltosNamespace(),
-			Name:      "program_eventtrigger_time_seconds",
-			Help:      "Program EventTrigger on a workload cluster duration distribution",
+			Name:      eventTriggerMetricName,
+			Help:      eventTriggerMetricHelp,
 			Buckets:   []float64{0.1, 0.5, 1, 5, 10, 20, 30},
 		},
 	)
@@ -53,8 +58,8 @@ func newEventTriggerHistogram(clusterNamespace, clusterName string, clusterType 
 	histogram := prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: clusterInfo,
-			Name:      "program_eventtrigger_time_seconds",
-			Help:      "Program EventTrigger on a workload cluster duration distribution",
+			Name:      eventTriggerMetricName,
+			Help:      eventTriggerMetricHelp,
 			Buckets:   []float64{0.1, 0.5, 1, 5, 10, 20, 30},
 		},
 	)
