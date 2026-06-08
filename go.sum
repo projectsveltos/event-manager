@@ -39,8 +39,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/fluxcd/pkg/apis/acl v0.9.0 h1:wBpgsKT+jcyZEcM//OmZr9RiF8klL3ebrDp2u2ThsnA=
 github.com/fluxcd/pkg/apis/acl v0.9.0/go.mod h1:TttNS+gocsGLwnvmgVi3/Yscwqrjc17+vhgYfqkfrV4=
-github.com/fluxcd/pkg/apis/meta v1.27.0 h1:EspByEk5j8w3rs1cGbEh9AjSmpDwQIz7DFG/zzqf6uI=
-github.com/fluxcd/pkg/apis/meta v1.27.0/go.mod h1:2t6JyrRfvIBhx6EBnXfFh/6sCCJ1db9WGaqko0JmNOE=
+github.com/fluxcd/pkg/apis/meta v1.28.0 h1:eJjMlLnfObnh23cyUB6xiIwDbgJaRU2MgfzzuilLFxI=
+github.com/fluxcd/pkg/apis/meta v1.28.0/go.mod h1:3DmYMnyH3XdY8/g2gXfsVIGEd/zpcB2PEkuurv2vgHU=
 github.com/fluxcd/source-controller/api v1.8.5 h1:mLKc9YVMk46JCt1BQbkG6irkrpBZp95kiXh2+GYB6KQ=
 github.com/fluxcd/source-controller/api v1.8.5/go.mod h1:sio4t49RDx+S1etHRFAEEw8qfVuw0KKlOg8bRVlEYPM=
 github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=
@@ -144,10 +144,10 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/projectsveltos/addon-controller v1.10.1-0.20260523193958-dfd5360438e8 h1:m2snqz/pK5Ta25mOoGQtGckoN2jP1CWYJ7sc5wmxYQg=
-github.com/projectsveltos/addon-controller v1.10.1-0.20260523193958-dfd5360438e8/go.mod h1:6QlnoFFc0GH12UoB0kqf5fNbIPXsUX1978dIoIbDeDE=
-github.com/projectsveltos/libsveltos v1.10.1-0.20260521153750-a1f348424b3f h1:XrgpnRRH59AwSkSEIcKPUDpAME0Sl4sXLeEhDIaYQMU=
-github.com/projectsveltos/libsveltos v1.10.1-0.20260521153750-a1f348424b3f/go.mod h1:AzKBiyMTL3KSTLYMii5QdR3ieWyUKBHZCMFWIVCfm6A=
+github.com/projectsveltos/addon-controller v1.10.1-0.20260607134513-fa510616ae64 h1:BgFmUpYSi2Oa0ECUDxdhkx6MiAuku1ndjtMhnmZ8Z04=
+github.com/projectsveltos/addon-controller v1.10.1-0.20260607134513-fa510616ae64/go.mod h1:X2NT8E+xul4YHfZo+hTyaqFS/aMhMgEKSmq/8qhhz54=
+github.com/projectsveltos/libsveltos v1.10.1-0.20260601130048-ace88648a3f5 h1:eRrg+zo7Gna3AGvunD/r4XCQxwkNUyQ0xzesEF+6Ayo=
+github.com/projectsveltos/libsveltos v1.10.1-0.20260601130048-ace88648a3f5/go.mod h1:AzKBiyMTL3KSTLYMii5QdR3ieWyUKBHZCMFWIVCfm6A=
 github.com/prometheus/client_golang v1.23.2 h1:Je96obch5RDVy3FDMndoUsjAhG5Edi49h0RJWRi/o0o=
 github.com/prometheus/client_golang v1.23.2/go.mod h1:Tb1a6LWHB3/SPIzCoaDXI4I8UHKeFTEQ1YCr+0Gyqmg=
 github.com/prometheus/client_model v0.6.2 h1:oBsgwpGs7iVziMvrGhE53c/GrLUsZdHnqNwqPLxwZyk=

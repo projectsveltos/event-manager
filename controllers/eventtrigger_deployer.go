@@ -30,7 +30,6 @@ import (
 	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1b2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/gdexlab/go-render/render"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -434,9 +433,9 @@ func eventTriggerHash(ctx context.Context, c client.Client,
 		case *corev1.Secret:
 			config.WriteString(render.AsCode(getSortedMapBinary(r.Data)))
 			config.WriteString(render.AsCode(getSortedMap(r.StringData)))
-		case *sourcev1b2.Bucket:
+		case *sourcev1.Bucket:
 			config.WriteString(render.AsCode(r.Status.Artifact))
-		case *sourcev1b2.OCIRepository:
+		case *sourcev1.OCIRepository:
 			config.WriteString(render.AsCode(r.Status.Artifact))
 		case *sourcev1.GitRepository:
 			config.WriteString(render.AsCode(r.Status.Artifact))
@@ -1307,7 +1306,7 @@ func proceedRemovingStaleEventSources(ctx context.Context, c client.Client,
 		// EventReports pulled from this managed cluster because of this EventSource
 		err = removeStaleEventReports(ctx, c, clusterNamespace, clusterName, es.Name, clusterType, logger)
 		if err != nil {
-			return nil
+			return err
 		}
 
 		l.V(logs.LogDebug).Info("deleting EventSource from managed cluster")
