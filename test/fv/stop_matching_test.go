@@ -60,8 +60,8 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 					{
 						Group:   "",
-						Version: "v1",
-						Kind:    "Namespace",
+						Version: coreV1Version,
+						Kind:    namespaceKind,
 						LabelFilters: []libsveltosv1beta1.LabelFilter{
 							{Key: nsKey, Operation: libsveltosv1beta1.OperationEqual, Value: nsValue},
 						},
@@ -77,7 +77,7 @@ var _ = Describe("Deletes ClusterProfile when cluster is not a match anymore", f
 		cmName := randomString()
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: "default",
+				Namespace: defaultNamespace,
 				Name:      randomString(),
 			},
 			Data: map[string]string{

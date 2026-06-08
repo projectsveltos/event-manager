@@ -602,22 +602,22 @@ func getConsumersForEntry(currentMap map[corev1.ObjectReference]*libsveltosset.S
 func (r *EventTriggerReconciler) updateClusterInfo(ctx context.Context,
 	eventTriggerScope *scope.EventTriggerScope) error {
 
-	chc := eventTriggerScope.EventTrigger
+	et := eventTriggerScope.EventTrigger
 
 	getClusterID := func(cluster corev1.ObjectReference) string {
 		return fmt.Sprintf("%s:%s/%s", clusterproxy.GetClusterType(&cluster), cluster.Namespace, cluster.Name)
 	}
 
-	// Build Map for all Clusters with an entry in Classifier.Status.ClusterInfo
+	// Build Map for all Clusters with an entry in EventTrigger.Status.ClusterInfo
 	clusterMap := make(map[string]bool)
-	for i := range chc.Status.ClusterInfo {
-		c := &chc.Status.ClusterInfo[i]
+	for i := range et.Status.ClusterInfo {
+		c := &et.Status.ClusterInfo[i]
 		clusterMap[getClusterID(c.Cluster)] = true
 	}
 
 	newClusterInfo := make([]libsveltosv1beta1.ClusterInfo, 0)
-	for i := range chc.Status.MatchingClusterRefs {
-		c := chc.Status.MatchingClusterRefs[i]
+	for i := range et.Status.MatchingClusterRefs {
+		c := et.Status.MatchingClusterRefs[i]
 		if _, ok := clusterMap[getClusterID(c)]; !ok {
 			newClusterInfo = append(newClusterInfo,
 				libsveltosv1beta1.ClusterInfo{
@@ -627,7 +627,7 @@ func (r *EventTriggerReconciler) updateClusterInfo(ctx context.Context,
 		}
 	}
 
-	finalClusterInfo := chc.Status.ClusterInfo
+	finalClusterInfo := et.Status.ClusterInfo
 	finalClusterInfo = append(finalClusterInfo, newClusterInfo...)
 
 	eventTriggerScope.SetClusterInfo(finalClusterInfo)

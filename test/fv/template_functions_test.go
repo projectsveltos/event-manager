@@ -63,7 +63,7 @@ var _ = Describe("Template functions", func() {
 					ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 						{
 							Group:     "",
-							Version:   "v1",
+							Version:   coreV1Version,
 							Kind:      "ConfigMap",
 							Namespace: cmNamespace,
 							Name:      cmName,
@@ -78,12 +78,12 @@ var _ = Describe("Template functions", func() {
 
 			cm := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "default",
+					Namespace: defaultNamespace,
 					Name:      randomString(),
 					// Mark resource as template so instantiateReferencedPolicies
 					// will generate a new one in projectsveltos namespace
 					Annotations: map[string]string{
-						"projectsveltos.io/instantiate": "ok",
+						instantiateAnnotation: instantiateOk,
 					},
 				},
 				Data: map[string]string{
@@ -194,7 +194,7 @@ var _ = Describe("Template functions", func() {
 			Eventually(func() bool {
 				currentConfigMap := &corev1.ConfigMap{}
 				err := workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: cmNamespace, Name: "copied-version"},
+					types.NamespacedName{Namespace: cmNamespace, Name: copiedVersion},
 					currentConfigMap)
 				if err != nil {
 					return false
@@ -237,7 +237,7 @@ var _ = Describe("Template functions", func() {
 			Eventually(func() bool {
 				currentConfigMap := &corev1.ConfigMap{}
 				err := workloadClient.Get(context.TODO(),
-					types.NamespacedName{Namespace: cmNamespace, Name: "copied-version"},
+					types.NamespacedName{Namespace: cmNamespace, Name: copiedVersion},
 					currentConfigMap)
 				return err != nil && apierrors.IsNotFound(err)
 			}, timeout, pollingInterval).Should(BeTrue())

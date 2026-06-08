@@ -71,8 +71,8 @@ var _ = Describe("Reference ClusterSet", func() {
 				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 					{
 						Group:     "",
-						Version:   "v1",
-						Kind:      "Service",
+						Version:   coreV1Version,
+						Kind:      serviceKind,
 						Namespace: serviceNamespace,
 					},
 				},

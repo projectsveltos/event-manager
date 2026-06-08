@@ -44,6 +44,10 @@ import (
 
 const (
 	sveltosKubeconfigPostfix = "-kubeconfig"
+	kubeconfigSecretKey      = "value"
+	labelValueOk             = "ok"
+	versionKey               = "version"
+	coreV1APIVersion         = "v1"
 )
 
 var (
@@ -187,7 +191,7 @@ func prepareCluster() *clusterv1.Cluster {
 			Name:      randomString(),
 			Labels: map[string]string{
 				clusterv1.ClusterNameLabel:         cluster.Name,
-				clusterv1.MachineControlPlaneLabel: "ok",
+				clusterv1.MachineControlPlaneLabel: labelValueOk,
 			},
 		},
 	}
@@ -218,7 +222,7 @@ func prepareCluster() *clusterv1.Cluster {
 			Name:      cluster.Name + sveltosKubeconfigPostfix,
 		},
 		Data: map[string][]byte{
-			"value": testEnv.Kubeconfig,
+			kubeconfigSecretKey: testEnv.Kubeconfig,
 		},
 	}
 	Expect(testEnv.Create(context.TODO(), secret)).To(Succeed())
@@ -248,7 +252,7 @@ func createSecretWithKubeconfig(clusterNamespace, clusterName string) {
 			Name:      clusterName + sveltosKubeconfigPostfix,
 		},
 		Data: map[string][]byte{
-			"value": testEnv.Kubeconfig,
+			kubeconfigSecretKey: testEnv.Kubeconfig,
 		},
 	}
 

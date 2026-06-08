@@ -133,7 +133,7 @@ func verifySveltosCluster() {
 	clusterList := &libsveltosv1beta1.SveltosClusterList{}
 	listOptions := []client.ListOption{
 		client.MatchingLabels(
-			map[string]string{"cluster-name": "clusterapi-workload"}, // This label is added by Makefile
+			map[string]string{"cluster-name": workloadCluster}, // This label is added by Makefile
 		),
 	}
 
@@ -169,7 +169,7 @@ func verifyCAPICluster() {
 	clusterList := &clusterv1.ClusterList{}
 	listOptions := []client.ListOption{
 		client.MatchingLabels(
-			map[string]string{clusterv1.ClusterNameLabel: "clusterapi-workload"},
+			map[string]string{clusterv1.ClusterNameLabel: workloadCluster},
 		),
 	}
 

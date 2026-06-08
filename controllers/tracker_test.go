@@ -49,7 +49,7 @@ var _ = Describe("Tracker", func() {
 			Kind:       secretKind,
 			Name:       randomString(),
 			Namespace:  randomString(),
-			APIVersion: "v1",
+			APIVersion: coreV1APIVersion,
 		}
 
 		controllers.TrackResourceForConsumer(resourceTracker, resource, eventTriggerRef)
@@ -70,7 +70,7 @@ var _ = Describe("Tracker", func() {
 			Kind:       secretKind,
 			Name:       randomString(),
 			Namespace:  randomString(),
-			APIVersion: "v1",
+			APIVersion: coreV1APIVersion,
 		}
 		controllers.TrackResourceForConsumer(resourceTracker, resource1, eventTriggerRef)
 
@@ -78,7 +78,7 @@ var _ = Describe("Tracker", func() {
 			Kind:       secretKind,
 			Name:       randomString(),
 			Namespace:  randomString(),
-			APIVersion: "v1",
+			APIVersion: coreV1APIVersion,
 		}
 		controllers.TrackResourceForConsumer(resourceTracker, resource2, eventTriggerRef)
 
@@ -104,7 +104,7 @@ var _ = Describe("Tracker", func() {
 			Kind:       secretKind,
 			Name:       randomString(),
 			Namespace:  randomString(),
-			APIVersion: "v1",
+			APIVersion: coreV1APIVersion,
 		}
 		controllers.TrackResourceForConsumer(resourceTracker, resource, eventTriggerRef)
 

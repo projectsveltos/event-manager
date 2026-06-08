@@ -42,6 +42,10 @@ import (
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
+const (
+	controllerNameEventManager = "event-manager"
+)
+
 func getEventTriggerInstance(name, eventSourceName string) *v1beta1.EventTrigger {
 	return &v1beta1.EventTrigger{
 		ObjectMeta: metav1.ObjectMeta{
@@ -219,7 +223,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			{
 				Namespace:  randomString(),
 				Name:       randomString(),
-				Kind:       "Cluster",
+				Kind:       ClusterKind,
 				APIVersion: clusterv1.GroupVersion.String(),
 			},
 			{
@@ -249,7 +253,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Client:         c,
 			Logger:         logger,
 			EventTrigger:   currentResource,
-			ControllerName: "classifier",
+			ControllerName: controllerNameEventManager,
 		})
 		Expect(err).To(BeNil())
 
@@ -290,7 +294,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Client:         c,
 			Logger:         logger,
 			EventTrigger:   resource,
-			ControllerName: "classifier",
+			ControllerName: controllerNameEventManager,
 		})
 		Expect(err).To(BeNil())
 
@@ -359,7 +363,7 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 			Client:         c,
 			Logger:         logger,
 			EventTrigger:   resource,
-			ControllerName: "classifier",
+			ControllerName: controllerNameEventManager,
 		})
 		Expect(err).To(BeNil())
 

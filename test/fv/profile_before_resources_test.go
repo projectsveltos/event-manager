@@ -62,8 +62,8 @@ var _ = Describe("ClusterProfile deletion precedes referenced resource cleanup",
 					ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
 						{
 							Group:   "",
-							Version: "v1",
-							Kind:    "Namespace",
+							Version: coreV1Version,
+							Kind:    namespaceKind,
 							LabelFilters: []libsveltosv1beta1.LabelFilter{
 								{Key: nsKey, Operation: libsveltosv1beta1.OperationEqual, Value: nsValue},
 							},
@@ -81,10 +81,10 @@ var _ = Describe("ClusterProfile deletion precedes referenced resource cleanup",
 			// that the generated ClusterProfile will reference.
 			templateCM := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "default",
+					Namespace: defaultNamespace,
 					Name:      randomString(),
 					Annotations: map[string]string{
-						"projectsveltos.io/instantiate": "ok",
+						instantiateAnnotation: instantiateOk,
 					},
 				},
 				Data: map[string]string{

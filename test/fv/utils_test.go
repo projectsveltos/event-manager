@@ -38,8 +38,16 @@ import (
 )
 
 const (
-	key   = "env"
-	value = "fv"
+	key                   = "env"
+	value                 = "fv"
+	coreV1Version         = "v1"
+	serviceKind           = "Service"
+	namespaceKind         = "Namespace"
+	defaultNamespace      = "default"
+	instantiateAnnotation = "projectsveltos.io/instantiate"
+	instantiateOk         = "ok"
+	workloadCluster       = "clusterapi-workload"
+	copiedVersion         = "copied-version"
 )
 
 // Byf is a simple wrapper around By.

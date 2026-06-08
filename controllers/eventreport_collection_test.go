@@ -62,7 +62,7 @@ var _ = Describe("EventSource Deployer", func() {
 				Name:      cmVersionName,
 			},
 			Data: map[string]string{
-				"version": version,
+				versionKey: version,
 			},
 		}
 		Expect(testEnv.Create(context.TODO(), cm)).To(Succeed())
@@ -519,7 +519,7 @@ spec:
 		cluster2 := corev1.ObjectReference{
 			Namespace:  randomString(),
 			Name:       randomString(),
-			Kind:       "Cluster",
+			Kind:       ClusterKind,
 			APIVersion: clusterv1.GroupVersion.String(),
 		}
 		cluster3 := corev1.ObjectReference{
@@ -572,7 +572,7 @@ spec:
 				Name:      cmName,
 			},
 			Data: map[string]string{
-				"version": version,
+				versionKey: version,
 			},
 		}
 		Expect(testEnv.Create(context.TODO(), cm)).To(Succeed())
@@ -597,7 +597,7 @@ spec:
 		capiClusterRef := corev1.ObjectReference{
 			Namespace:  capiCluster.Namespace,
 			Name:       capiCluster.Name,
-			Kind:       "Cluster",
+			Kind:       ClusterKind,
 			APIVersion: clusterv1.GroupVersion.String(),
 		}
 
