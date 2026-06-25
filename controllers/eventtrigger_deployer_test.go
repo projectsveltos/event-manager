@@ -2449,6 +2449,77 @@ data:
 		Expect(len(secretList.Items)).To(Equal(1))
 		Expect(secretList.Items[0].Name).To(Equal(currentSecret.Name))
 	})
+
+	It("incrementZeroMatchCount increments per (EventReport, EventTrigger) key", func() {
+		controllers.ResetZeroMatchCounters()
+
+		er := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+			},
+		}
+		etName := randomString()
+
+		Expect(controllers.IncrementZeroMatchCount(er, etName)).To(Equal(1))
+		Expect(controllers.IncrementZeroMatchCount(er, etName)).To(Equal(2))
+		Expect(controllers.IncrementZeroMatchCount(er, etName)).To(Equal(3))
+
+		// A different EventTrigger name keeps its own counter.
+		otherEtName := randomString()
+		Expect(controllers.IncrementZeroMatchCount(er, otherEtName)).To(Equal(1))
+
+		// A different EventReport keeps its own counter.
+		er2 := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+			},
+		}
+		Expect(controllers.IncrementZeroMatchCount(er2, etName)).To(Equal(1))
+	})
+
+	It("resetZeroMatchCount clears the counter", func() {
+		controllers.ResetZeroMatchCounters()
+
+		er := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+			},
+		}
+		etName := randomString()
+
+		controllers.IncrementZeroMatchCount(er, etName)
+		controllers.IncrementZeroMatchCount(er, etName)
+		controllers.ResetZeroMatchCount(er, etName)
+
+		// After reset the counter starts from 1 again.
+		Expect(controllers.IncrementZeroMatchCount(er, etName)).To(Equal(1))
+	})
+
+	It("zero-match counter reaches threshold and resets", func() {
+		controllers.ResetZeroMatchCounters()
+
+		er := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+			},
+		}
+		etName := randomString()
+
+		threshold := controllers.ZeroMatchThreshold
+		for i := 1; i < threshold; i++ {
+			Expect(controllers.IncrementZeroMatchCount(er, etName)).To(Equal(i))
+		}
+		// Reaching the threshold.
+		Expect(controllers.IncrementZeroMatchCount(er, etName)).To(Equal(threshold))
+
+		// After the caller resets on threshold, next increment starts at 1.
+		controllers.ResetZeroMatchCount(er, etName)
+		Expect(controllers.IncrementZeroMatchCount(er, etName)).To(Equal(1))
+	})
 })
 
 func validateLabels(labels map[string]string, clusterRef *corev1.ObjectReference,

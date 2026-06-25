@@ -26,6 +26,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -1359,12 +1360,11 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 	logger logr.Logger) error {
 
 	var err error
-	// If no resource is currently matching, clear all
-	if !er.DeletionTimestamp.IsZero() || !hasMatchingResources(er) {
-		logger.V(logs.LogDebug).Info("EventReport is deleted or has no matching resources")
-		// ClusterProfiles created because of CloudEvents are removed when CloudEventAction is set to Delete.
-		// Fetch all ClusterProfiles created because of CloudEvents by this eventTrigger and append to list
-		// of ClusterProfiles that are not stale
+
+	// EventReport explicitly deleted: remove immediately, no safeguard needed.
+	if !er.DeletionTimestamp.IsZero() {
+		logger.V(logs.LogDebug).Info("EventReport is being deleted")
+		resetZeroMatchCount(er, eventTrigger.Name)
 		clusterProfiles := []*configv1beta1.ClusterProfile{}
 		clusterProfiles, err = appendCloudEventClusterProfiles(ctx, c, clusterNamespace, clusterName, eventTrigger.Name,
 			clusterType, er, clusterProfiles)
@@ -1374,6 +1374,33 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 		return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType,
 			eventTrigger, er, clusterProfiles, nil, logger)
 	}
+
+	// No matching resources: require zeroMatchThreshold consecutive observations before removing
+	// ClusterProfiles, to guard against transient empty EventReports (e.g. from a sveltos-agent
+	// internal restart before its informers have re-synced).
+	if !hasMatchingResources(er) {
+		count := incrementZeroMatchCount(er, eventTrigger.Name)
+		if count < zeroMatchThreshold {
+			logger.V(logs.LogInfo).Info("EventReport has no matching resources, waiting for confirmation",
+				"count", count, "threshold", zeroMatchThreshold)
+			return fmt.Errorf("EventReport %s/%s shows no matches (%d/%d), requeuing",
+				er.Namespace, er.Name, count, zeroMatchThreshold)
+		}
+		logger.V(logs.LogDebug).Info("EventReport has no matching resources confirmed, removing ClusterProfiles",
+			"count", count)
+		resetZeroMatchCount(er, eventTrigger.Name)
+		clusterProfiles := []*configv1beta1.ClusterProfile{}
+		clusterProfiles, err = appendCloudEventClusterProfiles(ctx, c, clusterNamespace, clusterName, eventTrigger.Name,
+			clusterType, er, clusterProfiles)
+		if err != nil {
+			return err
+		}
+		return removeInstantiatedResources(ctx, c, clusterNamespace, clusterName, clusterType,
+			eventTrigger, er, clusterProfiles, nil, logger)
+	}
+
+	// Has matching resources: reset the zero-match counter.
+	resetZeroMatchCount(er, eventTrigger.Name)
 
 	var clusterProfiles []*configv1beta1.ClusterProfile
 	var fromGenerators []libsveltosv1beta1.PolicyRef
@@ -3308,6 +3335,50 @@ func getValuesFrom(ctx context.Context, c client.Client, valuesFrom []configv1be
 		result = append(result, resource)
 	}
 	return result
+}
+
+// zeroMatchCounts tracks the number of consecutive collection cycles in which a given
+// (EventReport, EventTrigger) pair reported zero matching resources.
+// Key format: "<erNamespace>/<erName>/<eventTriggerName>".
+// Not persisted across event-manager restarts; that is intentional.
+var (
+	zeroMatchCounts sync.Map
+)
+
+const (
+	zeroMatchThreshold = 3
+)
+
+func zeroMatchKey(er *libsveltosv1beta1.EventReport, eventTriggerName string) string {
+	return er.Namespace + "/" + er.Name + "/" + eventTriggerName
+}
+
+// incrementZeroMatchCount bumps the counter and returns the new value.
+func incrementZeroMatchCount(er *libsveltosv1beta1.EventReport, eventTriggerName string) int {
+	key := zeroMatchKey(er, eventTriggerName)
+	for {
+		existing, loaded := zeroMatchCounts.Load(key)
+		var cur int
+		if loaded {
+			cur = existing.(int)
+		}
+		next := cur + 1
+		if !loaded {
+			if _, loaded2 := zeroMatchCounts.LoadOrStore(key, next); !loaded2 {
+				return next
+			}
+			// Another goroutine stored first; retry.
+			continue
+		}
+		if zeroMatchCounts.CompareAndSwap(key, cur, next) {
+			return next
+		}
+	}
+}
+
+// resetZeroMatchCount removes the counter entry for this (EventReport, EventTrigger) pair.
+func resetZeroMatchCount(er *libsveltosv1beta1.EventReport, eventTriggerName string) {
+	zeroMatchCounts.Delete(zeroMatchKey(er, eventTriggerName))
 }
 
 func hasMatchingResources(er *libsveltosv1beta1.EventReport) bool {
