@@ -114,3 +114,19 @@ func SetSchema(s *runtime.Scheme) {
 func SetConfig(config *rest.Config) {
 	mgmtClusterConfig = config
 }
+
+var (
+	HasMatchingResources    = hasMatchingResources
+	IncrementZeroMatchCount = incrementZeroMatchCount
+	ResetZeroMatchCount     = resetZeroMatchCount
+	ZeroMatchThreshold      = zeroMatchThreshold
+)
+
+// ResetZeroMatchCounters clears all entries in the package-level counter map.
+// For use in tests only.
+func ResetZeroMatchCounters() {
+	zeroMatchCounts.Range(func(k, _ any) bool {
+		zeroMatchCounts.Delete(k)
+		return true
+	})
+}
