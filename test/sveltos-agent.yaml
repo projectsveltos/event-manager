@@ -242,5 +242,7 @@ spec:
             - ALL
       securityContext:
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: sveltos-agent-manager
       terminationGracePeriodSeconds: 10
