@@ -48,6 +48,14 @@ const (
 	instantiateOk         = "ok"
 	workloadCluster       = "clusterapi-workload"
 	copiedVersion         = "copied-version"
+
+	// metallb is used across fv HelmChart tests: small, fast to fetch/render.
+	metallbRepositoryURL  = "https://metallb.github.io/metallb"
+	metallbRepositoryName = "metallb"
+	metallbChartName      = "metallb/metallb"
+	metallbChartVersion   = "0.15.3"
+
+	resourceNamespaceTemplate = "{{ .Resource.metadata.namespace }}"
 )
 
 // Byf is a simple wrapper around By.

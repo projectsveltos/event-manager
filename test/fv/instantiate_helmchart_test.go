@@ -89,12 +89,12 @@ var _ = Describe("Instantiate one ClusterProfile per resource. Instantiate and d
 		eventTrigger.Spec.OneForEvent = true
 		eventTrigger.Spec.HelmCharts = []configv1beta1.HelmChart{
 			{
-				RepositoryURL:    "https://metallb.github.io/metallb",
-				RepositoryName:   "metallb",
-				ChartName:        "metallb/metallb",
-				ChartVersion:     "0.15.3",
+				RepositoryURL:    metallbRepositoryURL,
+				RepositoryName:   metallbRepositoryName,
+				ChartName:        metallbChartName,
+				ChartVersion:     metallbChartVersion,
 				ReleaseName:      "{{ .Cluster.metadata.name }}",
-				ReleaseNamespace: "{{ .Resource.metadata.namespace }}",
+				ReleaseNamespace: resourceNamespaceTemplate,
 				HelmChartAction:  configv1beta1.HelmChartActionInstall,
 				ValuesFrom: []configv1beta1.ValueFrom{
 					{

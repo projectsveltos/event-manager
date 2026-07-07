@@ -1783,18 +1783,34 @@ func setClusterSelector(clusterProfileSpec *configv1beta1.Spec, clusterNamespace
 		useSameCluster = false
 		templateName := getTemplateName(clusterNamespace, clusterName, eventTrigger.Name)
 
-		raw, err := json.Marshal(*eventTrigger.Spec.DestinationCluster)
+		// Instantiated field-by-field (not by JSON-marshaling the whole ObjectReference and
+		// templating that as one blob): a quoted string literal used as a function argument
+		// inside a template action would otherwise be corrupted by JSON's quote escaping
+		// before the template engine ever sees it.
+		destinationCluster := *eventTrigger.Spec.DestinationCluster.DeepCopy()
+
+		var err error
+		destinationCluster.Namespace, err = instantiateStringField(templateName, "destinationCluster.namespace",
+			destinationCluster.Namespace, data, false, logger)
 		if err != nil {
 			return err
 		}
 
-		instantiated, err := instantiateSection(templateName, raw, data, false, logger)
+		destinationCluster.Name, err = instantiateStringField(templateName, "destinationCluster.name",
+			destinationCluster.Name, data, false, logger)
 		if err != nil {
 			return err
 		}
 
-		var destinationCluster corev1.ObjectReference
-		if err := json.Unmarshal(instantiated, &destinationCluster); err != nil {
+		destinationCluster.Kind, err = instantiateStringField(templateName, "destinationCluster.kind",
+			destinationCluster.Kind, data, false, logger)
+		if err != nil {
+			return err
+		}
+
+		destinationCluster.APIVersion, err = instantiateStringField(templateName, "destinationCluster.apiVersion",
+			destinationCluster.APIVersion, data, false, logger)
+		if err != nil {
 			return err
 		}
 
@@ -1901,36 +1917,86 @@ func instantiateSection(templateName string, toBeInstantiated []byte, data any,
 	return buffer.Bytes(), nil
 }
 
+// instantiateStringField instantiates a single string field as its own Go template and
+// returns the result. Fields are instantiated one at a time (rather than JSON-marshaling a
+// whole struct/slice and templating that as one blob) so a quoted string literal used as a
+// function argument inside a template action (e.g. {{ replace "-control-plane" "" .Name }})
+// is never corrupted by JSON's quote/newline escaping before the template engine sees it.
+func instantiateStringField(templateName, fieldName, value string, data any, useTxtFuncMap bool,
+	logger logr.Logger) (string, error) {
+
+	instantiated, err := instantiateSection(templateName, []byte(value), data, useTxtFuncMap, logger)
+	if err != nil {
+		logger.V(logs.LogInfo).Error(err, fmt.Sprintf("failed to instantiate %s", fieldName))
+		return "", err
+	}
+	return string(instantiated), nil
+}
+
 func instantiateHelmCharts(ctx context.Context, c client.Client, e *v1beta1.EventTrigger,
 	clusterNamespace, templateName string, helmCharts []configv1beta1.HelmChart, data any,
 	labels map[string]string, logger logr.Logger) ([]configv1beta1.HelmChart, error) {
 
-	helmChartJson, err := json.Marshal(helmCharts)
-	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to marshel helmCharts")
-		return nil, err
-	}
+	useTxtFuncMap := funcmap.HasTextTemplateAnnotation(e.Annotations)
 
-	instantiatedData, err := instantiateSection(templateName, helmChartJson, data,
-		funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
-	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to execute template")
-		return nil, err
-	}
+	instantiatedHelmCharts := make([]configv1beta1.HelmChart, len(helmCharts))
+	for i := range helmCharts {
+		// DeepCopy, not a plain struct copy: ValuesFrom (mutated in place by instantiateValuesFrom
+		// below) and other slice/map fields would otherwise still share their backing array/map
+		// with the original helmCharts[i], corrupting it for any other caller reusing the same
+		// EventTrigger spec (e.g. one instantiation per matching resource in oneForEvent mode).
+		instantiatedHelmChart := *helmCharts[i].DeepCopy()
 
-	instantiatedHelmCharts := make([]configv1beta1.HelmChart, 0)
-	err = json.Unmarshal(instantiatedData, &instantiatedHelmCharts)
-	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to unmarshal helmCharts")
-		return nil, err
-	}
+		var err error
+		instantiatedHelmChart.RepositoryURL, err = instantiateStringField(templateName, "repositoryURL",
+			instantiatedHelmChart.RepositoryURL, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
 
-	for i := range instantiatedHelmCharts {
-		err = instantiateValuesFrom(ctx, c, e, instantiatedHelmCharts[i].ValuesFrom,
+		instantiatedHelmChart.RepositoryName, err = instantiateStringField(templateName, "repositoryName",
+			instantiatedHelmChart.RepositoryName, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		instantiatedHelmChart.ChartName, err = instantiateStringField(templateName, "chartName",
+			instantiatedHelmChart.ChartName, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		instantiatedHelmChart.ChartVersion, err = instantiateStringField(templateName, "chartVersion",
+			instantiatedHelmChart.ChartVersion, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		instantiatedHelmChart.ReleaseName, err = instantiateStringField(templateName, "releaseName",
+			instantiatedHelmChart.ReleaseName, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		instantiatedHelmChart.ReleaseNamespace, err = instantiateStringField(templateName, "releaseNamespace",
+			instantiatedHelmChart.ReleaseNamespace, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		instantiatedHelmChart.Values, err = instantiateStringField(templateName, "values",
+			instantiatedHelmChart.Values, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		err = instantiateValuesFrom(ctx, c, e, instantiatedHelmChart.ValuesFrom,
 			clusterNamespace, templateName, data, labels, logger)
 		if err != nil {
 			return nil, err
 		}
+
+		instantiatedHelmCharts[i] = instantiatedHelmChart
 	}
 
 	return instantiatedHelmCharts, nil
@@ -1940,32 +2006,64 @@ func instantiateKustomizationRefs(ctx context.Context, c client.Client, e *v1bet
 	clusterNamespace, templateName string, kustomizationRefs []configv1beta1.KustomizationRef,
 	data any, labels map[string]string, logger logr.Logger) ([]configv1beta1.KustomizationRef, error) {
 
-	kustomizationRefsJson, err := json.Marshal(kustomizationRefs)
-	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to marshel kustomizationRefs")
-		return nil, err
-	}
+	useTxtFuncMap := funcmap.HasTextTemplateAnnotation(e.Annotations)
 
-	instantiatedData, err := instantiateSection(templateName, kustomizationRefsJson, data,
-		funcmap.HasTextTemplateAnnotation(e.Annotations), logger)
-	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to execute template")
-		return nil, err
-	}
+	instantiatedKustomizationRefs := make([]configv1beta1.KustomizationRef, len(kustomizationRefs))
+	for i := range kustomizationRefs {
+		// DeepCopy, not a plain struct copy: ValuesFrom (mutated in place by instantiateValuesFrom
+		// below), Components, and Values would otherwise still share their backing array/map with
+		// the original kustomizationRefs[i], corrupting it for any other caller reusing the same
+		// EventTrigger spec (e.g. one instantiation per matching resource in oneForEvent mode).
+		instantiatedRef := *kustomizationRefs[i].DeepCopy()
 
-	instantiatedKustomizationRefs := make([]configv1beta1.KustomizationRef, 0)
-	err = json.Unmarshal(instantiatedData, &instantiatedKustomizationRefs)
-	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to unmarshal kustomizationRefs")
-		return nil, err
-	}
+		var err error
+		instantiatedRef.Namespace, err = instantiateStringField(templateName, "namespace",
+			instantiatedRef.Namespace, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
 
-	for i := range instantiatedKustomizationRefs {
-		err = instantiateValuesFrom(ctx, c, e, instantiatedKustomizationRefs[i].ValuesFrom,
+		instantiatedRef.Name, err = instantiateStringField(templateName, "name",
+			instantiatedRef.Name, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		instantiatedRef.Path, err = instantiateStringField(templateName, "path",
+			instantiatedRef.Path, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		instantiatedRef.TargetNamespace, err = instantiateStringField(templateName, "targetNamespace",
+			instantiatedRef.TargetNamespace, data, useTxtFuncMap, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		for j := range instantiatedRef.Components {
+			instantiatedRef.Components[j], err = instantiateStringField(templateName, "components",
+				instantiatedRef.Components[j], data, useTxtFuncMap, logger)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		for k, v := range instantiatedRef.Values {
+			instantiatedRef.Values[k], err = instantiateStringField(templateName, "values",
+				v, data, useTxtFuncMap, logger)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		err = instantiateValuesFrom(ctx, c, e, instantiatedRef.ValuesFrom,
 			clusterNamespace, templateName, data, labels, logger)
 		if err != nil {
 			return nil, err
 		}
+
+		instantiatedKustomizationRefs[i] = instantiatedRef
 	}
 
 	return instantiatedKustomizationRefs, nil

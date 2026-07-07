@@ -2538,3 +2538,137 @@ func validateLabels(labels map[string]string, clusterRef *corev1.ObjectReference
 		Expect(v).To(Equal(expectedLabels[k]))
 	}
 }
+
+const (
+	testEksChartsRepoURL    = "https://aws.github.io/eks-charts"
+	testAWSLBControllerName = "aws-load-balancer-controller"
+	testKubeSystemNamespace = "kube-system"
+	testResourceDataKey     = "Resource"
+	testMetadataDataKey     = "metadata"
+	testControlPlaneCluster = "my-cluster-control-plane"
+	testNameDataKey         = "name"
+	testFluxSystemName      = "flux-system"
+)
+
+var _ = Describe("InstantiateHelmCharts and InstantiateKustomizationRefs", func() {
+	// Regression test for a bug where the whole helmCharts/kustomizationRefs slice was
+	// JSON-marshaled and templated as one blob: JSON-escaping a quoted string literal used as
+	// a function argument inside a template action (e.g. `replace "-control-plane" ""`) turned
+	// it into `replace \"-control-plane\" \"\"`, which Go's template parser rejects with
+	// `unexpected "\\" in operand`. Fields are now instantiated one at a time instead.
+
+	var logger logr.Logger
+	var e *v1beta1.EventTrigger
+
+	BeforeEach(func() {
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+		e = &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+		}
+	})
+
+	It("InstantiateHelmCharts succeeds with a quoted string literal function argument", func() {
+		helmCharts := []configv1beta1.HelmChart{
+			{
+				RepositoryURL:    testEksChartsRepoURL,
+				RepositoryName:   "eks",
+				ChartName:        testAWSLBControllerName,
+				ChartVersion:     "3.4.0",
+				ReleaseName:      testAWSLBControllerName,
+				ReleaseNamespace: testKubeSystemNamespace,
+				HelmChartAction:  configv1beta1.HelmChartActionInstall,
+				Values: `clusterName: {{ .Resource.metadata.name | replace "-control-plane" "" }}
+`,
+			},
+		}
+
+		data := map[string]interface{}{
+			testResourceDataKey: map[string]interface{}{
+				testMetadataDataKey: map[string]interface{}{
+					testNameDataKey: testControlPlaneCluster,
+				},
+			},
+		}
+
+		instantiated, err := controllers.InstantiateHelmCharts(context.TODO(), nil, e,
+			randomString(), randomString(), helmCharts, data, nil, logger)
+		Expect(err).To(BeNil())
+		Expect(instantiated).To(HaveLen(1))
+		Expect(instantiated[0].Values).To(Equal("clusterName: my-cluster\n"))
+
+		// the original slice passed in must be untouched (no aliasing/mutation)
+		Expect(helmCharts[0].Values).To(ContainSubstring(`replace "-control-plane" ""`))
+	})
+
+	It("InstantiateHelmCharts does not mutate or alias the input across repeated calls", func() {
+		helmCharts := []configv1beta1.HelmChart{
+			{
+				RepositoryURL:    testEksChartsRepoURL,
+				ReleaseName:      "{{ .Resource.metadata.name }}",
+				ReleaseNamespace: testKubeSystemNamespace,
+				Values:           "clusterName: {{ .Resource.metadata.name }}\n",
+			},
+		}
+
+		dataOne := map[string]interface{}{
+			testResourceDataKey: map[string]interface{}{testMetadataDataKey: map[string]interface{}{testNameDataKey: "cluster-one"}},
+		}
+		dataTwo := map[string]interface{}{
+			testResourceDataKey: map[string]interface{}{testMetadataDataKey: map[string]interface{}{testNameDataKey: "cluster-two"}},
+		}
+
+		instantiatedOne, err := controllers.InstantiateHelmCharts(context.TODO(), nil, e,
+			randomString(), randomString(), helmCharts, dataOne, nil, logger)
+		Expect(err).To(BeNil())
+		Expect(instantiatedOne[0].ReleaseName).To(Equal("cluster-one"))
+		Expect(instantiatedOne[0].Values).To(Equal("clusterName: cluster-one\n"))
+
+		// original input must still hold the raw, un-instantiated template text
+		Expect(helmCharts[0].ReleaseName).To(Equal("{{ .Resource.metadata.name }}"))
+		Expect(helmCharts[0].Values).To(Equal("clusterName: {{ .Resource.metadata.name }}\n"))
+
+		instantiatedTwo, err := controllers.InstantiateHelmCharts(context.TODO(), nil, e,
+			randomString(), randomString(), helmCharts, dataTwo, nil, logger)
+		Expect(err).To(BeNil())
+		Expect(instantiatedTwo[0].ReleaseName).To(Equal("cluster-two"))
+		Expect(instantiatedTwo[0].Values).To(Equal("clusterName: cluster-two\n"))
+
+		// first result must not have been retroactively changed by the second call
+		Expect(instantiatedOne[0].ReleaseName).To(Equal("cluster-one"))
+	})
+
+	It("InstantiateKustomizationRefs succeeds with a quoted string literal function argument", func() {
+		kustomizationRefs := []configv1beta1.KustomizationRef{
+			{
+				Namespace: testFluxSystemName,
+				Name:      testFluxSystemName,
+				Kind:      "GitRepository",
+				Path:      `./kustomize-resources/{{ .Resource.metadata.name | replace "-control-plane" "" }}/`,
+				Values: map[string]string{
+					"region": `{{ .Resource.metadata.labels.awsAccount | replace "-" "" }}`,
+				},
+			},
+		}
+
+		data := map[string]interface{}{
+			testResourceDataKey: map[string]interface{}{
+				testMetadataDataKey: map[string]interface{}{
+					testNameDataKey: testControlPlaneCluster,
+					"labels":        map[string]interface{}{"awsAccount": "111-222"},
+				},
+			},
+		}
+
+		instantiated, err := controllers.InstantiateKustomizationRefs(context.TODO(), nil, e,
+			randomString(), randomString(), kustomizationRefs, data, nil, logger)
+		Expect(err).To(BeNil())
+		Expect(instantiated).To(HaveLen(1))
+		Expect(instantiated[0].Path).To(Equal("./kustomize-resources/my-cluster/"))
+		Expect(instantiated[0].Values["region"]).To(Equal("111222"))
+
+		// the original slice passed in must be untouched (no aliasing/mutation)
+		Expect(kustomizationRefs[0].Path).To(ContainSubstring(`replace "-control-plane" ""`))
+	})
+})
