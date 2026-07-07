@@ -77,6 +77,10 @@ var (
 	RemoveSecrets                   = removeSecrets
 	UnstructuredToTyped             = unstructuredToTyped
 
+	InstantiateHelmCharts        = instantiateHelmCharts
+	InstantiateKustomizationRefs = instantiateKustomizationRefs
+	InstantiateStringField       = instantiateStringField
+
 	BuildEventTriggersForEventSourceMap = buildEventTriggersForEventSourceMap
 	BuildEventTriggersForClusterMap     = buildEventTriggersForClusterMap
 	BuildClustersWithEventTrigger       = buildClustersWithEventTrigger
