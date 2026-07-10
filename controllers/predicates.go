@@ -46,7 +46,10 @@ func EventReportPredicates(logger logr.Logger) predicate.Funcs {
 				return true
 			}
 
-			if !reflect.DeepEqual(oldER, newER) {
+			// return true if EventReport Spec has changed. Status is written by event-manager
+			// itself (Phase, FailureMessage) so it must not be compared here, or every such
+			// write would spuriously requeue the associated EventTriggers.
+			if !reflect.DeepEqual(oldER.Spec, newER.Spec) {
 				log.V(logs.LogVerbose).Info("EventReport Spec changed")
 				return true
 			}

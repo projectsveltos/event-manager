@@ -496,7 +496,9 @@ func processEventReportsForClusterInAgentlessMode(ctx context.Context, c client.
 		}
 
 		logger.V(logs.LogDebug).Info("processing EventReport")
-		if err := updateAllClusterProfiles(ctx, c, ref, er, eventSourceMap, eventTriggerMap, logger); err == nil {
+		err := updateAllClusterProfiles(ctx, c, ref, er, eventSourceMap, eventTriggerMap, logger)
+		setEventReportFailureMessage(ctx, mgmtClient, er, err, logger)
+		if err == nil {
 			updateEventReportStatus(ctx, mgmtClient, er, logger)
 		} else {
 			retErr = err
@@ -517,6 +519,10 @@ func skipCollecting(ctx context.Context, c client.Client, cluster *corev1.Object
 	}
 	ready, err := clusterproxy.IsClusterReadyToBeConfigured(ctx, c, clusterRef, logger)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.V(logs.LogDebug).Info("cluster no longer exists, skipping")
+			return true, nil
+		}
 		logger.V(logs.LogDebug).Info("cluster is not ready yet")
 		return true, err
 	}
@@ -528,6 +534,10 @@ func skipCollecting(ctx context.Context, c client.Client, cluster *corev1.Object
 	paused, err := clusterproxy.IsClusterPaused(ctx, c, cluster.Namespace, cluster.Name,
 		clusterproxy.GetClusterType(cluster))
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.V(logs.LogDebug).Info("cluster no longer exists, skipping")
+			return true, nil
+		}
 		logger.V(logs.LogDebug).Error(err, "failed to verify if cluster is paused")
 		return true, err
 	}
@@ -537,6 +547,23 @@ func skipCollecting(ctx context.Context, c client.Client, cluster *corev1.Object
 	}
 
 	return false, nil
+}
+
+// isClusterInPullMode wraps clusterproxy.IsClusterInPullMode, treating a since-deleted cluster
+// as "skip" rather than an error the caller must abort processing on.
+func isClusterInPullMode(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
+	logger logr.Logger) (skip, isPullMode bool, err error) {
+
+	isPullMode, err = clusterproxy.IsClusterInPullMode(ctx, c, cluster.Namespace, cluster.Name,
+		clusterproxy.GetClusterType(cluster), logger)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.V(logs.LogDebug).Info("cluster no longer exists, skipping")
+			return true, false, nil
+		}
+		return false, false, err
+	}
+	return false, isPullMode, nil
 }
 
 func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
@@ -558,10 +585,12 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 		Kind:       cluster.Kind,
 	}
 
-	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, c, cluster.Namespace, cluster.Name,
-		clusterproxy.GetClusterType(cluster), logger)
+	skipCluster, isPullMode, err := isClusterInPullMode(ctx, c, cluster, logger)
 	if err != nil {
 		return err
+	}
+	if skipCluster {
+		return nil
 	}
 	if !isPullMode && !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctx, c, getSveltosNamespace(), version,
 		cluster.Namespace, cluster.Name, clusterproxy.GetClusterType(clusterRef), getAgentInMgmtCluster(), logger) {
@@ -608,53 +637,108 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 			continue
 		}
 
-		reprocessing := firstCollection
-		l := logger.WithValues("eventReport", er.Name)
-		// First update/delete eventReports in managemnent cluster
-		var mgmtClusterEventReport *libsveltosv1beta1.EventReport
-		if !er.DeletionTimestamp.IsZero() {
-			l.V(logs.LogDebug).Info("deleting from management cluster")
-			err = deleteEventReport(ctx, c, cluster, er, l)
-			if err != nil {
-				logger.V(logs.LogInfo).Error(err, "failed to delete EventReport in management cluster")
-				continue
-			}
-			reprocessing = true
-		} else if shouldReprocess(er) {
-			l.V(logs.LogDebug).Info("updating in management cluster")
-			mgmtClusterEventReport, err = updateEventReport(ctx, c, cluster, er, isPullMode, l)
-			if err != nil {
-				l.V(logs.LogInfo).Error(err, "failed to update EventReport in management cluster")
-				continue
-			}
-			reprocessing = true
-		}
-
-		if !reprocessing {
-			continue
-		}
-		l.V(logs.LogDebug).Info("processing EventReport")
-		if getAgentInMgmtCluster() {
-			if mgmtClusterEventReport != nil {
-				// After ClusterProfiles are updated, EventReport status is updated to Processed.
-				// If in agentless mode, the Status of EventReport in the management cluster will be updated.
-				// So set er to current version (update otherwise will fail with object has been modified)
-				er = mgmtClusterEventReport
-			}
-		}
-
-		err = updateAllClusterProfiles(ctx, c, cluster, er, eventSourceMap, eventTriggerMap, l)
-		if err == nil {
-			updateEventReportStatus(ctx, clusterClient, er, l)
-		}
+		processOneEventReport(ctx, c, clusterClient, cluster, er, isPullMode, firstCollection,
+			eventSourceMap, eventTriggerMap, logger)
 	}
 	return nil
 }
 
+// processOneEventReport updates or deletes er's management-cluster copy, then, if it is still
+// relevant, generates ClusterProfile(s) from it and records the outcome. Split out of
+// collectAndProcessEventReportsFromCluster to keep that function's cyclomatic complexity down.
+func processOneEventReport(ctx context.Context, c, clusterClient client.Client, cluster *corev1.ObjectReference,
+	er *libsveltosv1beta1.EventReport, isPullMode, firstCollection bool,
+	eventSourceMap map[string][]*v1beta1.EventTrigger, eventTriggerMap map[string]libsveltosset.Set,
+	logger logr.Logger) {
+
+	reprocessing := firstCollection
+	l := logger.WithValues("eventReport", er.Name)
+	// First update/delete eventReports in managemnent cluster
+	var mgmtClusterEventReport *libsveltosv1beta1.EventReport
+	var err error
+	if !er.DeletionTimestamp.IsZero() {
+		l.V(logs.LogDebug).Info("deleting from management cluster")
+		err = deleteEventReport(ctx, c, cluster, er, l)
+		if err != nil {
+			logger.V(logs.LogInfo).Error(err, "failed to delete EventReport in management cluster")
+			return
+		}
+		reprocessing = true
+	} else if shouldReprocess(er) || firstCollection {
+		// firstCollection also forces a reprocessing pass below (regardless of Phase) to
+		// self-heal after a restart, so the management-cluster copy must be resolved here
+		// too - otherwise that pass has nowhere to record a FailureMessage if it fails.
+		l.V(logs.LogDebug).Info("updating in management cluster")
+		mgmtClusterEventReport, err = updateEventReport(ctx, c, cluster, er, isPullMode, l)
+		if err != nil {
+			l.V(logs.LogInfo).Error(err, "failed to update EventReport in management cluster")
+			return
+		}
+		reprocessing = true
+	}
+
+	if !reprocessing {
+		return
+	}
+	l.V(logs.LogDebug).Info("processing EventReport")
+	if getAgentInMgmtCluster() && mgmtClusterEventReport != nil {
+		// After ClusterProfiles are updated, EventReport status is updated to Processed.
+		// If in agentless mode, the Status of EventReport in the management cluster will be updated.
+		// So set er to current version (update otherwise will fail with object has been modified)
+		er = mgmtClusterEventReport
+	}
+
+	err = updateAllClusterProfiles(ctx, c, cluster, er, eventSourceMap, eventTriggerMap, l)
+	// FailureMessage must land on the management-cluster copy regardless of mode: in
+	// pull mode er and mgmtClusterEventReport are the same object already; in the
+	// default in-cluster-agent mode er is the managed cluster's own object, so
+	// mgmtClusterEventReport (the copy updateEventReport creates/updates in the management
+	// cluster) is the one that needs the write. It's nil only for reports being deleted,
+	// since reprocessing (shouldReprocess || firstCollection) always resolves it otherwise.
+	if mgmtClusterEventReport != nil {
+		setEventReportFailureMessage(ctx, c, mgmtClusterEventReport, err, l)
+	}
+	if err == nil {
+		updateEventReportStatus(ctx, clusterClient, er, l)
+	}
+}
+
+// setEventReportFailureMessage records the outcome of the most recent attempt to generate
+// ClusterProfile(s) from er (processErr, nil on success) on the given EventReport. Callers must
+// pass the management-cluster-resident copy of the EventReport (not the managed-cluster source
+// object used for Phase/CloudEvents bookkeeping in updateEventReportStatus) so the result is
+// visible regardless of which mode the source object lives in. Only writes when the
+// FailureMessage actually changes, so a persistent failure does not generate a Status update on
+// every collection cycle.
+func setEventReportFailureMessage(ctx context.Context, c client.Client, er *libsveltosv1beta1.EventReport,
+	processErr error, logger logr.Logger) {
+
+	var message *string
+	if processErr != nil {
+		m := processErr.Error()
+		message = &m
+	}
+
+	unchanged := (er.Status.FailureMessage == nil) == (message == nil) &&
+		(message == nil || *er.Status.FailureMessage == *message)
+	if unchanged {
+		return
+	}
+
+	er.Status.FailureMessage = message
+	if err := c.Status().Update(ctx, er); err != nil {
+		logger.V(logs.LogInfo).Error(err, "failed to update EventReport FailureMessage")
+	}
+}
+
+// updateEventReportStatus updates EventReport Status once ClusterProfile(s) have been
+// successfully generated from it: CloudEvents are reset (once processed, no need to keep them)
+// and Phase is marked Processed.
 func updateEventReportStatus(ctx context.Context, clusterClient client.Client, er *libsveltosv1beta1.EventReport,
 	logger logr.Logger) {
 
 	logger.V(logs.LogDebug).Info("updating EventReport")
+
 	// Update EventReport Status in managed cluster
 	if er.Spec.CloudEvents != nil {
 		logger.V(logs.LogDebug).Info(fmt.Sprintf("resetting CloudEvents (%d) in EventReport", len(er.Spec.CloudEvents)))
@@ -674,8 +758,7 @@ func updateEventReportStatus(ctx context.Context, clusterClient client.Client, e
 	}
 	phase := libsveltosv1beta1.ReportProcessed
 	er.Status.Phase = &phase
-	err := clusterClient.Status().Update(ctx, er)
-	if err != nil {
+	if err := clusterClient.Status().Update(ctx, er); err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to update EventReport in managed cluster")
 	}
 }
