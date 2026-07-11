@@ -129,6 +129,46 @@ var _ = Describe("EventTrigger Predicates: EventReportPredicates", func() {
 		result := hcrPredicate.Update(e)
 		Expect(result).To(BeFalse())
 	})
+
+	It("Update does not reprocess when only Status changes", func() {
+		hcrPredicate := controllers.EventReportPredicates(logger)
+
+		eventReport.Spec = libsveltosv1beta1.EventReportSpec{
+			MatchingResources: []corev1.ObjectReference{
+				{
+					Kind:       randomString(),
+					APIVersion: randomString(),
+					Name:       randomString(),
+					Namespace:  randomString(),
+				},
+			},
+		}
+		phase := libsveltosv1beta1.ReportProcessed
+		eventReport.Status = libsveltosv1beta1.EventReportStatus{
+			Phase: &phase,
+		}
+
+		oldEventReport := &libsveltosv1beta1.EventReport{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      eventReport.Name,
+				Namespace: eventReport.Namespace,
+			},
+			Spec: eventReport.Spec,
+			// Status differs from eventReport (empty vs Processed with a FailureMessage),
+			// Spec does not: event-manager itself writes Status and must not requeue
+			// EventTriggers as a result.
+		}
+		failureMessage := randomString()
+		oldEventReport.Status.FailureMessage = &failureMessage
+
+		e := event.UpdateEvent{
+			ObjectNew: eventReport,
+			ObjectOld: oldEventReport,
+		}
+
+		result := hcrPredicate.Update(e)
+		Expect(result).To(BeFalse())
+	})
 })
 
 var _ = Describe("EventTrigger Predicates: EventSourcePredicates", func() {

@@ -18,6 +18,7 @@ package controllers_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -126,6 +127,148 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(err).ToNot(BeNil())
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	})
+
+	It("setEventReportFailureMessage records a failure, skips an unchanged write, then clears on success", func() {
+		eventReport := getEventReport(randomString(), randomString(), randomString())
+
+		initObjects := []client.Object{
+			eventReport,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		currentEventReport := &libsveltosv1beta1.EventReport{}
+		Expect(c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+			currentEventReport)).To(Succeed())
+
+		processingErr := errors.New(randomString())
+		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, processingErr, logger)
+
+		Expect(c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+			currentEventReport)).To(Succeed())
+		Expect(currentEventReport.Status.FailureMessage).ToNot(BeNil())
+		Expect(*currentEventReport.Status.FailureMessage).To(Equal(processingErr.Error()))
+
+		resourceVersionAfterFailure := currentEventReport.ResourceVersion
+
+		// Same failure message again: FailureMessage is unchanged so no Status update
+		// (and no api-server write) should happen.
+		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, processingErr, logger)
+
+		Expect(c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+			currentEventReport)).To(Succeed())
+		Expect(currentEventReport.ResourceVersion).To(Equal(resourceVersionAfterFailure))
+
+		// Success (nil error) clears FailureMessage
+		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, nil, logger)
+
+		Expect(c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+			currentEventReport)).To(Succeed())
+		Expect(currentEventReport.Status.FailureMessage).To(BeNil())
+	})
+
+	It("updateEventReportStatus marks the EventReport as Processed", func() {
+		eventReport := getEventReport(randomString(), randomString(), randomString())
+
+		initObjects := []client.Object{
+			eventReport,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		currentEventReport := &libsveltosv1beta1.EventReport{}
+		Expect(c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+			currentEventReport)).To(Succeed())
+
+		controllers.UpdateEventReportStatus(context.TODO(), c, currentEventReport, logger)
+
+		Expect(c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+			currentEventReport)).To(Succeed())
+		Expect(currentEventReport.Status.Phase).ToNot(BeNil())
+		Expect(*currentEventReport.Status.Phase).To(Equal(libsveltosv1beta1.ReportProcessed))
+	})
+
+	It("skipCollecting skips without error when cluster no longer exists", func() {
+		clusterRef := &corev1.ObjectReference{
+			Namespace:  randomString(),
+			Name:       randomString(),
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		skip, err := controllers.SkipCollecting(context.TODO(), c, clusterRef, logger)
+		Expect(err).To(BeNil())
+		Expect(skip).To(BeTrue())
+	})
+
+	It("processOneEventReport records a FailureMessage when firstCollection forces reprocessing of an already-Processed EventReport",
+		func() {
+			// Simulates an event-manager restart: the EventReport was already marked Processed
+			// before the restart, so shouldReprocess alone would skip it. firstCollection must
+			// still force one reprocessing attempt, and if that attempt fails (here: no matching
+			// resources yet, so updateClusterProfiles returns the zero-match confirmation error),
+			// the failure must land on EventReport.Status.FailureMessage rather than being dropped.
+			controllers.SetAgentInMgmtCluster(false)
+			controllers.ResetZeroMatchCounters()
+
+			clusterRef := &corev1.ObjectReference{
+				Namespace:  randomString(),
+				Name:       randomString(),
+				Kind:       libsveltosv1beta1.SveltosClusterKind,
+				APIVersion: libsveltosv1beta1.GroupVersion.String(),
+			}
+
+			eventSourceName := randomString()
+			eventTrigger := &v1beta1.EventTrigger{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: randomString(),
+				},
+				Spec: v1beta1.EventTriggerSpec{
+					EventSourceName: eventSourceName,
+				},
+				Status: v1beta1.EventTriggerStatus{
+					MatchingClusterRefs: []corev1.ObjectReference{*clusterRef},
+				},
+			}
+
+			eventReport := getEventReport(eventSourceName, clusterRef.Namespace, clusterRef.Name)
+			phase := libsveltosv1beta1.ReportProcessed
+			eventReport.Status.Phase = &phase
+
+			initObjects := []client.Object{eventTrigger, eventReport}
+			c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+				WithObjects(initObjects...).Build()
+
+			currentEventReport := &libsveltosv1beta1.EventReport{}
+			Expect(c.Get(context.TODO(),
+				types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+				currentEventReport)).To(Succeed())
+
+			eventSourceMap := map[string][]*v1beta1.EventTrigger{
+				eventSourceName: {eventTrigger},
+			}
+			eventTriggerMap := controllers.BuildEventTriggersForClusterMap(
+				&v1beta1.EventTriggerList{Items: []v1beta1.EventTrigger{*eventTrigger}})
+
+			controllers.ProcessOneEventReport(context.TODO(), c, c, clusterRef, currentEventReport,
+				true, true, eventSourceMap, eventTriggerMap, logger) // isPullMode=true, firstCollection=true
+
+			Expect(c.Get(context.TODO(),
+				types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+				currentEventReport)).To(Succeed())
+			Expect(currentEventReport.Status.FailureMessage).ToNot(BeNil())
+			Expect(*currentEventReport.Status.FailureMessage).To(ContainSubstring("waiting for confirmation"))
+		})
 
 	It("removeEventReports deletes all EventReport for a given EventSource instance", func() {
 		eventReport1 := getEventReport(eventSource.Name, randomString(), randomString())

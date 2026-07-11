@@ -28,6 +28,10 @@ var (
 	CollectAndProcessAllEventReports         = collectAndProcessAllEventReports
 	DeleteEventReport                        = deleteEventReport
 	ProcessEventTriggerForCluster            = processEventTriggerForCluster
+	UpdateEventReportStatus                  = updateEventReportStatus
+	SetEventReportFailureMessage             = setEventReportFailureMessage
+	SkipCollecting                           = skipCollecting
+	ProcessOneEventReport                    = processOneEventReport
 )
 
 var (

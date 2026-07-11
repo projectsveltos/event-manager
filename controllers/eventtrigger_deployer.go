@@ -1383,7 +1383,8 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 		if count < zeroMatchThreshold {
 			logger.V(logs.LogInfo).Info("EventReport has no matching resources, waiting for confirmation",
 				"count", count, "threshold", zeroMatchThreshold)
-			return fmt.Errorf("EventReport %s/%s shows no matches (%d/%d), requeuing",
+			return fmt.Errorf("EventReport %s/%s has no matching resources: waiting for confirmation before removing "+
+				"ClusterProfiles (%d/%d consecutive empty reports observed)",
 				er.Namespace, er.Name, count, zeroMatchThreshold)
 		}
 		logger.V(logs.LogDebug).Info("EventReport has no matching resources confirmed, removing ClusterProfiles",

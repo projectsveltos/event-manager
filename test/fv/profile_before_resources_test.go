@@ -88,7 +88,7 @@ var _ = Describe("ClusterProfile deletion precedes referenced resource cleanup",
 					},
 				},
 				Data: map[string]string{
-					"namespace": "{{ .Resource.metadata.name }}",
+					"namespace": "{{ .Resource.metadata.name }}", //nolint: goconst // just a test
 				},
 			}
 			Byf("Create template ConfigMap %s/%s annotated for instantiation",
