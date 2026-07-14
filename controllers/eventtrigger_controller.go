@@ -277,7 +277,9 @@ func (r *EventTriggerReconciler) reconcileNormal(
 
 	matchingCluster = append(matchingCluster, clusterSetClusters...)
 
-	eventTriggerScope.SetMatchingClusterRefs(removeDuplicates(matchingCluster))
+	matchingClusters := removeDuplicates(matchingCluster)
+	eventTriggerScope.SetMatchingClusterRefs(matchingClusters)
+	trackMatchingClusters(eventTriggerScope.EventTrigger.Name, len(matchingClusters), logger)
 
 	err = r.updateClusterInfo(ctx, eventTriggerScope)
 	if err != nil {

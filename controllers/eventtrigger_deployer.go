@@ -161,6 +161,7 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 
 						allProcessed = false
 					}
+					r.trackClusterInfoOutcome(clusterInfo, resource.Name, l)
 				}
 			}
 		}
@@ -189,6 +190,27 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 	}
 
 	return nil
+}
+
+// trackClusterInfoOutcome records reconcile-outcome metrics for a terminal clusterInfo.Status. Non-terminal
+// statuses (Provisioning, Removing) are intentionally not tracked.
+func (r *EventTriggerReconciler) trackClusterInfoOutcome(clusterInfo *libsveltosv1beta1.ClusterInfo,
+	eventTriggerName string, logger logr.Logger) {
+
+	clusterType := clusterproxy.GetClusterType(&clusterInfo.Cluster)
+
+	switch clusterInfo.Status {
+	case libsveltosv1beta1.SveltosStatusProvisioned, libsveltosv1beta1.SveltosStatusRemoved:
+		trackReconcileOutcome(clusterInfo.Cluster.Namespace, clusterInfo.Cluster.Name, clusterType,
+			true, eventTriggerName, logger)
+		trackLastSuccess(clusterInfo.Cluster.Namespace, clusterInfo.Cluster.Name, clusterType,
+			time.Now(), eventTriggerName, logger)
+	case libsveltosv1beta1.SveltosStatusFailed, libsveltosv1beta1.SveltosStatusFailedNonRetriable:
+		trackReconcileOutcome(clusterInfo.Cluster.Namespace, clusterInfo.Cluster.Name, clusterType,
+			false, eventTriggerName, logger)
+	case libsveltosv1beta1.SveltosStatusProvisioning, libsveltosv1beta1.SveltosStatusRemoving:
+		// Non-terminal; nothing to track yet.
+	}
 }
 
 // undeployEventBasedAddon clean resources in managed clusters
@@ -1412,6 +1434,15 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 
 	if eventTrigger.Spec.OneForEvent {
 		logger.V(logs.LogDebug).Info("updating one clusterProfile per resource")
+		// Instantiate ConfigMap/Secrets from ConfigMapGenerator/SecretGenerator first: the
+		// ClusterProfile is created/updated only once the resources it may depend on are ready,
+		// so a generator failure does not leave behind a ClusterProfile for this reconcile pass.
+		fromGenerators, err = instantiateFromGeneratorsPerResource(ctx, c, eventTrigger, er, clusterNamespace,
+			clusterName, clusterType, logger)
+		if err != nil {
+			logger.V(logs.LogInfo).Error(err, "failed to instantiate from generators")
+			return err
+		}
 		clusterProfiles, err = instantiateOneClusterProfilePerResource(ctx, c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, er, logger)
 		if err != nil {
@@ -1419,26 +1450,19 @@ func updateClusterProfiles(ctx context.Context, c client.Client, clusterNamespac
 				"failed to create one clusterProfile instance per matching resource")
 			return err
 		}
-		// Instantiate ConfigMap/Secrets from ConfigMapGenerator/SecretGenerator
-		fromGenerators, err = instantiateFromGeneratorsPerResource(ctx, c, eventTrigger, er, clusterNamespace,
+	} else {
+		logger.V(logs.LogDebug).Info("updating one clusterProfile for all resources")
+		fromGenerators, err = instantiateFromGeneratorsPerAllResource(ctx, c, eventTrigger, er, clusterNamespace,
 			clusterName, clusterType, logger)
 		if err != nil {
 			logger.V(logs.LogInfo).Error(err, "failed to instantiate from generators")
 			return err
 		}
-	} else {
-		logger.V(logs.LogDebug).Info("updating one clusterProfile for all resources")
 		clusterProfiles, err = instantiateOneClusterProfilePerAllResource(ctx, c, clusterNamespace, clusterName,
 			clusterType, eventTrigger, er, logger)
 		if err != nil {
 			logger.V(logs.LogInfo).Error(err,
 				"failed to create one clusterProfile instance per matching resource")
-			return err
-		}
-		fromGenerators, err = instantiateFromGeneratorsPerAllResource(ctx, c, eventTrigger, er, clusterNamespace,
-			clusterName, clusterType, logger)
-		if err != nil {
-			logger.V(logs.LogInfo).Error(err, "failed to instantiate from generators")
 			return err
 		}
 	}

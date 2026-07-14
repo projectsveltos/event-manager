@@ -840,6 +840,9 @@ func updateAllClusterProfiles(ctx context.Context, mgmtClient client.Client, clu
 			continue
 		}
 
+		trackMatchingResources(eventTriggers[i].Name, cluster.Namespace, cluster.Name, clusterType,
+			len(er.Spec.MatchingResources), l)
+
 		l.V(logs.LogDebug).Info("updating ClusterProfile")
 		err = updateClusterProfiles(ctx, mgmtClient, cluster.Namespace, cluster.Name, clusterType,
 			eventTriggers[i], er, l)
