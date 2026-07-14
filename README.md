@@ -1,5 +1,6 @@
 [![CI](https://github.com/projectsveltos/event-manager/actions/workflows/main.yaml/badge.svg)](https://github.com/projectsveltos/event-manager/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/projectsveltos/event-manager)](https://goreportcard.com/report/github.com/projectsveltos/event-manager)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/projectsveltos/event-manager/badge)](https://scorecard.dev/viewer/?uri=github.com/projectsveltos/event-manager)
+[![CodeQL](https://github.com/projectsveltos/event-manager/actions/workflows/codeql.yaml/badge.svg)](https://github.com/projectsveltos/event-manager/actions/workflows/codeql.yaml)
 [![Release](https://img.shields.io/github/v/release/projectsveltos/event-manager)](https://github.com/projectsveltos/event-manager/releases)
 [![License](https://img.shields.io/badge/license-Apache-blue.svg)](LICENSE)
 [![Slack](https://img.shields.io/badge/join%20slack-%23projectsveltos-brighteen)](https://join.slack.com/t/projectsveltos/shared_invite/zt-1hraownbr-W8NTs6LTimxLPB8Erj8Q6Q)
@@ -52,8 +53,8 @@ spec:
    value: fv
 ```
 
-Sveltos supports custom events written in [Lua](https://www.lua.org/). 
-Following EventSource instance again defines an Event as the creation/deletion of a Service with label *sveltos: fv* but using a Lua script. 
+Sveltos supports custom events written in [Lua](https://www.lua.org/).
+Following EventSource instance again defines an Event as the creation/deletion of a Service with label *sveltos: fv* but using a Lua script.
 
 ```yaml
 apiVersion: lib.projectsveltos.io/v1beta1
@@ -89,11 +90,11 @@ spec:
 
 Event manager is a Sveltos micro service in charge of deploying add-ons when certain events happen in managed clusters.
 
-## Contributing 
+## Contributing
 
 ❤️ Your contributions are always welcome! If you want to contribute, have questions, noticed any bug or want to get the latest project news, you can connect with us in the following ways:
 
-1. Open a bug/feature enhancement on github [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/projectsveltos/addon-controller/issues)
+1. Open a bug/feature enhancement on github [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/projectsveltos/event-manager/issues)
 2. Chat with us on the Slack in the #projectsveltos channel [![Slack](https://img.shields.io/badge/join%20slack-%23projectsveltos-brighteen)](https://join.slack.com/t/projectsveltos/shared_invite/zt-1hraownbr-W8NTs6LTimxLPB8Erj8Q6Q)
 3. [Contact Us](mailto:support@projectsveltos.io)
 
