@@ -26,6 +26,7 @@ var (
 	RemoveEventReportsFromCluster            = removeEventReportsFromCluster
 	CollectAndProcessEventReportsFromCluster = collectAndProcessEventReportsFromCluster
 	CollectAndProcessAllEventReports         = collectAndProcessAllEventReports
+	RemoveStaleEventReportsOnce              = removeStaleEventReportsOnce
 	DeleteEventReport                        = deleteEventReport
 	ProcessEventTriggerForCluster            = processEventTriggerForCluster
 	UpdateEventReportStatus                  = updateEventReportStatus

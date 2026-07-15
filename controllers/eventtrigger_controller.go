@@ -304,7 +304,7 @@ func (r *EventTriggerReconciler) reconcileNormal(
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.Controller, error) {
+func (r *EventTriggerReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (controller.Controller, error) {
 	c, err := ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.EventTrigger{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		WithOptions(controller.Options{
@@ -364,8 +364,16 @@ func (r *EventTriggerReconciler) SetupWithManager(mgr ctrl.Manager) (controller.
 	*/
 
 	if r.EventReportMode == CollectFromManagementCluster {
-		go collectEventReports(mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(), r.ShardKey,
+		go collectEventReports(ctx, mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(), r.ShardKey,
 			r.CapiOnboardAnnotation, getVersion(), mgr.GetLogger())
+	}
+
+	if r.ShardKey == "" {
+		// Cluster existence is a global fact, not something a single shard's cluster subset can
+		// safely determine on its own, so only the default (non-sharded) instance runs this.
+		// Runs regardless of EventReportMode: a cluster can be in pull mode - and so leave stale
+		// EventReports in the management cluster - independent of how this instance collects reports.
+		go pollStaleEventReports(ctx, mgr.GetClient(), r.CapiOnboardAnnotation, mgr.GetLogger())
 	}
 
 	return c, nil

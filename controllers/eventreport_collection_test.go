@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
@@ -857,6 +858,118 @@ spec:
 		ceAction, err := controllers.InstantiateCloudEventAction(clusterNamespace, clusterName, eventTrigger, objects[0], logger)
 		Expect(err).To(BeNil())
 		Expect(string(*ceAction)).To(Equal("Delete"))
+	})
+
+	It("removeStaleEventReportsOnce removes EventReport and instantiated resources when cluster no longer exists", func() {
+		clusterNamespace := randomString()
+		clusterName := randomString()
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterNamespace},
+		}
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+		eventSourceName := randomString()
+		eventReport := getEventReport(eventSourceName, clusterNamespace, clusterName)
+		eventReport.Labels[libsveltosv1beta1.EventReportClusterNameLabel] = clusterName
+		eventReport.Labels[libsveltosv1beta1.EventReportClusterTypeLabel] = strings.ToLower(string(clusterType))
+		Expect(testEnv.Create(context.TODO(), eventReport)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport)).To(Succeed())
+
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: randomString()},
+			Spec:       v1beta1.EventTriggerSpec{EventSourceName: eventSourceName},
+		}
+		Expect(testEnv.Create(context.TODO(), eventTrigger)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventTrigger)).To(Succeed())
+
+		// clusterProfile simulates a ClusterProfile instantiated by this EventTrigger because of
+		// this EventReport, back when clusterNamespace/clusterName still existed.
+		clusterProfile := &configv1beta1.ClusterProfile{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(clusterNamespace, clusterName, eventTrigger.Name,
+					nil, clusterType),
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), clusterProfile)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, clusterProfile)).To(Succeed())
+
+		// removeInstantiatedResources defers ConfigMap/Secret removal until any stale
+		// ClusterProfile is fully gone, so this converges over a few calls. The call's own
+		// error return is ignored: it aggregates failures across every stale cluster found
+		// in the shared testEnv (other specs may leave their own stale leftovers behind), so
+		// it does not reflect whether this test's own objects were handled correctly.
+		Eventually(func() bool {
+			_ = controllers.RemoveStaleEventReportsOnce(context.TODO(), testEnv.Client, "", logger)
+
+			err := testEnv.Get(context.TODO(),
+				types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+				&libsveltosv1beta1.EventReport{})
+			if err == nil || !apierrors.IsNotFound(err) {
+				return false
+			}
+
+			err = testEnv.Get(context.TODO(),
+				types.NamespacedName{Name: clusterProfile.Name}, &configv1beta1.ClusterProfile{})
+			return err != nil && apierrors.IsNotFound(err)
+		}, timeout, pollingInterval).Should(BeTrue())
+	})
+
+	It("removeStaleEventReportsOnce leaves EventReport and instantiated resources alone when cluster still exists", func() {
+		cluster := prepareCluster()
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+
+		// prepareCluster does not itself wait for the Cluster to be visible in the cache (only
+		// for the Machine and kubeconfig Secret it creates), so wait here: otherwise
+		// clusterproxy.GetListOfClusters can race the informer and momentarily miss this
+		// cluster, making removeStaleEventReportsOnce see it as gone.
+		Expect(waitForObject(context.TODO(), testEnv.Client, cluster)).To(Succeed())
+
+		eventSourceName := randomString()
+		eventReport := getEventReport(eventSourceName, cluster.Namespace, cluster.Name)
+		eventReport.Labels[libsveltosv1beta1.EventReportClusterNameLabel] = cluster.Name
+		eventReport.Labels[libsveltosv1beta1.EventReportClusterTypeLabel] = strings.ToLower(string(clusterType))
+		Expect(testEnv.Create(context.TODO(), eventReport)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventReport)).To(Succeed())
+
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: randomString()},
+			Spec:       v1beta1.EventTriggerSpec{EventSourceName: eventSourceName},
+		}
+		Expect(testEnv.Create(context.TODO(), eventTrigger)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventTrigger)).To(Succeed())
+
+		clusterProfile := &configv1beta1.ClusterProfile{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+				Labels: controllers.GetInstantiatedObjectLabels(cluster.Namespace, cluster.Name, eventTrigger.Name,
+					eventReport, clusterType),
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), clusterProfile)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, clusterProfile)).To(Succeed())
+
+		// The call's own error return is ignored here too, for the same reason as above: it
+		// aggregates failures across every stale cluster in the shared testEnv, unrelated to
+		// this test's own (live) cluster. What matters is that this test's objects survive
+		// repeated calls.
+		Consistently(func() bool {
+			_ = controllers.RemoveStaleEventReportsOnce(context.TODO(), testEnv.Client, "", logger)
+
+			err := testEnv.Get(context.TODO(),
+				types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+				&libsveltosv1beta1.EventReport{})
+			if err != nil {
+				return false
+			}
+
+			err = testEnv.Get(context.TODO(),
+				types.NamespacedName{Name: clusterProfile.Name}, &configv1beta1.ClusterProfile{})
+			return err == nil
+		}, timeout, pollingInterval).Should(BeTrue())
 	})
 })
 
