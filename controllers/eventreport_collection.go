@@ -196,7 +196,7 @@ func buildEventTriggersForClusterMap(eventTriggers *v1beta1.EventTriggerList,
 }
 
 // Periodically collects EventReports from each cluster (excluding pull mode clusters)
-func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme,
+func collectEventReports(ctx context.Context, config *rest.Config, c client.Client, s *runtime.Scheme,
 	shardKey, capiOnboardAnnotation, version string, logger logr.Logger) {
 
 	interval := 10 * time.Second
@@ -209,15 +209,20 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 	mgmtClusterSchema = s
 	mgmtClusterConfig = config
 
-	ctx := context.TODO()
 	for {
+		if ctx.Err() != nil {
+			return
+		}
+
 		logger.V(logs.LogDebug).Info("collecting EventTriggers")
 		// get all EventTriggers
 		eventTriggers := &v1beta1.EventTriggerList{}
 		err := c.List(ctx, eventTriggers)
 		if err != nil {
 			logger.V(logs.LogInfo).Error(err, "failed to get eventTriggers")
-			time.Sleep(interval)
+			if sleepOrDone(ctx, interval) {
+				return
+			}
 			continue
 		}
 
@@ -229,7 +234,9 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 			shardKey, logger)
 		if err != nil {
 			logger.V(logs.LogInfo).Error(err, "failed to get clusters")
-			time.Sleep(interval)
+			if sleepOrDone(ctx, interval) {
+				return
+			}
 			continue
 		}
 
@@ -270,7 +277,20 @@ func collectEventReports(config *rest.Config, c client.Client, s *runtime.Scheme
 			firstCollection = false
 		}
 
-		time.Sleep(interval)
+		if sleepOrDone(ctx, interval) {
+			return
+		}
+	}
+}
+
+// sleepOrDone waits for either d to elapse or ctx to be canceled, whichever comes first.
+// Returns true if ctx was canceled, so callers can stop instead of looping through shutdown.
+func sleepOrDone(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	case <-time.After(d):
+		return false
 	}
 }
 
@@ -370,6 +390,113 @@ func processEventReportClusters(ctx context.Context, c client.Client,
 	default:
 		return retErr
 	}
+}
+
+// pollStaleEventReports periodically scans every EventReport in the management cluster and, for
+// any whose Cluster/SveltosCluster no longer exists, removes it along with any ClusterProfile/
+// ConfigMap/Secret an EventTrigger instantiated because of it. This runs independent of
+// EventReportMode: a cluster can be in pull mode - and so leave stale EventReports behind in the
+// management cluster - no matter how this instance collects reports. Only the default
+// (non-sharded) instance runs this: cluster existence is a global fact, not something a single
+// shard's cluster subset can safely determine on its own.
+func pollStaleEventReports(ctx context.Context, c client.Client, capiOnboardAnnotation string, logger logr.Logger) {
+	const interval = 5 * time.Minute
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		if err := removeStaleEventReportsOnce(ctx, c, capiOnboardAnnotation, logger); err != nil {
+			logger.V(logs.LogInfo).Error(err, "failed to remove stale EventReports")
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// removeStaleEventReportsOnce lists every currently existing Cluster/SveltosCluster (cluster-wide,
+// no shard filtering) and every EventReport in the management cluster, then removes any EventReport
+// whose cluster is not in that live set, along with the ClusterProfile/ConfigMap/Secret instances
+// any EventTrigger created because of it.
+func removeStaleEventReportsOnce(ctx context.Context, c client.Client, capiOnboardAnnotation string,
+	logger logr.Logger) error {
+
+	liveClusters, err := clusterproxy.GetListOfClusters(ctx, c, "", capiOnboardAnnotation, logger)
+	if err != nil {
+		return err
+	}
+
+	type clusterKey struct{ ns, name, clusterType string }
+	live := make(map[clusterKey]bool, len(liveClusters))
+	for i := range liveClusters {
+		ref := liveClusters[i]
+		ct := strings.ToLower(string(clusterproxy.GetClusterType(&ref)))
+		live[clusterKey{ref.Namespace, ref.Name, ct}] = true
+	}
+
+	eventReportList := &libsveltosv1beta1.EventReportList{}
+	if err := c.List(ctx, eventReportList); err != nil {
+		return err
+	}
+
+	eventTriggers := &v1beta1.EventTriggerList{}
+	if err := c.List(ctx, eventTriggers); err != nil {
+		return err
+	}
+
+	staleClusters := make(map[clusterKey]bool)
+	for i := range eventReportList.Items {
+		er := &eventReportList.Items[i]
+		if er.Labels == nil {
+			continue
+		}
+		clusterName := er.Labels[libsveltosv1beta1.EventReportClusterNameLabel]
+		clusterType := er.Labels[libsveltosv1beta1.EventReportClusterTypeLabel]
+		clusterNs := er.Namespace
+		if clusterName == "" || clusterType == "" {
+			continue
+		}
+		key := clusterKey{clusterNs, clusterName, clusterType}
+		if !live[key] {
+			staleClusters[key] = true
+		}
+	}
+
+	var retErr error
+	for key := range staleClusters {
+		l := logger.WithValues("cluster", fmt.Sprintf("%s/%s:%s", key.ns, key.name, key.clusterType))
+
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+		if strings.EqualFold(key.clusterType, string(libsveltosv1beta1.ClusterTypeSveltos)) {
+			clusterType = libsveltosv1beta1.ClusterTypeSveltos
+		}
+
+		for i := range eventTriggers.Items {
+			eventTrigger := &eventTriggers.Items[i]
+			// Passing a nil EventReport and no clusterProfiles/policyRefs to keep means: this
+			// cluster is gone, so every ClusterProfile/ConfigMap/Secret this EventTrigger
+			// instantiated for it is stale. No-op if this EventTrigger never created anything
+			// for this cluster.
+			if err := removeInstantiatedResources(ctx, c, key.ns, key.name, clusterType, eventTrigger,
+				nil, nil, nil, l); err != nil {
+				l.V(logs.LogInfo).Error(err, fmt.Sprintf(
+					"failed to remove instantiated resources for EventTrigger %s", eventTrigger.Name))
+				retErr = err
+			}
+		}
+
+		if err := removeEventReportsFromCluster(ctx, c, key.ns, key.name, clusterType,
+			map[string]bool{}, l); err != nil {
+			l.V(logs.LogInfo).Error(err, "failed to remove stale EventReports")
+			retErr = err
+		}
+	}
+
+	return retErr
 }
 
 // collectAndProcessAllEventReports is used in agentless mode. It fetches all EventReports

@@ -332,20 +332,39 @@ func undeployEventTriggerResourcesFromCluster(ctx context.Context, c client.Clie
 		return err
 	}
 
-	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, c, clusterNamespace, clusterName,
-		clusterType, logger)
+	// This was queued while the cluster was still present; time may have passed since then,
+	// so check again. If the cluster is gone by now, there is no agent left to undeploy from
+	// or to ack a pull mode removal request.
+	var clusterStillExists bool
+	cluster, err := clusterproxy.GetCluster(ctx, c, clusterNamespace, clusterName, clusterType)
 	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to verify if Cluster is in pull mode")
-		return err
-	}
-
-	if isPullMode {
-		logger.V(logs.LogDebug).Info("Undeploy eventTrigger in pull mode")
-		err := undeployEventTriggerInPullMode(ctx, c, clusterNamespace, clusterName, eventTrigger, logger)
-		if err != nil {
-			logger.V(logs.LogInfo).Error(err, "failed to undeploy eventTrigger in pull mode")
+		if apierrors.IsNotFound(err) {
+			clusterStillExists = false
+		} else {
 			return err
 		}
+	} else {
+		clusterStillExists = cluster.GetDeletionTimestamp().IsZero()
+	}
+
+	if clusterStillExists {
+		isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, c, clusterNamespace, clusterName,
+			clusterType, logger)
+		if err != nil {
+			logger.V(logs.LogInfo).Error(err, "failed to verify if Cluster is in pull mode")
+			return err
+		}
+
+		if isPullMode {
+			logger.V(logs.LogDebug).Info("Undeploy eventTrigger in pull mode")
+			err := undeployEventTriggerInPullMode(ctx, c, clusterNamespace, clusterName, eventTrigger, logger)
+			if err != nil {
+				logger.V(logs.LogInfo).Error(err, "failed to undeploy eventTrigger in pull mode")
+				return err
+			}
+		}
+	} else {
+		logger.V(logs.LogDebug).Info("cluster is gone, skipping pull mode undeploy")
 	}
 
 	logger.V(logs.LogDebug).Info("Undeploy eventTrigger. Removing EventSource")

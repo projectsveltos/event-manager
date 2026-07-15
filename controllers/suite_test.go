@@ -35,6 +35,7 @@ import (
 
 	"github.com/projectsveltos/event-manager/controllers"
 	"github.com/projectsveltos/event-manager/internal/test/helpers"
+	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	libsveltoscrd "github.com/projectsveltos/libsveltos/lib/crd"
 	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 )
@@ -130,6 +131,15 @@ var _ = BeforeSuite(func() {
 	if synced := testEnv.GetCache().WaitForCacheSync(ctx); !synced {
 		time.Sleep(time.Second)
 	}
+
+	// clusterproxy caches CAPI CRD presence once, in a process-wide flag that is never reset.
+	// Later tests exercise EventTriggerReconciler.Reconcile with a fake client that has no
+	// CustomResourceDefinition object, which would otherwise be the first caller and permanently
+	// (and incorrectly) cache "CAPI not present" for the rest of this test binary. Priming it
+	// here, with the real testEnv client (which does have the CRD), locks in the correct answer
+	// first.
+	_, err = clusterproxy.GetListOfClusters(ctx, testEnv.Client, "", "", ctrl.Log)
+	Expect(err).To(BeNil())
 })
 
 var _ = AfterSuite(func() {

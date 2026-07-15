@@ -145,7 +145,7 @@ func main() {
 	eventTriggerReconciler := getEventTriggerReconciler(mgr)
 	eventTriggerReconciler.Deployer = d
 
-	eventTriggerController, err = eventTriggerReconciler.SetupWithManager(mgr)
+	eventTriggerController, err = eventTriggerReconciler.SetupWithManager(ctx, mgr)
 	if err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "EventTrigger")
 		os.Exit(1)
