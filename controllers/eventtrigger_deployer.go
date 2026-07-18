@@ -53,6 +53,7 @@ import (
 	"github.com/projectsveltos/event-manager/api/v1beta1"
 	"github.com/projectsveltos/event-manager/pkg/scope"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	"github.com/projectsveltos/libsveltos/lib/clustercache"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/deployer"
 	"github.com/projectsveltos/libsveltos/lib/funcmap"
@@ -651,6 +652,9 @@ func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Conte
 		if result.Err != nil {
 			errorMessage := result.Err.Error()
 			clusterInfo.FailureMessage = &errorMessage
+
+			clustercache.GetManager().InvalidateOnAuthError(cluster.Namespace, cluster.Name,
+				clusterproxy.GetClusterType(cluster), result.Err)
 		}
 
 		if *deployerStatus == libsveltosv1beta1.SveltosStatusProvisioned {
@@ -865,6 +869,9 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 		if result.Err != nil {
 			failureMessage := result.Err.Error()
 			clusterInfo.FailureMessage = &failureMessage
+
+			clustercache.GetManager().InvalidateOnAuthError(cluster.Namespace, cluster.Name,
+				clusterproxy.GetClusterType(cluster), result.Err)
 		}
 	} else {
 		logger.V(logs.LogDebug).Info("no result is available. mark status as removing")
@@ -1117,13 +1124,15 @@ func deployEventSource(ctx context.Context, c client.Client,
 			eventTrigger, currentEventSource, logger)
 	}
 
-	// If sveltos-agent is deployed to the managed cluster, deply EventSource there
+	// If sveltos-agent is deployed to the managed cluster, deploy EventSource there.
 	var remoteClient client.Client
-	remoteClient, err = clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
-		"", "", clusterType, logger)
-	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to get managed cluster client")
-		return err
+	if !isPullMode {
+		remoteClient, err = clustercache.GetManager().GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
+			"", "", clusterType, logger)
+		if err != nil {
+			logger.V(logs.LogInfo).Error(err, "failed to get managed cluster client")
+			return err
+		}
 	}
 
 	// classifier installs sveltos-agent and CRDs it needs, including
@@ -1298,7 +1307,7 @@ func proceedRemovingStaleEventSources(ctx context.Context, c client.Client,
 	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
 	eventTrigger *v1beta1.EventTrigger, removeAll bool, logger logr.Logger) error {
 
-	remoteClient, err := clusterproxy.GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
+	remoteClient, err := clustercache.GetManager().GetKubernetesClient(ctx, c, clusterNamespace, clusterName,
 		"", "", clusterType, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to get managed cluster client")
@@ -3737,7 +3746,7 @@ func (r *EventTriggerReconciler) resetEventReportStatus(ctx context.Context,
 	} else {
 		eventReportName = eventTrigger.Spec.EventSourceName
 		eventReportNamespace = sveltosNamespace
-		kubernetesClient, err = clusterproxy.GetKubernetesClient(ctx, r.Client, clusterRef.Namespace,
+		kubernetesClient, err = clustercache.GetManager().GetKubernetesClient(ctx, r.Client, clusterRef.Namespace,
 			clusterRef.Name, "", "", clusterType, logger)
 		if err != nil {
 			logger.V(logs.LogInfo).Error(err, "failed to get client")

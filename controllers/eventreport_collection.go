@@ -34,6 +34,7 @@ import (
 
 	"github.com/projectsveltos/event-manager/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	"github.com/projectsveltos/libsveltos/lib/clustercache"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
@@ -734,6 +735,8 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 	clusterClient, err := getEventReportClient(ctx, cluster.Namespace, cluster.Name,
 		clusterproxy.GetClusterType(clusterRef), isPullMode, logger)
 	if err != nil {
+		clustercache.GetManager().InvalidateOnAuthError(cluster.Namespace, cluster.Name,
+			clusterproxy.GetClusterType(clusterRef), err)
 		return err
 	}
 

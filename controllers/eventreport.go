@@ -30,7 +30,7 @@ import (
 
 	"github.com/projectsveltos/event-manager/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
-	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
+	"github.com/projectsveltos/libsveltos/lib/clustercache"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	"github.com/projectsveltos/libsveltos/lib/mgmtagent"
 )
@@ -54,7 +54,7 @@ func getEventReportClient(ctx context.Context, clusterNamespace, clusterName str
 	// ResourceSummary is a Sveltos resource created in managed clusters.
 	// Sveltos resources are always created using cluster-admin so that admin does not need to be
 	// given such permissions.
-	return clusterproxy.GetKubernetesClient(ctx, getManagementClusterClient(),
+	return clustercache.GetManager().GetKubernetesClient(ctx, getManagementClusterClient(),
 		clusterNamespace, clusterName, "", "", clusterType, logger)
 }
 
