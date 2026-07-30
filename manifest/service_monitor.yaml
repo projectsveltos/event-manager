@@ -3,16 +3,19 @@ kind: ServiceMonitor
 metadata:
   labels:
     control-plane: event-manager
-  name: manager-metrics-monitor
+  name: event-manager
   namespace: projectsveltos
 spec:
   endpoints:
-    - path: /metrics
-      port: metrics
-      scheme: https
-      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-      tlsConfig:
-        insecureSkipVerify: true
+  - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    path: /metrics
+    port: metrics
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+  namespaceSelector:
+    matchNames:
+    - projectsveltos
   selector:
     matchLabels:
       control-plane: event-manager
