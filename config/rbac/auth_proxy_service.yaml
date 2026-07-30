@@ -7,9 +7,9 @@ metadata:
   namespace: projectsveltos
 spec:
   ports:
-  - name: https
+  - name: metrics
     port: 8443
     protocol: TCP
-    targetPort: https
+    targetPort: 8443
   selector:
     control-plane: event-manager
