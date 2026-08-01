@@ -101,7 +101,7 @@ type EventTriggerSpec struct {
 	// event happened.
 	// If DestinationClusterSelector is set though, when an event happens in any of the
 	// cluster identified by SourceClusterSelector, add-ons will be deployed in each of
-	// the cluster indentified by DestinationClusterSelector.
+	// the cluster identified by DestinationClusterSelector.
 	// +optional
 	DestinationClusterSelector libsveltosv1beta1.Selector `json:"destinationClusterSelector,omitempty"`
 
