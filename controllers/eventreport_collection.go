@@ -757,6 +757,13 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 	eventReportList := libsveltosv1beta1.EventReportList{}
 	err = clusterClient.List(ctx, &eventReportList, listOptions...)
 	if err != nil {
+		// getEventReportClient succeeding only means the cached rest.Config was non-nil - it
+		// does not verify the credentials still work, since client.New performs no network
+		// call. A token that expired since the config was cached surfaces here, on first
+		// actual use, not there. Evict so the next collection cycle rebuilds the client from a
+		// freshly-read kubeconfig Secret instead of retrying the same stale credentials forever.
+		clustercache.GetManager().InvalidateOnAuthError(cluster.Namespace, cluster.Name,
+			clusterproxy.GetClusterType(clusterRef), err)
 		return err
 	}
 
