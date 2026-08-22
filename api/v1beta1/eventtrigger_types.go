@@ -114,7 +114,7 @@ type EventTriggerSpec struct {
 	// Multiple resources in a managed cluster can be a match for referenced
 	// EventSource. OneForEvent indicates whether a ClusterProfile for all
 	// resource (OneForEvent = false) or one per resource (OneForEvent = true)
-	// needs to be creted.
+	// needs to be created.
 	//+kubebuilder:validation:XValidation:rule="self == oldSelf",message="Value is immutable"
 	// +optional
 	OneForEvent bool `json:"oneForEvent,omitempty"`
