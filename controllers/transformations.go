@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	"github.com/projectsveltos/libsveltos/lib/clustercache"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
 
@@ -239,6 +240,10 @@ func (r *EventTriggerReconciler) requeueEventTriggerForReference(
 			Namespace:  o.GetNamespace(),
 			Name:       o.GetName(),
 		}
+		// A Secret change might be a managed cluster's kubeconfig being rotated/pointed at a
+		// new endpoint. clustercache has no other way to learn that (see #1954): evict whatever
+		// it may have cached under this Secret so the next read rebuilds from current content.
+		clustercache.GetManager().RemoveSecret(&key)
 	default:
 		key = corev1.ObjectReference{
 			APIVersion: o.GetObjectKind().GroupVersionKind().GroupVersion().String(),

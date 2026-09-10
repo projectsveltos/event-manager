@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	"github.com/projectsveltos/libsveltos/lib/clustercache"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
@@ -83,6 +84,7 @@ func processCluster(ctx context.Context, c client.Client, cluster client.Object,
 		if clusterType == libsveltosv1beta1.ClusterTypeSveltos {
 			clusterproxy.EvictWorkloadIdentityCache(req.Namespace, req.Name)
 		}
+		clustercache.GetManager().RemoveCluster(req.Namespace, req.Name, clusterType)
 		err := removeEventReportsFromCluster(ctx, c, req.Namespace, req.Name,
 			clusterType, map[string]bool{}, logger)
 		if err != nil {

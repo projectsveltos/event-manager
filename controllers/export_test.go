@@ -36,12 +36,15 @@ var (
 )
 
 var (
-	RequeueEventTriggerForCluster = (*EventTriggerReconciler).requeueEventTriggerForCluster
-	UpdateClusterInfo             = (*EventTriggerReconciler).updateClusterInfo
-	CleanMaps                     = (*EventTriggerReconciler).cleanMaps
-	UpdateMaps                    = (*EventTriggerReconciler).updateMaps
-	ProcessEventTrigger           = (*EventTriggerReconciler).processEventTrigger
-	GetClustersFromClusterSets    = (*EventTriggerReconciler).getClustersFromClusterSets
+	RequeueEventTriggerForCluster   = (*EventTriggerReconciler).requeueEventTriggerForCluster
+	RequeueEventTriggerForReference = (*EventTriggerReconciler).requeueEventTriggerForReference
+	UpdateClusterInfo               = (*EventTriggerReconciler).updateClusterInfo
+	CleanMaps                       = (*EventTriggerReconciler).cleanMaps
+	UpdateMaps                      = (*EventTriggerReconciler).updateMaps
+	ProcessEventTrigger             = (*EventTriggerReconciler).processEventTrigger
+	GetClustersFromClusterSets      = (*EventTriggerReconciler).getClustersFromClusterSets
+
+	ProcessCluster = processCluster
 
 	GetKeyFromObject      = getKeyFromObject
 	GetHandlersForFeature = getHandlersForFeature
