@@ -42,6 +42,7 @@ import (
 	"github.com/projectsveltos/event-manager/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
+	"github.com/projectsveltos/libsveltos/lib/pullmode"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
@@ -210,6 +211,63 @@ var _ = Describe("EventSource Deployer", func() {
 		skip, err := controllers.SkipCollecting(context.TODO(), c, clusterRef, logger)
 		Expect(err).To(BeNil())
 		Expect(skip).To(BeTrue())
+	})
+
+	It("isAgentHeartbeatCurrent returns false when agent heartbeat has timed out", func() {
+		sveltosCluster := &libsveltosv1beta1.SveltosCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+			},
+			Spec: libsveltosv1beta1.SveltosClusterSpec{
+				PullMode: true,
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sveltosCluster).
+			WithStatusSubresource(sveltosCluster).Build()
+
+		heartbeatTimeout := &pullmode.AgentHeartbeatTimeoutError{}
+		failureMessage := heartbeatTimeout.Error()
+		sveltosCluster.Status.FailureMessage = &failureMessage
+		Expect(c.Status().Update(context.TODO(), sveltosCluster)).To(Succeed())
+
+		clusterRef := &corev1.ObjectReference{
+			Namespace:  sveltosCluster.Namespace,
+			Name:       sveltosCluster.Name,
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+
+		healthy, err := controllers.IsAgentHeartbeatCurrent(context.TODO(), c, clusterRef, logger)
+		Expect(err).To(BeNil())
+		Expect(healthy).To(BeFalse())
+	})
+
+	It("isAgentHeartbeatCurrent returns true when agent heartbeat is current", func() {
+		sveltosCluster := &libsveltosv1beta1.SveltosCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+			},
+			Spec: libsveltosv1beta1.SveltosClusterSpec{
+				PullMode: true,
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sveltosCluster).
+			WithStatusSubresource(sveltosCluster).Build()
+
+		clusterRef := &corev1.ObjectReference{
+			Namespace:  sveltosCluster.Namespace,
+			Name:       sveltosCluster.Name,
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+
+		healthy, err := controllers.IsAgentHeartbeatCurrent(context.TODO(), c, clusterRef, logger)
+		Expect(err).To(BeNil())
+		Expect(healthy).To(BeTrue())
 	})
 
 	It("processOneEventReport records a FailureMessage when firstCollection forces reprocessing of an already-Processed EventReport",

@@ -37,6 +37,7 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/clustercache"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
+	"github.com/projectsveltos/libsveltos/lib/pullmode"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	"github.com/projectsveltos/libsveltos/lib/sveltos_upgrade"
 	libsveltostemplate "github.com/projectsveltos/libsveltos/lib/template"
@@ -694,6 +695,24 @@ func isClusterInPullMode(ctx context.Context, c client.Client, cluster *corev1.O
 	return false, isPullMode, nil
 }
 
+// isAgentHeartbeatCurrent returns false only when the given pull-mode SveltosCluster's agent
+// heartbeat has timed out. Callers must only call this once they know the cluster is in pull mode.
+func isAgentHeartbeatCurrent(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
+	logger logr.Logger) (bool, error) {
+
+	sveltosCluster := &libsveltosv1beta1.SveltosCluster{}
+	err := c.Get(ctx, types.NamespacedName{Namespace: cluster.Namespace, Name: cluster.Name}, sveltosCluster)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.V(logs.LogDebug).Info("cluster no longer exists, skipping")
+			return false, nil
+		}
+		return false, err
+	}
+
+	return !pullmode.IsAgentTimeoutError(sveltosCluster), nil
+}
+
 func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Client, cluster *corev1.ObjectReference,
 	eventSourceMap map[string][]*v1beta1.EventTrigger, eventTriggerMap map[string]libsveltosset.Set,
 	version string, firstCollection bool, logger logr.Logger) error {
@@ -719,6 +738,18 @@ func collectAndProcessEventReportsFromCluster(ctx context.Context, c client.Clie
 	}
 	if skipCluster {
 		return nil
+	}
+	if isPullMode {
+		// A pull-mode agent that stopped reporting will never produce new EventReports.
+		// Skip collection instead of retrying forever.
+		healthy, err := isAgentHeartbeatCurrent(ctx, c, cluster, logger)
+		if err != nil {
+			return err
+		}
+		if !healthy {
+			logger.V(logs.LogDebug).Info("agent in managed cluster is not healthy")
+			return nil
+		}
 	}
 	if !isPullMode && !sveltos_upgrade.IsSveltosAgentVersionCompatible(ctx, c, getSveltosNamespace(), version,
 		cluster.Namespace, cluster.Name, clusterproxy.GetClusterType(clusterRef), getAgentInMgmtCluster(), logger) {
