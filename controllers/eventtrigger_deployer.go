@@ -762,6 +762,14 @@ func (r *EventTriggerReconciler) proceedDeployingEventTriggerInPullMode(ctx cont
 		case libsveltosv1beta1.FeatureStatusFailedNonRetriable, libsveltosv1beta1.FeatureStatusRemoving,
 			libsveltosv1beta1.FeatureStatusAgentRemoving, libsveltosv1beta1.FeatureStatusRemoved:
 			logger.V(logs.LogDebug).Info("proceed deploying")
+		case libsveltosv1beta1.FeatureStatusBlocked:
+			// Blocked is set by addon-controller on a ClusterSummary while a predecessor waits
+			// on a DependsOn dependent or a TransitionFrom successor. EventTrigger's own
+			// DependsOn only orders the ClusterProfile it generates, deployed and tracked
+			// separately via addon-controller's own ClusterSummary; the pull-mode agent never
+			// reports Blocked in a ConfigurationGroup for EventTrigger itself, so this case is
+			// unreachable in practice. Listed only to satisfy exhaustive.
+			logger.V(logs.LogDebug).Info("proceed deploying")
 		}
 	} else {
 		clusterInfo.Status = libsveltosv1beta1.SveltosStatusProvisioning
@@ -2273,7 +2281,7 @@ func instantiatePatchesFromWithResource(ctx context.Context, c client.Client, e 
 	clusterNamespace, templateName string, data any, labels map[string]string, logger logr.Logger,
 ) ([]configv1beta1.ValueFrom, error) {
 
-	var valuesFrom []configv1beta1.ValueFrom
+	valuesFrom := make([]configv1beta1.ValueFrom, len(e.Spec.PatchesFrom))
 	copy(valuesFrom, e.Spec.PatchesFrom)
 	err := instantiateValuesFrom(ctx, c, e, valuesFrom, clusterNamespace, templateName, data, labels, logger)
 	if err != nil {
@@ -2289,7 +2297,7 @@ func instantiatePatchesFromWithAllResources(ctx context.Context, c client.Client
 	clusterNamespace, templateName string, data any, labels map[string]string, logger logr.Logger,
 ) ([]configv1beta1.ValueFrom, error) {
 
-	var valuesFrom []configv1beta1.ValueFrom
+	valuesFrom := make([]configv1beta1.ValueFrom, len(e.Spec.PatchesFrom))
 	copy(valuesFrom, e.Spec.PatchesFrom)
 	err := instantiateValuesFrom(ctx, c, e, valuesFrom, clusterNamespace, templateName, data, labels, logger)
 	if err != nil {

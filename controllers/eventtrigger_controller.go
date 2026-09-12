@@ -238,7 +238,7 @@ func (r *EventTriggerReconciler) reconcileDelete(
 	err := r.undeployEventTrigger(ctx, eventTriggerScope, eventTriggerScope.EventTrigger.Status.ClusterInfo, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to undeploy")
-		return reconcile.Result{Requeue: true, RequeueAfter: deleteRequeueAfter}
+		return reconcile.Result{RequeueAfter: deleteRequeueAfter}
 	}
 
 	if controllerutil.ContainsFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer) {
@@ -259,20 +259,20 @@ func (r *EventTriggerReconciler) reconcileNormal(
 
 	if !controllerutil.ContainsFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer) {
 		if err := r.addFinalizer(ctx, eventTriggerScope); err != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
+			return reconcile.Result{RequeueAfter: normalRequeueAfter}
 		}
 	}
 
 	matchingCluster, err := clusterproxy.GetMatchingClusters(ctx, r.Client, eventTriggerScope.GetSelector(), "",
 		r.CapiOnboardAnnotation, eventTriggerScope.Logger)
 	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
+		return reconcile.Result{RequeueAfter: normalRequeueAfter}
 	}
 
 	// Get all clusters from referenced ClusterSets
 	clusterSetClusters, err := r.getClustersFromClusterSets(ctx, eventTriggerScope.EventTrigger.Spec.ClusterSetRefs, logger)
 	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
+		return reconcile.Result{RequeueAfter: normalRequeueAfter}
 	}
 
 	matchingCluster = append(matchingCluster, clusterSetClusters...)
@@ -284,19 +284,19 @@ func (r *EventTriggerReconciler) reconcileNormal(
 	err = r.updateClusterInfo(ctx, eventTriggerScope)
 	if err != nil {
 		logger.V(logs.LogDebug).Info("failed to update clusterConditions")
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
+		return reconcile.Result{RequeueAfter: normalRequeueAfter}
 	}
 
 	err = r.updateMaps(eventTriggerScope, logger)
 	if err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to update maps")
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
+		return reconcile.Result{RequeueAfter: normalRequeueAfter}
 	}
 
 	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
 	if err := r.deployEventTrigger(ctx, eventTriggerScope, f, logger); err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to deploy")
-		return reconcile.Result{Requeue: true, RequeueAfter: normalRequeueAfter}
+		return reconcile.Result{RequeueAfter: normalRequeueAfter}
 	}
 
 	logger.V(logs.LogDebug).Info("Reconcile success")
