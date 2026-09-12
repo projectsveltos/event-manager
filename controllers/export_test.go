@@ -90,6 +90,9 @@ var (
 	InstantiateKustomizationRefs = instantiateKustomizationRefs
 	InstantiateStringField       = instantiateStringField
 
+	InstantiatePatchesFromWithResource     = instantiatePatchesFromWithResource
+	InstantiatePatchesFromWithAllResources = instantiatePatchesFromWithAllResources
+
 	BuildEventTriggersForEventSourceMap = buildEventTriggersForEventSourceMap
 	BuildEventTriggersForClusterMap     = buildEventTriggersForClusterMap
 	BuildClustersWithEventTrigger       = buildClustersWithEventTrigger

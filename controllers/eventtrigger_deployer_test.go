@@ -2672,3 +2672,82 @@ var _ = Describe("InstantiateHelmCharts and InstantiateKustomizationRefs", func(
 		Expect(kustomizationRefs[0].Path).To(ContainSubstring(`replace "-control-plane" ""`))
 	})
 })
+
+var _ = Describe("InstantiatePatchesFromWithResource and InstantiatePatchesFromWithAllResources", func() {
+	// Regression test for a bug where both functions declared their result with
+	// `var valuesFrom []configv1beta1.ValueFrom` and then called `copy(valuesFrom,
+	// e.Spec.PatchesFrom)`: copy into a nil, zero-length slice always copies zero
+	// elements, so the function returned an empty slice no matter how many entries
+	// PatchesFrom actually had.
+
+	var logger logr.Logger
+	var e *v1beta1.EventTrigger
+	var patchesFrom []configv1beta1.ValueFrom
+	var configMap *corev1.ConfigMap
+
+	BeforeEach(func() {
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+
+		configMap = &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: testKubeSystemNamespace,
+				Name:      randomString(),
+			},
+		}
+
+		patchesFrom = []configv1beta1.ValueFrom{
+			{
+				Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+				Namespace: configMap.Namespace,
+				Name:      configMap.Name,
+			},
+		}
+
+		e = &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				PatchesFrom: patchesFrom,
+			},
+		}
+	})
+
+	It("InstantiatePatchesFromWithResource returns one entry per configured PatchesFrom", func() {
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(configMap).Build()
+
+		instantiated, err := controllers.InstantiatePatchesFromWithResource(context.TODO(), c, e,
+			randomString(), randomString(), map[string]interface{}{}, nil, logger)
+		Expect(err).To(BeNil())
+		Expect(instantiated).To(HaveLen(1))
+		Expect(instantiated[0].Namespace).To(Equal(configMap.Namespace))
+		Expect(instantiated[0].Name).To(Equal(configMap.Name))
+
+		// the original slice on the EventTrigger must be untouched (no aliasing/mutation)
+		Expect(e.Spec.PatchesFrom).To(HaveLen(1))
+		Expect(e.Spec.PatchesFrom[0].Name).To(Equal(configMap.Name))
+	})
+
+	It("InstantiatePatchesFromWithAllResources returns one entry per configured PatchesFrom", func() {
+		secondConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: testKubeSystemNamespace,
+				Name:      randomString(),
+			},
+		}
+		e.Spec.PatchesFrom = append(e.Spec.PatchesFrom, configv1beta1.ValueFrom{
+			Kind:      string(libsveltosv1beta1.ConfigMapReferencedResourceKind),
+			Namespace: secondConfigMap.Namespace,
+			Name:      secondConfigMap.Name,
+		})
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(configMap, secondConfigMap).Build()
+
+		instantiated, err := controllers.InstantiatePatchesFromWithAllResources(context.TODO(), c, e,
+			randomString(), randomString(), map[string]interface{}{}, nil, logger)
+		Expect(err).To(BeNil())
+		Expect(instantiated).To(HaveLen(2))
+		Expect(instantiated[0].Name).To(Equal(configMap.Name))
+		Expect(instantiated[1].Name).To(Equal(secondConfigMap.Name))
+	})
+})
