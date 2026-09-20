@@ -146,7 +146,7 @@ var _ = Describe("EventSource Deployer", func() {
 			currentEventReport)).To(Succeed())
 
 		processingErr := errors.New(randomString())
-		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, processingErr, logger)
+		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, processingErr, false, logger)
 
 		Expect(c.Get(context.TODO(),
 			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
@@ -158,7 +158,7 @@ var _ = Describe("EventSource Deployer", func() {
 
 		// Same failure message again: FailureMessage is unchanged so no Status update
 		// (and no api-server write) should happen.
-		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, processingErr, logger)
+		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, processingErr, false, logger)
 
 		Expect(c.Get(context.TODO(),
 			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
@@ -166,12 +166,41 @@ var _ = Describe("EventSource Deployer", func() {
 		Expect(currentEventReport.ResourceVersion).To(Equal(resourceVersionAfterFailure))
 
 		// Success (nil error) clears FailureMessage
-		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, nil, logger)
+		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, nil, false, logger)
 
 		Expect(c.Get(context.TODO(),
 			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
 			currentEventReport)).To(Succeed())
 		Expect(currentEventReport.Status.FailureMessage).To(BeNil())
+	})
+
+	It("setEventReportFailureMessage writes even with an unchanged FailureMessage when agentFailureMessageChanged is set", func() {
+		eventReport := getEventReport(randomString(), randomString(), randomString())
+
+		initObjects := []client.Object{
+			eventReport,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		currentEventReport := &libsveltosv1beta1.EventReport{}
+		Expect(c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+			currentEventReport)).To(Succeed())
+
+		// FailureMessage stays nil (processingErr is nil) across both calls, only
+		// AgentFailureMessage (set by the caller before this call, mirroring
+		// processOneEventReport) changed, so the write must still happen.
+		agentFailureMessage := randomString()
+		currentEventReport.Status.AgentFailureMessage = &agentFailureMessage
+		controllers.SetEventReportFailureMessage(context.TODO(), c, currentEventReport, nil, true, logger)
+
+		Expect(c.Get(context.TODO(),
+			types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name},
+			currentEventReport)).To(Succeed())
+		Expect(currentEventReport.Status.AgentFailureMessage).ToNot(BeNil())
+		Expect(*currentEventReport.Status.AgentFailureMessage).To(Equal(agentFailureMessage))
 	})
 
 	It("updateEventReportStatus marks the EventReport as Processed", func() {
