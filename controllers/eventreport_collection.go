@@ -626,7 +626,9 @@ func processEventReportsForClusterInAgentlessMode(ctx context.Context, c client.
 
 		logger.V(logs.LogDebug).Info("processing EventReport")
 		err := updateAllClusterProfiles(ctx, c, ref, er, eventSourceMap, eventTriggerMap, logger)
-		setEventReportFailureMessage(ctx, mgmtClient, er, err, logger)
+		// AgentFailureMessage is already set directly by sveltos-agent on this same object in
+		// agentless mode, no copy needed here.
+		setEventReportFailureMessage(ctx, mgmtClient, er, err, false, logger)
 		if err == nil {
 			updateEventReportStatus(ctx, mgmtClient, er, logger)
 		} else {
@@ -864,7 +866,18 @@ func processOneEventReport(ctx context.Context, c, clusterClient client.Client, 
 	// cluster) is the one that needs the write. It's nil only for reports being deleted,
 	// since reprocessing (shouldReprocess || firstCollection) always resolves it otherwise.
 	if mgmtClusterEventReport != nil {
-		setEventReportFailureMessage(ctx, c, mgmtClusterEventReport, err, l)
+		// AgentFailureMessage is set by sveltos-agent itself, in the managed cluster, when it
+		// cannot refresh Spec.MatchingResources/Spec.CloudEvents. In agentless/pull mode
+		// mgmtClusterEventReport already is er (updateEventReport is a no-op in both), so this
+		// is a real copy only in the default (clusterproxy-pull) mode, a harmless self-assignment
+		// otherwise. Compare against the previous value so a change here isn't swallowed by
+		// setEventReportFailureMessage's own FailureMessage-only unchanged check.
+		previousAgentFailureMessage := mgmtClusterEventReport.Status.AgentFailureMessage
+		mgmtClusterEventReport.Status.AgentFailureMessage = er.Status.AgentFailureMessage
+		agentFailureMessageChanged := (previousAgentFailureMessage == nil) != (er.Status.AgentFailureMessage == nil) ||
+			(previousAgentFailureMessage != nil && er.Status.AgentFailureMessage != nil &&
+				*previousAgentFailureMessage != *er.Status.AgentFailureMessage)
+		setEventReportFailureMessage(ctx, c, mgmtClusterEventReport, err, agentFailureMessageChanged, l)
 	}
 	if err == nil {
 		updateEventReportStatus(ctx, clusterClient, er, l)
@@ -876,10 +889,11 @@ func processOneEventReport(ctx context.Context, c, clusterClient client.Client, 
 // pass the management-cluster-resident copy of the EventReport (not the managed-cluster source
 // object used for Phase/CloudEvents bookkeeping in updateEventReportStatus) so the result is
 // visible regardless of which mode the source object lives in. Only writes when the
-// FailureMessage actually changes, so a persistent failure does not generate a Status update on
-// every collection cycle.
+// FailureMessage actually changes (or agentFailureMessageChanged is set by the caller, for the
+// AgentFailureMessage copy in processOneEventReport), so a persistent failure does not generate a
+// Status update on every collection cycle.
 func setEventReportFailureMessage(ctx context.Context, c client.Client, er *libsveltosv1beta1.EventReport,
-	processErr error, logger logr.Logger) {
+	processErr error, agentFailureMessageChanged bool, logger logr.Logger) {
 
 	var message *string
 	if processErr != nil {
@@ -887,7 +901,8 @@ func setEventReportFailureMessage(ctx context.Context, c client.Client, er *libs
 		message = &m
 	}
 
-	unchanged := (er.Status.FailureMessage == nil) == (message == nil) &&
+	unchanged := !agentFailureMessageChanged &&
+		(er.Status.FailureMessage == nil) == (message == nil) &&
 		(message == nil || *er.Status.FailureMessage == *message)
 	if unchanged {
 		return
