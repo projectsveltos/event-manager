@@ -443,6 +443,8 @@ func getSortedSpec(spec *v1beta1.EventTriggerSpec) *v1beta1.EventTriggerSpec {
 
 	specCopy.PostDeleteChecks = getSortedValidateHealths(spec.PostDeleteChecks)
 
+	specCopy.ClusterRefs = getSortedClusterRefs(spec.ClusterRefs)
+
 	sort.Strings(specCopy.ClusterSetRefs)
 	sort.Strings(specCopy.DependsOn)
 	return specCopy
@@ -1018,6 +1020,12 @@ func (r *EventTriggerReconciler) canProceed(ctx context.Context, eScope *scope.E
 
 	ready, err := clusterproxy.IsClusterReadyToBeConfigured(ctx, r.Client, cluster, eScope.Logger)
 	if err != nil {
+		// A cluster referenced by ClusterRefs might not exist (yet). Cluster creation
+		// will trigger a new reconciliation.
+		if apierrors.IsNotFound(err) {
+			logger.V(logs.LogDebug).Info("Cluster not found")
+			return false, nil
+		}
 		return false, err
 	}
 
