@@ -275,6 +275,7 @@ func (r *EventTriggerReconciler) reconcileNormal(
 		return reconcile.Result{RequeueAfter: normalRequeueAfter}
 	}
 
+	matchingCluster = append(matchingCluster, eventTriggerScope.EventTrigger.Spec.ClusterRefs...)
 	matchingCluster = append(matchingCluster, clusterSetClusters...)
 
 	matchingClusters := removeDuplicates(matchingCluster)

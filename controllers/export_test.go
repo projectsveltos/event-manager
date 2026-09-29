@@ -41,8 +41,10 @@ var (
 	RequeueEventTriggerForReference = (*EventTriggerReconciler).requeueEventTriggerForReference
 	UpdateClusterInfo               = (*EventTriggerReconciler).updateClusterInfo
 	CleanMaps                       = (*EventTriggerReconciler).cleanMaps
+	CanProceed                      = (*EventTriggerReconciler).canProceed
 	UpdateMaps                      = (*EventTriggerReconciler).updateMaps
 	ProcessEventTrigger             = (*EventTriggerReconciler).processEventTrigger
+	DeployEventTrigger              = (*EventTriggerReconciler).deployEventTrigger
 	GetClustersFromClusterSets      = (*EventTriggerReconciler).getClustersFromClusterSets
 
 	ProcessCluster = processCluster

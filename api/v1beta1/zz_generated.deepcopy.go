@@ -92,6 +92,11 @@ func (in *EventTriggerList) DeepCopyObject() runtime.Object {
 func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 	*out = *in
 	in.SourceClusterSelector.DeepCopyInto(&out.SourceClusterSelector)
+	if in.ClusterRefs != nil {
+		in, out := &in.ClusterRefs, &out.ClusterRefs
+		*out = make([]v1.ObjectReference, len(*in))
+		copy(*out, *in)
+	}
 	if in.ClusterSetRefs != nil {
 		in, out := &in.ClusterSetRefs, &out.ClusterSetRefs
 		*out = make([]string, len(*in))
