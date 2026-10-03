@@ -237,6 +237,16 @@ type EventTriggerSpec struct {
 	// This field will be directly transferred to the ClusterProfile Spec
 	DependsOn []string `json:"dependsOn,omitempty"`
 
+	// TransitionFrom names the Profiles or ClusterProfiles this instance replaces.
+	// For matching target clusters, teardown of the replaced profiles is deferred
+	// until this instance reaches Provisioned. This instance is also permitted to
+	// adopt resources owned by the replaced profiles, ignoring tier restrictions.
+	// Same-kind only: a ClusterProfile names other ClusterProfiles, a Profile names
+	// other Profiles in the same namespace.
+	// +listType=atomic
+	// +optional
+	TransitionFrom []string `json:"transitionFrom,omitempty"`
+
 	// TemplateResourceRefs is a list of resource to collect from the management cluster.
 	// Those resources' values will be used to instantiate templates contained in referenced
 	// PolicyRefs and Helm charts

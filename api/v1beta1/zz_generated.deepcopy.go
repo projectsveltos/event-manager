@@ -123,6 +123,11 @@ func (in *EventTriggerSpec) DeepCopyInto(out *EventTriggerSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.TransitionFrom != nil {
+		in, out := &in.TransitionFrom, &out.TransitionFrom
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.TemplateResourceRefs != nil {
 		in, out := &in.TemplateResourceRefs, &out.TemplateResourceRefs
 		*out = make([]apiv1beta1.TemplateResourceRef, len(*in))
