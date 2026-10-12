@@ -908,6 +908,12 @@ func setEventReportFailureMessage(ctx context.Context, c client.Client, er *libs
 		return
 	}
 
+	// A failure which is new, or different from the previous one, is recorded as an event too. Nothing is
+	// recorded when only AgentFailureMessage changed, or when the failure is cleared.
+	if message != nil && (er.Status.FailureMessage == nil || *er.Status.FailureMessage != *message) {
+		recordEventReportFailure(er, *message)
+	}
+
 	er.Status.FailureMessage = message
 	if err := c.Status().Update(ctx, er); err != nil {
 		logger.V(logs.LogInfo).Error(err, "failed to update EventReport FailureMessage")

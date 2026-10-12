@@ -93,6 +93,15 @@ type feature struct {
 	undeploy    deployer.RequestHandler
 }
 
+const (
+	// The failure messages of a cluster which is not a failure to deploy the EventTrigger: the cluster is paused,
+	// not ready or down, its agent is not healthy, or a previous cleanup is still in progress. They are not
+	// recorded as events.
+	msgClusterPausedOrNotReady = "cannot proceed deploying. Either cluster is paused or not ready."
+	msgAgentNotHealthy         = "agent in managed cluster is not healthy."
+	msgCleanupInProgress       = "cleanup is in progress"
+)
+
 func (r *EventTriggerReconciler) isClusterAShardMatch(ctx context.Context,
 	clusterInfo *libsveltosv1beta1.ClusterInfo) (bool, error) {
 
@@ -156,6 +165,8 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 				if clusterInfo.Hash == nil {
 					l.V(logs.LogDebug).Info("hash is not set. Skip this.")
 				} else {
+					// c is what the EventTrigger recorded for this cluster before this attempt
+					recordClusterInfoFailure(ctx, r.Client, resource, c.FailureMessage, clusterInfo)
 					resource.Status.ClusterInfo[i] = *clusterInfo
 					if clusterInfo.Status != libsveltosv1beta1.SveltosStatusProvisioned &&
 						clusterInfo.Status != libsveltosv1beta1.SveltosStatusFailedNonRetriable {
@@ -248,6 +259,8 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 
 		// Always update the slice with the returned state if it exists
 		if newInfo != nil {
+			// clusterInfo[i] is what the EventTrigger recorded for this cluster before this attempt
+			recordClusterInfoFailure(ctx, r.Client, resource, clusterInfo[i].FailureMessage, newInfo)
 			clusterInfo[i] = *newInfo
 		}
 
@@ -550,7 +563,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		clusterInfo.FailureMessage = &failureMessage
 		return clusterInfo, err
 	} else if !proceed {
-		failureMessage := "cannot proceed deploying. Either cluster is paused or not ready."
+		failureMessage := msgClusterPausedOrNotReady
 		clusterInfo.FailureMessage = &failureMessage
 		return clusterInfo, nil
 	}
@@ -561,7 +574,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		return clusterInfo, err
 	}
 	if !isHealthy {
-		failureMessage := "agent in managed cluster is not healthy."
+		failureMessage := msgAgentNotHealthy
 		logger.V(logs.LogInfo).Info(failureMessage)
 		clusterInfo.FailureMessage = &failureMessage
 		clusterInfo.Status = libsveltosv1beta1.SveltosStatusFailedNonRetriable
@@ -578,7 +591,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 	if r.Deployer.IsInProgress(cluster.Namespace, cluster.Name, eventTrigger.Name, f.id,
 		clusterproxy.GetClusterType(cluster), true) {
 
-		msg := "cleanup is in progress"
+		msg := msgCleanupInProgress
 		clusterInfo.FailureMessage = &msg
 		logger.V(logs.LogDebug).Info(msg)
 		return clusterInfo, fmt.Errorf("cleanup of %s in cluster still in progress. Wait before redeploying", f.id)
