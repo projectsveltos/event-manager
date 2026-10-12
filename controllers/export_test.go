@@ -32,6 +32,7 @@ var (
 	UpdateEventReportStatus                  = updateEventReportStatus
 	SetEventReportFailureMessage             = setEventReportFailureMessage
 	SkipCollecting                           = skipCollecting
+	RecordClusterInfoFailure                 = recordClusterInfoFailure
 	IsAgentHeartbeatCurrent                  = isAgentHeartbeatCurrent
 	ProcessOneEventReport                    = processOneEventReport
 )

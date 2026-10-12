@@ -126,6 +126,7 @@ func main() {
 	sveltosNamespace := getSveltosNamespace()
 
 	controllers.SetManagementClusterAccess(mgr.GetClient(), mgr.GetConfig())
+	controllers.SetEventRecorder(mgr.GetEventRecorder("event-recorder"))
 	controllers.SetAgentInMgmtCluster(agentInMgmtCluster)
 	controllers.SetSveltosNamespace(sveltosNamespace)
 

@@ -163,6 +163,7 @@ type EventTriggerReconciler struct {
 //+kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines/status,verbs=get;watch;list
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=sveltosclusters,verbs=get;watch;list
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=sveltosclusters/status,verbs=get;watch;list
+//+kubebuilder:rbac:groups="events.k8s.io",resources=events,verbs=create;update;patch
 //+kubebuilder:rbac:groups="",resources=secrets,verbs="*"
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs="*"
 //+kubebuilder:rbac:groups="source.toolkit.fluxcd.io",resources=gitrepositories,verbs=get;watch;list
