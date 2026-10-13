@@ -92,6 +92,11 @@ type EventTriggerSpec struct {
 	// events defined by referenced EventSource
 	SourceClusterSelector libsveltosv1beta1.Selector `json:"sourceClusterSelector"`
 
+	// ClusterRefs identifies clusters to associate to.
+	// These are added to the clusters matched by SourceClusterSelector.
+	// +optional
+	ClusterRefs []corev1.ObjectReference `json:"clusterRefs,omitempty"`
+
 	// SetRefs identifies referenced ClusterSets. Name of the referenced ClusterSets.
 	// +optional
 	ClusterSetRefs []string `json:"clusterSetRefs,omitempty"`

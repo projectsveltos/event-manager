@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
@@ -45,6 +47,28 @@ func getSortedPolicyRefs(policyRef []configv1beta1.PolicyRef) []configv1beta1.Po
 
 	sort.Sort(SortedPolicyRefs(sortedPolicyRefs))
 	return sortedPolicyRefs
+}
+
+type SortedClusterRefs []corev1.ObjectReference
+
+func (a SortedClusterRefs) Len() int      { return len(a) }
+func (a SortedClusterRefs) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a SortedClusterRefs) Less(i, j int) bool {
+	if a[i].Kind != a[j].Kind {
+		return a[i].Kind < a[j].Kind
+	}
+	if a[i].Namespace != a[j].Namespace {
+		return a[i].Namespace < a[j].Namespace
+	}
+	return a[i].Name < a[j].Name
+}
+
+func getSortedClusterRefs(clusterRefs []corev1.ObjectReference) []corev1.ObjectReference {
+	sortedClusterRefs := make([]corev1.ObjectReference, len(clusterRefs))
+	copy(sortedClusterRefs, clusterRefs)
+
+	sort.Sort(SortedClusterRefs(sortedClusterRefs))
+	return sortedClusterRefs
 }
 
 type SortedHelmCharts []configv1beta1.HelmChart
