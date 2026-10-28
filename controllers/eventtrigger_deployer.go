@@ -3688,6 +3688,7 @@ func getClusterProfileSpec(eventTrigger *v1beta1.EventTrigger) *configv1beta1.Sp
 		ValidateHealths:      eventTrigger.Spec.ValidateHealths,
 		PreDeleteChecks:      eventTrigger.Spec.PreDeleteChecks,
 		PostDeleteChecks:     eventTrigger.Spec.PostDeleteChecks,
+		HealthMonitoring:     eventTrigger.Spec.HealthMonitoring,
 		Patches:              eventTrigger.Spec.Patches,
 		ExtraLabels:          eventTrigger.Spec.ExtraLabels,
 		ExtraAnnotations:     eventTrigger.Spec.ExtraAnnotations,
