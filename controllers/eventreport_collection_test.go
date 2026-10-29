@@ -915,6 +915,60 @@ spec:
 			}, timeout, pollingInterval).Should(BeTrue())
 		})
 
+	It("collectAndProcessAllEventReports skips the EventReports of a cluster in pull mode whose agent heartbeat timed out",
+		func() {
+			sveltosCluster := &libsveltosv1beta1.SveltosCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: randomString(),
+					Name:      randomString(),
+				},
+				Spec: libsveltosv1beta1.SveltosClusterSpec{
+					PullMode: true,
+				},
+			}
+
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: sveltosCluster.Namespace}}
+			Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+			Expect(waitForObject(context.TODO(), testEnv.Client, ns)).To(Succeed())
+
+			Expect(testEnv.Create(context.TODO(), sveltosCluster)).To(Succeed())
+			Expect(waitForObject(context.TODO(), testEnv.Client, sveltosCluster)).To(Succeed())
+
+			heartbeatTimeout := &pullmode.AgentHeartbeatTimeoutError{}
+			failureMessage := heartbeatTimeout.Error()
+			sveltosCluster.Status.Ready = true
+			sveltosCluster.Status.FailureMessage = &failureMessage
+			Expect(testEnv.Status().Update(context.TODO(), sveltosCluster)).To(Succeed())
+
+			eventReport := getEventReport(randomString(), sveltosCluster.Namespace, sveltosCluster.Name)
+			eventReport.Spec.ClusterType = libsveltosv1beta1.ClusterTypeSveltos
+			eventReport.Labels[libsveltosv1beta1.EventReportClusterNameLabel] = sveltosCluster.Name
+			eventReport.Labels[libsveltosv1beta1.EventReportClusterTypeLabel] =
+				strings.ToLower(string(libsveltosv1beta1.ClusterTypeSveltos))
+			Expect(testEnv.Create(context.TODO(), eventReport)).To(Succeed())
+			Expect(waitForObject(context.TODO(), testEnv.Client, eventReport)).To(Succeed())
+
+			sveltosClusterRef := corev1.ObjectReference{
+				Namespace:  sveltosCluster.Namespace,
+				Name:       sveltosCluster.Name,
+				Kind:       libsveltosv1beta1.SveltosClusterKind,
+				APIVersion: libsveltosv1beta1.GroupVersion.String(),
+			}
+
+			Expect(controllers.CollectAndProcessAllEventReports(context.TODO(), testEnv.Client,
+				[]corev1.ObjectReference{sveltosClusterRef}, &v1beta1.EventTriggerList{},
+				map[string]libsveltosset.Set{}, version, false, logger)).To(Succeed())
+
+			// testEnv.Client is cached: Consistently, not a single Get, so a Phase set by processing
+			// cannot be missed because the cache has not caught up yet.
+			Consistently(func() bool {
+				current := &libsveltosv1beta1.EventReport{}
+				err := testEnv.Get(context.TODO(),
+					types.NamespacedName{Namespace: eventReport.Namespace, Name: eventReport.Name}, current)
+				return err == nil && current.Status.Phase == nil
+			}, 10*time.Second, time.Second).Should(BeTrue())
+		})
+
 	It("instantiateCloudEventAction ", func() {
 		clusterNamespace := randomString()
 		clusterName := randomString()
