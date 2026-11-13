@@ -206,6 +206,183 @@ var _ = Describe("EventTrigger: Reconciler", func() {
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	})
 
+	It("Remove finalizer removes the metric series of the EventTrigger", func() {
+		Expect(controllerutil.AddFinalizer(resource, v1beta1.EventTriggerFinalizer)).To(BeTrue())
+
+		cluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: randomString(),
+				Name:      randomString(),
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, cluster)).To(Succeed())
+
+		clusterRef := corev1.ObjectReference{
+			Namespace: cluster.Namespace, Name: cluster.Name, APIVersion: cluster.APIVersion, Kind: cluster.Kind,
+		}
+		// goneClusterRef points to a cluster that no longer exists, so it is removed on the first reconcile.
+		goneClusterRef := corev1.ObjectReference{
+			Namespace: randomString(), Name: randomString(), APIVersion: cluster.APIVersion, Kind: cluster.Kind,
+		}
+
+		initObjects := []client.Object{
+			resource,
+			cluster,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		resourceName := client.ObjectKey{
+			Name: resource.Name,
+		}
+
+		currentResource := &v1beta1.EventTrigger{}
+		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
+		Expect(c.Delete(context.TODO(), currentResource)).To(Succeed())
+
+		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
+		currentResource.Status.ClusterInfo = []libsveltosv1beta1.ClusterInfo{
+			{Cluster: clusterRef, Status: libsveltosv1beta1.SveltosStatusProvisioned, Hash: []byte(randomString())},
+			{Cluster: goneClusterRef, Status: libsveltosv1beta1.SveltosStatusProvisioned, Hash: []byte(randomString())},
+		}
+		Expect(c.Status().Update(context.TODO(), currentResource)).To(Succeed())
+
+		otherEventTrigger := randomString()
+		for _, name := range []string{resource.Name, otherEventTrigger} {
+			controllers.TrackMatchingClusters(name, 2, logger)
+			recordEventTriggerClusterMetrics(name, &clusterRef, logger)
+			recordEventTriggerClusterMetrics(name, &goneClusterRef, logger)
+		}
+
+		dep := fakedeployer.GetClient(context.TODO(), logger, c)
+		controllers.RegisterFeatures(dep, logger)
+
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			ClusterSetMap:    make(map[corev1.ObjectReference]*libsveltosset.Set),
+		}
+
+		// The EventTrigger is removed from goneCluster, and is still being removed from cluster.
+		_, err := reconciler.Reconcile(context.TODO(), ctrl.Request{
+			NamespacedName: resourceName,
+		})
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
+		Expect(controllerutil.ContainsFinalizer(currentResource, v1beta1.EventTriggerFinalizer)).To(BeTrue())
+		Expect(currentResource.Status.ClusterInfo).To(HaveLen(1))
+
+		for _, name := range eventTriggerClusterMetrics {
+			Expect(hasMetricSeries(name, eventTriggerClusterLabels(resource.Name, &goneClusterRef))).To(BeFalse(), name)
+			Expect(hasMetricSeries(name, eventTriggerClusterLabels(resource.Name, &clusterRef))).To(BeTrue(), name)
+			Expect(hasMetricSeries(name, eventTriggerClusterLabels(otherEventTrigger, &goneClusterRef))).To(BeTrue(), name)
+		}
+		Expect(hasMetricSeries(matchingClustersMetric,
+			map[string]string{eventTriggerNameMetricLabel: resource.Name})).To(BeTrue())
+
+		// Once cluster is gone too, the finalizer is removed.
+		Expect(c.Delete(context.TODO(), cluster)).To(Succeed())
+
+		_, err = reconciler.Reconcile(context.TODO(), ctrl.Request{
+			NamespacedName: resourceName,
+		})
+		Expect(err).ToNot(HaveOccurred())
+
+		err = c.Get(context.TODO(), resourceName, currentResource)
+		Expect(err).To(HaveOccurred())
+		Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+		for _, name := range eventTriggerClusterMetrics {
+			Expect(hasMetricSeries(name, eventTriggerClusterLabels(resource.Name, &clusterRef))).To(BeFalse(), name)
+			Expect(hasMetricSeries(name, eventTriggerClusterLabels(otherEventTrigger, &clusterRef))).To(BeTrue(), name)
+		}
+		Expect(hasMetricSeries(matchingClustersMetric,
+			map[string]string{eventTriggerNameMetricLabel: resource.Name})).To(BeFalse())
+		Expect(hasMetricSeries(matchingClustersMetric,
+			map[string]string{eventTriggerNameMetricLabel: otherEventTrigger})).To(BeTrue())
+	})
+
+	It("Reconcile removes the metric series of a cluster the EventTrigger no longer matches", func() {
+		Expect(controllerutil.AddFinalizer(resource, v1beta1.EventTriggerFinalizer)).To(BeTrue())
+
+		eventSource := &libsveltosv1beta1.EventSource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: eventSourceName,
+			},
+		}
+
+		// No cluster matches the EventTrigger anymore, and this one is gone.
+		goneClusterRef := corev1.ObjectReference{
+			Namespace: randomString(), Name: randomString(),
+			APIVersion: clusterv1.GroupVersion.String(), Kind: ClusterKind,
+		}
+
+		initObjects := []client.Object{
+			resource,
+			eventSource,
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).Build()
+
+		resourceName := client.ObjectKey{
+			Name: resource.Name,
+		}
+
+		currentResource := &v1beta1.EventTrigger{}
+		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
+		currentResource.Status.ClusterInfo = []libsveltosv1beta1.ClusterInfo{
+			{Cluster: goneClusterRef, Status: libsveltosv1beta1.SveltosStatusProvisioned, Hash: []byte(randomString())},
+		}
+		Expect(c.Status().Update(context.TODO(), currentResource)).To(Succeed())
+
+		otherEventTrigger := randomString()
+		for _, name := range []string{resource.Name, otherEventTrigger} {
+			recordEventTriggerClusterMetrics(name, &goneClusterRef, logger)
+		}
+
+		dep := fakedeployer.GetClient(context.TODO(), logger, c)
+		controllers.RegisterFeatures(dep, logger)
+
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           c,
+			Deployer:         dep,
+			Scheme:           c.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+			ClusterSetMap:    make(map[corev1.ObjectReference]*libsveltosset.Set),
+		}
+
+		_, err := reconciler.Reconcile(context.TODO(), ctrl.Request{
+			NamespacedName: resourceName,
+		})
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(c.Get(context.TODO(), resourceName, currentResource)).To(Succeed())
+		Expect(currentResource.Status.ClusterInfo).To(BeEmpty())
+
+		for _, name := range eventTriggerClusterMetrics {
+			Expect(hasMetricSeries(name, eventTriggerClusterLabels(resource.Name, &goneClusterRef))).To(BeFalse(), name)
+			Expect(hasMetricSeries(name, eventTriggerClusterLabels(otherEventTrigger, &goneClusterRef))).To(BeTrue(), name)
+		}
+		// The EventTrigger still exists, so its matching_clusters series stays.
+		Expect(hasMetricSeries(matchingClustersMetric,
+			map[string]string{eventTriggerNameMetricLabel: resource.Name})).To(BeTrue())
+	})
+
 	It("updateClusterInfo updates EventTrigger Status.ClusterInfo field", func() {
 		initObjects := []client.Object{
 			resource,
