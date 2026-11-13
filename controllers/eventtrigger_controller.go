@@ -242,6 +242,8 @@ func (r *EventTriggerReconciler) reconcileDelete(
 		return reconcile.Result{RequeueAfter: deleteRequeueAfter}
 	}
 
+	clearEventTriggerMetrics(eventTriggerScope.EventTrigger.Name, logger)
+
 	if controllerutil.ContainsFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer) {
 		controllerutil.RemoveFinalizer(eventTriggerScope.EventTrigger, v1beta1.EventTriggerFinalizer)
 	}
