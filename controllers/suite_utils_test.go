@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -36,10 +37,13 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
+	"github.com/projectsveltos/event-manager/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 )
 
 const (
@@ -258,4 +262,64 @@ func createSecretWithKubeconfig(clusterNamespace, clusterName string) {
 
 	Expect(testEnv.Create(context.TODO(), secret)).To(Succeed())
 	Expect(waitForObject(context.TODO(), testEnv.Client, secret)).To(Succeed())
+}
+
+const (
+	// eventTriggerNameMetricLabel is the label of the EventTrigger name in the projectsveltos metrics.
+	eventTriggerNameMetricLabel = "event_trigger_name"
+	matchingClustersMetric      = "projectsveltos_matching_clusters"
+)
+
+// eventTriggerClusterMetrics are the projectsveltos metrics labeled by EventTrigger and cluster.
+var eventTriggerClusterMetrics = []string{
+	"projectsveltos_reconcile_outcome_total",
+	"projectsveltos_reconcile_last_success_timestamp_seconds",
+	"projectsveltos_matching_resources",
+}
+
+// eventTriggerClusterLabels returns the labels identifying an EventTrigger on a cluster in the projectsveltos
+// metrics.
+func eventTriggerClusterLabels(eventTriggerName string, cluster *corev1.ObjectReference) map[string]string {
+	return map[string]string{
+		eventTriggerNameMetricLabel: eventTriggerName,
+		"cluster_type":              string(clusterproxy.GetClusterType(cluster)),
+		"cluster_namespace":         cluster.Namespace,
+		"cluster_name":              cluster.Name,
+	}
+}
+
+// recordEventTriggerClusterMetrics records a series for eventTriggerName on cluster in every metric of
+// eventTriggerClusterMetrics, with both outcomes in reconcile_outcome_total.
+func recordEventTriggerClusterMetrics(eventTriggerName string, cluster *corev1.ObjectReference, logger logr.Logger) {
+	clusterType := clusterproxy.GetClusterType(cluster)
+	controllers.TrackReconcileOutcome(cluster.Namespace, cluster.Name, clusterType, true, eventTriggerName, logger)
+	controllers.TrackReconcileOutcome(cluster.Namespace, cluster.Name, clusterType, false, eventTriggerName, logger)
+	controllers.TrackLastSuccess(cluster.Namespace, cluster.Name, clusterType, time.Now(), eventTriggerName, logger)
+	controllers.TrackMatchingResources(eventTriggerName, cluster.Namespace, cluster.Name, clusterType, 1, logger)
+}
+
+// hasMetricSeries returns true if the metric called name has a series, in the controller-runtime
+// registry, whose labels include all of labels.
+func hasMetricSeries(name string, labels map[string]string) bool {
+	families, err := metrics.Registry.Gather()
+	Expect(err).To(BeNil())
+
+	for _, family := range families {
+		if family.GetName() != name {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			matched := 0
+			for _, label := range metric.GetLabel() {
+				if value, ok := labels[label.GetName()]; ok && value == label.GetValue() {
+					matched++
+				}
+			}
+			if matched == len(labels) {
+				return true
+			}
+		}
+	}
+
+	return false
 }

@@ -219,3 +219,41 @@ func trackMatchingResources(eventTriggerName, clusterNamespace, clusterName stri
 	logger.V(logs.LogVerbose).Info(fmt.Sprintf("Tracking matching resources for eventTrigger %s %s %s/%s: %d",
 		eventTriggerName, clusterType, clusterNamespace, clusterName, count))
 }
+
+// clearEventTriggerMetrics removes the series recorded for an EventTrigger in matchingClustersGauge. Call it once
+// the EventTrigger is gone, so the gauge does not keep reporting its last count.
+func clearEventTriggerMetrics(eventTriggerName string, logger logr.Logger) {
+	matchingClustersGauge.Delete(prometheus.Labels{
+		metricEventTriggerNameLabel: eventTriggerName,
+	})
+
+	logger.V(logs.LogVerbose).Info(fmt.Sprintf("Cleared matching clusters for eventTrigger %s", eventTriggerName))
+}
+
+// clearEventTriggerClusterMetrics removes the series of reconcileOutcomeCounter, reconcileLastSuccessTimestampGauge
+// and matchingResourcesGauge recorded for an EventTrigger on a cluster. Call it once the cluster is removed from the
+// EventTrigger's Status.ClusterInfo: nothing updates those series anymore, so the gauges would keep reporting their
+// last value. reconcileDurationHistogram is not labeled by EventTrigger: its series are shared by every EventTrigger
+// deployed on the cluster.
+func clearEventTriggerClusterMetrics(clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
+	eventTriggerName string, logger logr.Logger) {
+
+	labels := prometheus.Labels{
+		metricClusterTypeLabel:      string(clusterType),
+		metricClusterNamespaceLabel: clusterNamespace,
+		metricClusterNameLabel:      clusterName,
+		metricEventTriggerNameLabel: eventTriggerName,
+	}
+
+	reconcileLastSuccessTimestampGauge.Delete(labels)
+	matchingResourcesGauge.Delete(labels)
+
+	// reconcileOutcomeCounter also has the outcome label.
+	for _, status := range []string{statusSuccess, statusFailure} {
+		labels[metricStatusLabel] = status
+		reconcileOutcomeCounter.Delete(labels)
+	}
+
+	logger.V(logs.LogVerbose).Info(fmt.Sprintf("Cleared metric series for eventTrigger %s on %s %s/%s",
+		eventTriggerName, clusterType, clusterNamespace, clusterName))
+}

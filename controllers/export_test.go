@@ -44,6 +44,7 @@ var (
 	CleanMaps                       = (*EventTriggerReconciler).cleanMaps
 	UpdateMaps                      = (*EventTriggerReconciler).updateMaps
 	ProcessEventTrigger             = (*EventTriggerReconciler).processEventTrigger
+	DeployEventTrigger              = (*EventTriggerReconciler).deployEventTrigger
 	GetClustersFromClusterSets      = (*EventTriggerReconciler).getClustersFromClusterSets
 
 	ProcessCluster = processCluster
@@ -112,6 +113,14 @@ var (
 const (
 	ReferencedResourceNamespaceLabel = referencedResourceNamespaceLabel
 	ReferencedResourceNameLabel      = referencedResourceNameLabel
+)
+
+// metrics
+var (
+	TrackMatchingClusters  = trackMatchingClusters
+	TrackMatchingResources = trackMatchingResources
+	TrackReconcileOutcome  = trackReconcileOutcome
+	TrackLastSuccess       = trackLastSuccess
 )
 
 // fetcher

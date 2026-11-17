@@ -185,7 +185,11 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 		if resource.Status.ClusterInfo[i].Status != libsveltosv1beta1.SveltosStatusRemoved {
 			resource.Status.ClusterInfo[n] = resource.Status.ClusterInfo[i]
 			n++
+			continue
 		}
+		removed := &resource.Status.ClusterInfo[i].Cluster
+		clearEventTriggerClusterMetrics(removed.Namespace, removed.Name, clusterproxy.GetClusterType(removed),
+			resource.Name, logger)
 	}
 	// Truncate the slice to the new length
 	resource.Status.ClusterInfo = resource.Status.ClusterInfo[:n]
@@ -276,7 +280,11 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 		if resource.Status.ClusterInfo[i].Status != libsveltosv1beta1.SveltosStatusRemoved {
 			resource.Status.ClusterInfo[n] = resource.Status.ClusterInfo[i]
 			n++
+			continue
 		}
+		removed := &resource.Status.ClusterInfo[i].Cluster
+		clearEventTriggerClusterMetrics(removed.Namespace, removed.Name, clusterproxy.GetClusterType(removed),
+			resource.Name, logger)
 	}
 	// Truncate the slice to the new length
 	resource.Status.ClusterInfo = resource.Status.ClusterInfo[:n]
