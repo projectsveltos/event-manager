@@ -32,8 +32,6 @@ manager_auth_proxy_patch.yaml-e
 
 version.txt
 
-.dockerignore
-
 ac-deployment-shard.yaml
 tmp-ac-deployment-shard.yamlsveltos-agent.m
 tmp-ac-deployment-shard.yamlsveltos-agent.tmp
