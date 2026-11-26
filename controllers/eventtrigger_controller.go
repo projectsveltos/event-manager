@@ -238,7 +238,7 @@ func (r *EventTriggerReconciler) reconcileDelete(
 
 	err := r.undeployEventTrigger(ctx, eventTriggerScope, eventTriggerScope.EventTrigger.Status.ClusterInfo, logger)
 	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to undeploy")
+		logRequeueReason(logger, err, "failed to undeploy")
 		return reconcile.Result{RequeueAfter: deleteRequeueAfter}
 	}
 
@@ -250,6 +250,17 @@ func (r *EventTriggerReconciler) reconcileDelete(
 
 	logger.V(logs.LogDebug).Info("Reconcile delete success")
 	return reconcile.Result{}
+}
+
+// logRequeueReason logs why the EventTrigger is requeued. A request which has not completed yet is expected
+// and is not logged as an error: with many EventTriggers or clusters that floods the log.
+func logRequeueReason(logger logr.Logger, err error, msg string) {
+	if isWaiting(err) {
+		logger.V(logs.LogDebug).Info(msg, "reason", err.Error())
+		return
+	}
+
+	logger.V(logs.LogInfo).Error(err, msg)
 }
 
 func (r *EventTriggerReconciler) reconcileNormal(
@@ -298,7 +309,7 @@ func (r *EventTriggerReconciler) reconcileNormal(
 
 	f := getHandlersForFeature(v1beta1.FeatureEventTrigger)
 	if err := r.deployEventTrigger(ctx, eventTriggerScope, f, logger); err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to deploy")
+		logRequeueReason(logger, err, "failed to deploy")
 		return reconcile.Result{RequeueAfter: normalRequeueAfter}
 	}
 

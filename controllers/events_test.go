@@ -111,7 +111,7 @@ var _ = Describe("EventTrigger and EventReport events", func() {
 			for _, m := range []string{
 				"cannot proceed deploying. Either cluster is paused or not ready.",
 				"agent in managed cluster is not healthy.",
-				"cleanup is in progress",
+				controllers.MsgCleanupInProgress,
 			} {
 				record(nil, libsveltosv1beta1.SveltosStatusProvisioning, message(m))
 			}
@@ -189,5 +189,45 @@ var _ = Describe("EventTrigger and EventReport events", func() {
 			controllers.SetEventReportFailureMessage(context.TODO(), c, current, nil, true, logger)
 			Expect(recorder.Events).To(BeEmpty())
 		})
+	})
+})
+
+var _ = Describe("errors only saying a request is still waiting", func() {
+	waiting := []string{
+		"request to deploy queued",
+		"cleanup request is queued",
+		"EventTrigger is still being provisioned",
+		"request to process EventTrigger is still queued in one ore more clusters",
+		controllers.MsgCleanupInProgress,
+		"agent cleanup request is queued",
+		"agent is removing eventTrigger instance",
+		"remove pending",
+		"feature is still being removed",
+	}
+
+	It("isWaiting is true for a request which has not completed yet", func() {
+		for _, m := range waiting {
+			Expect(controllers.IsWaiting(errors.New(m))).To(BeTrue(), m)
+		}
+	})
+
+	It("isWaiting is false for a failure", func() {
+		Expect(controllers.IsWaiting(errors.New("failed to create ClusterProfile"))).To(BeFalse())
+	})
+
+	It("keepFailure reports the last error when it is a failure", func() {
+		first := errors.New("first failure")
+		last := errors.New("last failure")
+		Expect(controllers.KeepFailure(nil, last)).To(Equal(last))
+		Expect(controllers.KeepFailure(first, last)).To(Equal(last))
+		Expect(controllers.KeepFailure(errors.New(waiting[0]), last)).To(Equal(last))
+	})
+
+	It("keepFailure does not replace an error with one only saying a request is still waiting", func() {
+		failure := errors.New("failed to create ClusterProfile")
+		Expect(controllers.KeepFailure(failure, errors.New(waiting[0]))).To(Equal(failure))
+
+		stillWaiting := errors.New(waiting[1])
+		Expect(controllers.KeepFailure(nil, stillWaiting)).To(Equal(stillWaiting))
 	})
 })

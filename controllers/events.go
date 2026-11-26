@@ -43,6 +43,20 @@ func SetEventRecorder(recorder events.EventRecorder) {
 	eventRecorder = recorder
 }
 
+// The errors returned while a request to deploy or to clean up has been made and has not completed yet. They are
+// not failures: the EventTrigger is requeued until the request completes.
+const (
+	msgDeployQueued       = "request to deploy queued"
+	msgDeployInProgress   = "deploy is in progress. Wait before cleanup"
+	msgCleanupQueued      = "cleanup request is queued"
+	msgAgentCleanupQueued = "agent cleanup request is queued"
+	msgAgentRemoving      = "agent is removing eventTrigger instance"
+	msgStillProvisioning  = "EventTrigger is still being provisioned"
+	msgStillBeingRemoved  = "feature is still being removed"
+	msgRemovePending      = "remove pending"
+	msgStillQueued        = "request to process EventTrigger is still queued in one ore more clusters"
+)
+
 // recordEventf records an event on regarding, about the related object (can be nil).
 // It does nothing when no recorder is set.
 // The note is capped, so an oversized message is not rejected by the API server.
@@ -108,6 +122,30 @@ func isNotAFailure(message string) bool {
 	return message == msgClusterPausedOrNotReady ||
 		message == msgAgentNotHealthy ||
 		message == msgCleanupInProgress
+}
+
+// isWaiting returns true when err only says a request to deploy or to clean up has not completed yet.
+func isWaiting(err error) bool {
+	message := err.Error()
+	return isNotAFailure(message) ||
+		message == msgDeployQueued ||
+		message == msgDeployInProgress ||
+		message == msgCleanupQueued ||
+		message == msgAgentCleanupQueued ||
+		message == msgAgentRemoving ||
+		message == msgStillProvisioning ||
+		message == msgStillBeingRemoved ||
+		message == msgRemovePending ||
+		message == msgStillQueued
+}
+
+// keepFailure returns the error to report once err has been seen after seen: the last error wins, except
+// that an error which only says a request is still waiting never replaces a failure.
+func keepFailure(seen, err error) error {
+	if seen != nil && isWaiting(err) {
+		return seen
+	}
+	return err
 }
 
 // recordEventReportFailure records a Warning EventTriggerFailed event on the EventReport when generating the

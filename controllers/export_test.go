@@ -35,6 +35,8 @@ var (
 	RecordClusterInfoFailure                 = recordClusterInfoFailure
 	IsAgentHeartbeatCurrent                  = isAgentHeartbeatCurrent
 	ProcessOneEventReport                    = processOneEventReport
+	IsWaiting                                = isWaiting
+	KeepFailure                              = keepFailure
 )
 
 var (
@@ -113,6 +115,7 @@ var (
 const (
 	ReferencedResourceNamespaceLabel = referencedResourceNamespaceLabel
 	ReferencedResourceNameLabel      = referencedResourceNameLabel
+	MsgCleanupInProgress             = msgCleanupInProgress
 )
 
 // metrics
