@@ -36,6 +36,7 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
@@ -400,6 +401,37 @@ var _ = Describe("EventSource Deployer", func() {
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
 			WithObjects(initObjects...).Build()
+
+		Expect(controllers.RemoveEventReportsFromCluster(context.TODO(), c, clusterNamespace, clusterName,
+			clusterType, map[string]bool{}, logger)).To(Succeed())
+
+		eventReportList := &libsveltosv1beta1.EventReportList{}
+		Expect(c.List(context.TODO(), eventReportList)).To(Succeed())
+		Expect(len(eventReportList.Items)).To(BeZero())
+	})
+
+	It("removeEventReportsFromCluster ignores an EventReport which is already gone", func() {
+		clusterType := libsveltosv1beta1.ClusterTypeCapi
+		clusterNamespace := randomString()
+		clusterName := randomString()
+
+		eventReport := getEventReport(randomString(), clusterNamespace, clusterName)
+		eventReport.Labels = libsveltosv1beta1.GetEventReportLabels(
+			eventSource.Name, clusterName, &clusterType)
+
+		initObjects := []client.Object{eventReport}
+
+		// The EventReport is listed and removed by someone else before this reconciliation deletes it
+		c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(initObjects...).
+			WithObjects(initObjects...).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Delete: func(ctx context.Context, cl client.WithWatch, obj client.Object,
+					opts ...client.DeleteOption) error {
+
+					Expect(cl.Delete(ctx, obj, opts...)).To(Succeed())
+					return cl.Delete(ctx, obj, opts...)
+				},
+			}).Build()
 
 		Expect(controllers.RemoveEventReportsFromCluster(context.TODO(), c, clusterNamespace, clusterName,
 			clusterType, map[string]bool{}, logger)).To(Succeed())

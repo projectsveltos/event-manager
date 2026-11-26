@@ -18,8 +18,10 @@ package controllers
 
 import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
@@ -28,11 +30,35 @@ import (
 	configv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/event-manager/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 )
 
 var (
 	version string
 )
+
+// logExpectedFailure logs err at debug level when isExpected(err) is true, as an error otherwise.
+// Some failures are an expected outcome of a race: logging those as errors only adds noise.
+func logExpectedFailure(logger logr.Logger, err error, isExpected func(error) bool, msg string) {
+	if isExpected(err) {
+		logger.V(logs.LogDebug).Info(msg, "reason", err.Error())
+		return
+	}
+
+	logger.V(logs.LogInfo).Error(err, msg)
+}
+
+// logFetchFailure logs a failure to fetch an object. An object which does not exist is not logged as an error:
+// it is expected, for instance when a cluster is deleted while an EventTrigger is being processed.
+func logFetchFailure(logger logr.Logger, err error, msg string) {
+	logExpectedFailure(logger, err, apierrors.IsNotFound, msg)
+}
+
+// logUpdateFailure logs a failure to update an object. A conflict is not logged as an error: someone else changed
+// the object after it was read, so the update is not applied and the object is processed again.
+func logUpdateFailure(logger logr.Logger, err error, msg string) {
+	logExpectedFailure(logger, err, apierrors.IsConflict, msg)
+}
 
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=debuggingconfigurations,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch

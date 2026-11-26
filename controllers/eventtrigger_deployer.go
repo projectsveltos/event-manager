@@ -159,7 +159,7 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 		} else {
 			clusterInfo, err = r.processEventTrigger(ctx, eScope, &c.Cluster, f, l)
 			if err != nil {
-				errorSeen = err
+				errorSeen = keepFailure(errorSeen, err)
 			}
 			if clusterInfo != nil {
 				if clusterInfo.Hash == nil {
@@ -202,7 +202,7 @@ func (r *EventTriggerReconciler) deployEventTrigger(ctx context.Context, eScope 
 	}
 
 	if !allProcessed {
-		return fmt.Errorf("request to process EventTrigger is still queued in one ore more clusters")
+		return errors.New(msgStillQueued)
 	}
 
 	return nil
@@ -253,7 +253,7 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 
 		if !shardMatch && clusterInfo[i].Status != libsveltosv1beta1.SveltosStatusRemoved {
 			// If shard is not a match, wait for other controller to remove
-			err = fmt.Errorf("remove pending")
+			err = keepFailure(err, errors.New(msgRemovePending))
 			continue
 		}
 
@@ -269,7 +269,7 @@ func (r *EventTriggerReconciler) undeployEventTrigger(ctx context.Context, eScop
 		}
 
 		if tmpErr != nil {
-			err = tmpErr
+			err = keepFailure(err, tmpErr)
 			continue
 		}
 	}
@@ -583,7 +583,9 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 	}
 	if !isHealthy {
 		failureMessage := msgAgentNotHealthy
-		logger.V(logs.LogInfo).Info(failureMessage)
+		// Not logged at info level: it is repeated at every reconciliation for as long as the agent is not
+		// healthy. The failure message is recorded in the EventTrigger status.
+		logger.V(logs.LogDebug).Info(failureMessage)
 		clusterInfo.FailureMessage = &failureMessage
 		clusterInfo.Status = libsveltosv1beta1.SveltosStatusFailedNonRetriable
 		return clusterInfo, nil
@@ -602,7 +604,7 @@ func (r *EventTriggerReconciler) processEventTrigger(ctx context.Context, eScope
 		msg := msgCleanupInProgress
 		clusterInfo.FailureMessage = &msg
 		logger.V(logs.LogDebug).Info(msg)
-		return clusterInfo, fmt.Errorf("cleanup of %s in cluster still in progress. Wait before redeploying", f.id)
+		return clusterInfo, errors.New(msgCleanupInProgress)
 	}
 
 	isPullMode, err := clusterproxy.IsClusterInPullMode(ctx, r.Client, cluster.Namespace,
@@ -690,7 +692,7 @@ func (r *EventTriggerReconciler) proceedProcessingEventTrigger(ctx context.Conte
 		}
 
 		if *deployerStatus == libsveltosv1beta1.SveltosStatusProvisioning {
-			return clusterInfo, fmt.Errorf("EventTrigger is still being provisioned")
+			return clusterInfo, errors.New(msgStillProvisioning)
 		}
 	} else if isConfigSame && currentStatus != nil && *currentStatus == libsveltosv1beta1.SveltosStatusProvisioned {
 		logger.V(logs.LogDebug).Info("already deployed")
@@ -810,7 +812,7 @@ func (r *EventTriggerReconciler) proceedDeployingEventTriggerInPullMode(ctx cont
 		return clusterInfo, err
 	}
 
-	return clusterInfo, fmt.Errorf("request to deploy queued")
+	return clusterInfo, errors.New(msgDeployQueued)
 }
 
 // If SveltosCluster is in pull mode, verify whether agent has pulled and successuffly deployed it.
@@ -877,7 +879,7 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 		msg := "provisioning is in progress"
 		logger.V(logs.LogDebug).Info(msg)
 		clusterInfo.FailureMessage = &msg
-		return clusterInfo, fmt.Errorf("deploying %s still in progress. Wait before cleanup", f.id)
+		return clusterInfo, errors.New(msgDeployInProgress)
 	}
 
 	result := r.Deployer.GetResult(ctx, cluster.Namespace, cluster.Name, resource.Name, f.id,
@@ -886,7 +888,7 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 
 	if status != nil {
 		if *status == libsveltosv1beta1.SveltosStatusRemoving {
-			return clusterInfo, fmt.Errorf("feature is still being removed")
+			return clusterInfo, errors.New(msgStillBeingRemoved)
 		}
 
 		if *status == libsveltosv1beta1.SveltosStatusRemoved {
@@ -915,7 +917,7 @@ func (r *EventTriggerReconciler) removeEventTrigger(ctx context.Context, eScope 
 		return clusterInfo, err
 	}
 
-	return clusterInfo, fmt.Errorf("cleanup request is queued")
+	return clusterInfo, errors.New(msgCleanupQueued)
 }
 
 func undeployEventTriggerInPullMode(ctx context.Context, c client.Client,
@@ -944,7 +946,7 @@ func undeployEventTriggerInPullMode(ctx context.Context, c client.Client,
 		} else if agentStatus.FailureMessage != nil {
 			retError = errors.New(*agentStatus.FailureMessage)
 		} else {
-			return errors.New("agent is removing eventTrigger instance")
+			return errors.New(msgAgentRemoving)
 		}
 	}
 
@@ -961,7 +963,7 @@ func undeployEventTriggerInPullMode(ctx context.Context, c client.Client,
 		return retError
 	}
 
-	return fmt.Errorf("agent cleanup request is queued")
+	return errors.New(msgAgentCleanupQueued)
 }
 
 func (r *EventTriggerReconciler) convertResultStatus(result deployer.Result) *libsveltosv1beta1.SveltosFeatureStatus {
@@ -3113,7 +3115,7 @@ func fecthClusterObjects(ctx context.Context, c client.Client,
 
 	genericCluster, err := clusterproxy.GetCluster(ctx, c, clusterNamespace, clusterName, clusterType)
 	if err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to fetch cluster")
+		logFetchFailure(logger, err, "failed to fetch cluster")
 		return nil, err
 	}
 	return runtime.DefaultUnstructuredConverter.ToUnstructured(genericCluster)

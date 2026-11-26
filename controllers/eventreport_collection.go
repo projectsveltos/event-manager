@@ -108,7 +108,8 @@ func removeEventReportsFromCluster(ctx context.Context, c client.Client, cluster
 		er := &eventReportList.Items[i]
 		if _, ok := currentEventReports[er.Name]; !ok {
 			err = c.Delete(ctx, er)
-			if err != nil {
+			// The EventReport may already be gone: removed by another reconciliation or by the collection loop
+			if err != nil && !apierrors.IsNotFound(err) {
 				return err
 			}
 		}
@@ -940,7 +941,7 @@ func setEventReportFailureMessage(ctx context.Context, c client.Client, er *libs
 
 	er.Status.FailureMessage = message
 	if err := c.Status().Update(ctx, er); err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to update EventReport FailureMessage")
+		logUpdateFailure(logger, err, "failed to update EventReport FailureMessage")
 	}
 }
 
@@ -965,14 +966,14 @@ func updateEventReportStatus(ctx context.Context, clusterClient client.Client, e
 			// This can fail because for instance a new CloudEvent was received while we were processing it in the mgmt cluster.
 			// That's OK though. CloudEvent source/subject are added as labels to profiles, so no new profile will be created
 			// when reprocessing it
-			logger.V(logs.LogInfo).Error(err, "failed to reset EventReport's CloudEvents in managed cluster")
+			logUpdateFailure(logger, err, "failed to reset EventReport's CloudEvents in managed cluster")
 			return
 		}
 	}
 	phase := libsveltosv1beta1.ReportProcessed
 	er.Status.Phase = &phase
 	if err := clusterClient.Status().Update(ctx, er); err != nil {
-		logger.V(logs.LogInfo).Error(err, "failed to update EventReport in managed cluster")
+		logUpdateFailure(logger, err, "failed to update EventReport in managed cluster")
 	}
 }
 
