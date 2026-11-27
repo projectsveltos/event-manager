@@ -57,6 +57,7 @@ var (
 
 	GetCloudEvents = getCloudEvents
 	GetResources   = getResources
+	GetPolicyRef   = getPolicyRef
 )
 
 type (
