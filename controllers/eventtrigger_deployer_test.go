@@ -18,6 +18,7 @@ package controllers_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -209,7 +210,7 @@ var _ = Describe("EventTrigger deployer", func() {
 			Client:         testEnv,
 			Logger:         logger,
 			EventTrigger:   eventTrigger,
-			ControllerName: "eventTrigger",
+			ControllerName: controllerNameEventManager,
 		})
 		Expect(err).To(BeNil())
 
@@ -228,6 +229,139 @@ var _ = Describe("EventTrigger deployer", func() {
 		// Expect job to be queued
 		Expect(dep.IsInProgress(clusterNamespace, clusterName, eventTrigger.Name, v1beta1.FeatureEventTrigger,
 			clusterType, false)).To(BeTrue())
+	})
+
+	It("deployEventTrigger queues job for ready cluster even when other clusters are missing or not ready", func() {
+		eventSource := &libsveltosv1beta1.EventSource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: libsveltosv1beta1.EventSourceSpec{
+				ResourceSelectors: []libsveltosv1beta1.ResourceSelector{
+					{
+						Kind:    randomString(),
+						Group:   randomString(),
+						Version: randomString(),
+					},
+				},
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), eventSource)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv.Client, eventSource)).To(Succeed())
+
+		clusterNamespace := randomString()
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: clusterNamespace,
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), ns)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, ns)).To(Succeed())
+
+		// Referenced cluster that does not exist
+		missingCluster := corev1.ObjectReference{
+			Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String(),
+			Namespace: clusterNamespace, Name: randomString(),
+		}
+
+		// Existing cluster that is not ready (control plane not initialized)
+		notReadyCluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: clusterNamespace,
+				Name:      randomString(),
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), notReadyCluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, notReadyCluster)).To(Succeed())
+
+		// Existing cluster that is ready
+		initialized := true
+		readyCluster := &clusterv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: clusterNamespace,
+				Name:      randomString(),
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), readyCluster)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, readyCluster)).To(Succeed())
+
+		readyCluster.Status = clusterv1.ClusterStatus{
+			Initialization: clusterv1.ClusterInitializationStatus{
+				ControlPlaneInitialized: &initialized,
+			},
+		}
+		Expect(testEnv.Status().Update(context.TODO(), readyCluster)).To(Succeed())
+		createSecretWithKubeconfig(clusterNamespace, readyCluster.Name)
+
+		Expect(addTypeInformationToObject(testEnv.Scheme(), notReadyCluster)).To(Succeed())
+		Expect(addTypeInformationToObject(testEnv.Scheme(), readyCluster)).To(Succeed())
+		notReadyClusterRef := controllers.GetKeyFromObject(testEnv.Scheme(), notReadyCluster)
+		readyClusterRef := controllers.GetKeyFromObject(testEnv.Scheme(), readyCluster)
+
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+			Spec: v1beta1.EventTriggerSpec{
+				EventSourceName: eventSource.Name,
+				ClusterRefs:     []corev1.ObjectReference{missingCluster, *notReadyClusterRef, *readyClusterRef},
+			},
+		}
+		Expect(testEnv.Create(context.TODO(), eventTrigger)).To(Succeed())
+		Expect(waitForObject(context.TODO(), testEnv, eventTrigger)).To(Succeed())
+
+		// Missing and not ready clusters come first: they must not prevent the ready one from being processed
+		emptyHash := []byte(base64.StdEncoding.EncodeToString([]byte("empty")))
+		eventTrigger.Status = v1beta1.EventTriggerStatus{
+			MatchingClusterRefs: []corev1.ObjectReference{missingCluster, *notReadyClusterRef, *readyClusterRef},
+			ClusterInfo: []libsveltosv1beta1.ClusterInfo{
+				{Cluster: missingCluster, Hash: emptyHash},
+				{Cluster: *notReadyClusterRef, Hash: emptyHash},
+				{Cluster: *readyClusterRef, Hash: emptyHash},
+			},
+		}
+		Expect(testEnv.Status().Update(context.TODO(), eventTrigger)).To(Succeed())
+
+		dep := fakedeployer.GetClient(context.TODO(), logger, testEnv)
+		controllers.RegisterFeatures(dep, logger)
+
+		reconciler := controllers.EventTriggerReconciler{
+			Client:           testEnv,
+			Deployer:         dep,
+			Scheme:           testEnv.Scheme(),
+			Mux:              sync.Mutex{},
+			ClusterMap:       make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToClusterMap:     make(map[types.NamespacedName]*libsveltosset.Set),
+			EventTriggers:    make(map[corev1.ObjectReference]libsveltosv1beta1.Selector),
+			EventSourceMap:   make(map[corev1.ObjectReference]*libsveltosset.Set),
+			ToEventSourceMap: make(map[types.NamespacedName]*libsveltosset.Set),
+		}
+
+		currentEventTrigger := &v1beta1.EventTrigger{}
+		Eventually(func() bool {
+			err := testEnv.Get(context.TODO(), types.NamespacedName{Name: eventTrigger.Name}, currentEventTrigger)
+			return err == nil && len(currentEventTrigger.Status.ClusterInfo) == 3
+		}, timeout, pollingInterval).Should(BeTrue())
+
+		eScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
+			Client:         testEnv,
+			Logger:         logger,
+			EventTrigger:   currentEventTrigger,
+			ControllerName: controllerNameEventManager,
+		})
+		Expect(err).To(BeNil())
+
+		f := controllers.GetHandlersForFeature(v1beta1.FeatureEventTrigger)
+		// Not all clusters are processed, so an error is expected
+		Expect(controllers.DeployEventTrigger(&reconciler, context.TODO(), eScope, f, logger)).ToNot(Succeed())
+
+		// Job for the ready cluster is queued
+		Expect(dep.IsInProgress(readyCluster.Namespace, readyCluster.Name, eventTrigger.Name,
+			v1beta1.FeatureEventTrigger, libsveltosv1beta1.ClusterTypeCapi, false)).To(BeTrue())
+
+		// No job for the not ready cluster
+		Expect(dep.IsInProgress(notReadyCluster.Namespace, notReadyCluster.Name, eventTrigger.Name,
+			v1beta1.FeatureEventTrigger, libsveltosv1beta1.ClusterTypeCapi, false)).To(BeFalse())
 	})
 
 	It("eventTriggerHash returns current EventAddBasedAddOn hash", func() {
@@ -346,9 +480,27 @@ var _ = Describe("EventTrigger deployer", func() {
 			Expect(reflect.DeepEqual(hash, expectedHash)).To(BeTrue())
 		}
 
+		// ClusterRefs order does not change the hash, ClusterRefs content does
+		clusterRef1 := corev1.ObjectReference{Namespace: randomString(), Name: randomString(),
+			Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
+		clusterRef2 := corev1.ObjectReference{Namespace: randomString(), Name: randomString(),
+			Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String()}
+
+		e.Spec.ClusterRefs = []corev1.ObjectReference{clusterRef1, clusterRef2}
+		clusterRefsHash, err := controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
+		Expect(err).To(BeNil())
+		Expect(reflect.DeepEqual(clusterRefsHash, expectedHash)).To(BeFalse())
+
+		e.Spec.ClusterRefs = []corev1.ObjectReference{clusterRef2, clusterRef1}
+		hash, err := controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
+		Expect(err).To(BeNil())
+		Expect(reflect.DeepEqual(hash, clusterRefsHash)).To(BeTrue())
+
+		e.Spec.ClusterRefs = nil
+
 		// change the spec now
 		e.Spec.DependsOn = []string{randomString()}
-		hash, err := controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
+		hash, err = controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
 		Expect(err).To(BeNil())
 		Expect(reflect.DeepEqual(hash, expectedHash)).To(BeFalse())
 
@@ -374,6 +526,38 @@ var _ = Describe("EventTrigger deployer", func() {
 		hash, err = controllers.EventTriggerHash(context.TODO(), c, e, getClusterRef(cluster), logger)
 		Expect(err).To(BeNil())
 		Expect(reflect.DeepEqual(hash, expectedHash)).To(BeTrue())
+	})
+
+	It("canProceed returns false without an error when the referenced cluster does not exist", func() {
+		eventTrigger := &v1beta1.EventTrigger{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(eventTrigger).Build()
+
+		reconciler := controllers.EventTriggerReconciler{
+			Client: c,
+			Scheme: c.Scheme(),
+		}
+
+		eScope, err := scope.NewEventTriggerScope(scope.EventTriggerScopeParams{
+			Client:         c,
+			Logger:         logger,
+			EventTrigger:   eventTrigger,
+			ControllerName: controllerNameEventManager,
+		})
+		Expect(err).To(BeNil())
+
+		missingCluster := &corev1.ObjectReference{
+			Namespace: randomString(), Name: randomString(),
+			Kind: libsveltosv1beta1.SveltosClusterKind, APIVersion: libsveltosv1beta1.GroupVersion.String(),
+		}
+
+		proceed, err := controllers.CanProceed(&reconciler, context.TODO(), eScope, missingCluster, logger)
+		Expect(err).To(BeNil())
+		Expect(proceed).To(BeFalse())
 	})
 
 	It("getResources ", func() {
